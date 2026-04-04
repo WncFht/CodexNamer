@@ -1,7 +1,9 @@
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { CodexSessionManager } from "@codex-session-manager/core";
-import type { SessionSummary } from "@codex-session-manager/shared";
+import type { ConfigDocument, SessionSummary } from "@codex-session-manager/shared";
+
+import { ApiEventLog } from "./event-log.js";
 
 const API_VERSION = "0.1.0";
 
@@ -169,6 +171,7 @@ export async function buildApiServer(options?: {
     ? undefined
     : await CodexSessionManager.create({ operator: options?.operator ?? "api" });
   const manager = options?.manager ?? ownedManager!;
+  const eventLog = new ApiEventLog();
 
   if (ownedManager) {
     app.addHook("onClose", async () => {
@@ -186,6 +189,11 @@ export async function buildApiServer(options?: {
     version: API_VERSION,
     time: new Date().toISOString()
   }));
+
+  app.get("/api/v1/events/since", async (request) => {
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    return eventLog.listSince(parseNumberQuery(query.cursor) ?? 0, parseNumberQuery(query.limit));
+  });
 
   app.get("/api/v1/sessions", async (request) => {
     const query = (request.query as Record<string, unknown> | undefined) ?? {};
@@ -229,12 +237,24 @@ export async function buildApiServer(options?: {
 
   app.post("/api/v1/sessions/:id/suggest", async (request) => {
     const params = request.params as { id: string };
-    return manager.suggest(params.id);
+    const suggestion = await manager.suggest(params.id);
+    eventLog.publish("session.suggested", {
+      threadId: params.id,
+      name: suggestion.name,
+      source: suggestion.source
+    });
+    return suggestion;
   });
 
   app.post("/api/v1/sessions/:id/apply", async (request) => {
     const params = request.params as { id: string };
-    return manager.apply(params.id);
+    const result = await manager.apply(params.id);
+    eventLog.publish("session.applied", {
+      threadId: params.id,
+      name: result.name,
+      written: result.written
+    });
+    return result;
   });
 
   app.post("/api/v1/sessions/:id/rename", async (request) => {
@@ -243,30 +263,52 @@ export async function buildApiServer(options?: {
     if (!body.name?.trim()) {
       throw new Error("name is required");
     }
-    return manager.rename(params.id, body.name);
+    const result = await manager.rename(params.id, body.name);
+    eventLog.publish("session.renamed", {
+      threadId: params.id,
+      name: result.name,
+      written: result.written
+    });
+    return result;
   });
 
   app.post("/api/v1/sessions/:id/freeze", async (request) => {
     const params = request.params as { id: string };
     await manager.freeze(params.id);
+    eventLog.publish("session.freeze.changed", {
+      threadId: params.id,
+      frozen: true
+    });
     return { threadId: params.id, frozen: true };
   });
 
   app.post("/api/v1/sessions/:id/unfreeze", async (request) => {
     const params = request.params as { id: string };
     await manager.unfreeze(params.id);
+    eventLog.publish("session.freeze.changed", {
+      threadId: params.id,
+      frozen: false
+    });
     return { threadId: params.id, frozen: false };
   });
 
   app.post("/api/v1/sessions/:id/manual-override", async (request) => {
     const params = request.params as { id: string };
     await manager.setManualOverride(params.id);
+    eventLog.publish("session.manual_override.changed", {
+      threadId: params.id,
+      manualOverride: true
+    });
     return { threadId: params.id, manualOverride: true };
   });
 
   app.post("/api/v1/sessions/:id/clear-manual-override", async (request) => {
     const params = request.params as { id: string };
     await manager.clearManualOverride(params.id);
+    eventLog.publish("session.manual_override.changed", {
+      threadId: params.id,
+      manualOverride: false
+    });
     return { threadId: params.id, manualOverride: false };
   });
 
@@ -279,12 +321,23 @@ export async function buildApiServer(options?: {
     if (body.filter?.dirty === false) {
       throw new Error("Only dirty batch processing is supported in v1.");
     }
+    const items = await manager.batchApplyDirty({ previewOnly: body.previewOnly ?? false });
+    eventLog.publish("batch.apply.completed", {
+      previewOnly: body.previewOnly ?? false,
+      appliedCount: items.filter((item) => item.action === "applied").length,
+      skippedCount: items.filter((item) => item.action === "skipped").length,
+      previewCount: items.filter((item) => item.action === "preview").length
+    });
     return {
-      items: await manager.batchApplyDirty({ previewOnly: body.previewOnly ?? false })
+      items
     };
   });
 
-  app.post("/api/v1/scan", async () => manager.scan());
+  app.post("/api/v1/scan", async () => {
+    const report = await manager.scan();
+    eventLog.publish("scan.completed", report as unknown as Record<string, unknown>);
+    return report;
+  });
 
   app.get("/api/v1/providers", async () => {
     const config = await manager.printConfig();
@@ -301,7 +354,18 @@ export async function buildApiServer(options?: {
     return manager.testProvider({ threadId: body.threadId });
   });
 
-  app.get("/api/v1/config", async () => manager.printConfig());
+  app.get("/api/v1/config", async () => manager.getConfigView());
+
+  app.put("/api/v1/config", async (request) => {
+    const body = (request.body as (ConfigDocument & { userConfig?: ConfigDocument }) | undefined) ?? {};
+    const patch = body.userConfig ?? body;
+    const result = await manager.updateConfig(patch);
+    eventLog.publish("config.updated", {
+      writtenTo: result.writtenTo,
+      restartRequired: result.restartRequired
+    });
+    return result;
+  });
 
   app.get("/api/v1/doctor", async () => manager.doctor());
 
@@ -309,7 +373,15 @@ export async function buildApiServer(options?: {
 
   app.post("/api/v1/maintenance/compact-index", async (request) => {
     const body = (request.body as { dryRun?: boolean } | undefined) ?? {};
-    return manager.compactIndex({ dryRun: body.dryRun ?? true });
+    const result = await manager.compactIndex({ dryRun: body.dryRun ?? true });
+    eventLog.publish("maintenance.compact.completed", {
+      dryRun: result.dryRun,
+      originalLines: result.originalLines,
+      compactedLines: result.compactedLines,
+      originalSizeBytes: result.originalSizeBytes,
+      compactedSizeBytes: result.compactedSizeBytes
+    });
+    return result;
   });
 
   return app;

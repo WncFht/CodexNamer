@@ -4,7 +4,8 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadEffectiveConfig } from "@codex-session-manager/core";
+import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "@codex-session-manager/core";
+import { REDACTED_SECRET } from "@codex-session-manager/shared";
 
 const tempDirs: string[] = [];
 
@@ -72,5 +73,71 @@ describe("config loading", () => {
     expect(effective.inheritedCodex.auth?.authMode).toBe("apikey");
     expect(effective.inheritedCodex.auth?.openaiApiKey).toBe("codex-file-key");
     expect(effective.providerProfiles[0]?.apiKey).toBe("explicit-key");
+  });
+
+  it("preserves provider api keys when config patch uses redacted placeholder", async () => {
+    const root = await makeTempDir();
+    const codexHome = path.join(root, ".codex");
+    const configPath = path.join(root, "config.toml");
+
+    await fs.mkdir(codexHome, { recursive: true });
+    await fs.writeFile(path.join(codexHome, "config.toml"), 'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n');
+    await fs.writeFile(
+      configPath,
+      [
+        "[general]",
+        `codex_home = "${codexHome}"`,
+        `state_dir = "${path.join(root, "state")}"`,
+        "",
+        "[provider.default]",
+        'backend_kind = "openai-compatible"',
+        'display_name = "default"',
+        'provider_source = "explicit"',
+        'base_url = "http://explicit.test/v1"',
+        'model = "gpt-explicit"',
+        'api_key = "keep-me"'
+      ].join("\n"),
+      "utf8"
+    );
+
+    await writeUserConfig({
+      cwd: root,
+      configPath,
+      patch: {
+        naming: {
+          maxLength: 48
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            backendKind: "openai-compatible",
+            displayName: "default",
+            providerSource: "explicit",
+            baseUrl: "http://explicit.test/v1",
+            model: "gpt-next",
+            apiKey: REDACTED_SECRET,
+            enabled: true,
+            isDefault: true
+          }
+        ]
+      }
+    });
+
+    const effective = await loadEffectiveConfig({
+      cwd: root,
+      configPath
+    });
+    const view = await loadConfigView({
+      cwd: root,
+      configPath,
+      effectiveConfig: effective
+    });
+    const written = await fs.readFile(configPath, "utf8");
+
+    expect(effective.naming.maxLength).toBe(48);
+    expect(effective.providerProfiles[0]?.apiKey).toBe("keep-me");
+    expect(view.userConfig.providerProfiles?.[0]?.apiKey).toBe(REDACTED_SECRET);
+    expect(written).toContain('api_key = "keep-me"');
+    expect(written).toContain('model = "gpt-next"');
   });
 });

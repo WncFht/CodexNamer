@@ -32,7 +32,7 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
-- Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact
+- Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
 - WebUI：本地 session dashboard，支持会话浏览、详情查看、suggest/apply/freeze/manual override、provider 与 maintenance 视图
 - TUI：终端列表 + 详情布局，支持搜索、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
@@ -104,7 +104,214 @@ v1 完成后，项目至少应支持：
 - `npm run web`
 - `npm run tui`
 
-## 本地运行
+## 安装
+
+### 前置要求
+
+- Node.js `20+`
+- npm `10+`
+- 本机已有可读取的 Codex 目录，默认是 `~/.codex`
+- 如果要用 `backend = "codex"` 或继承 Codex provider，确保 `~/.codex/config.toml` 与 `~/.codex/auth.json` 可用
+
+### 克隆与依赖安装
+
+```bash
+git clone <your-repo-url> codex-session-manager
+cd codex-session-manager
+npm install
+npm run build
+```
+
+### 可选：初始化用户配置
+
+默认配置文件路径：
+
+- `~/.config/codex-session-manager/config.toml`
+
+如果你什么都不写，项目会直接继承：
+
+- `~/.codex/config.toml`
+- `~/.codex/auth.json`
+
+最小示例：
+
+```toml
+[general]
+codex_home = "~/.codex"
+state_dir = "~/.local/state/codex-session-manager"
+
+[ai]
+backend = "codex"
+provider_source = "inherit-codex"
+profile = "default"
+
+[naming]
+template = "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"
+max_length = 72
+language = "zh-CN"
+```
+
+如果你想显式指定 URL + API key：
+
+```toml
+[ai]
+backend = "openai-compatible"
+provider_source = "explicit"
+profile = "default"
+
+[provider.default]
+backend_kind = "openai-compatible"
+display_name = "default"
+provider_source = "explicit"
+base_url = "http://127.0.0.1:23141/v1"
+model = "gpt-5.4"
+api_key = "your-api-key"
+wire_api = "responses"
+enabled = true
+is_default = true
+```
+
+## 使用
+
+### 1. 启动 Local API
+
+```bash
+npm run api -- --host 127.0.0.1 --port 42110
+```
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:42110/api/v1/health
+```
+
+### 2. 启动 WebUI
+
+```bash
+npm run web
+```
+
+默认 Vite 地址：
+
+- `http://127.0.0.1:43110`
+
+### 3. 启动 TUI
+
+```bash
+npm run tui -- --api-base http://127.0.0.1:42110
+```
+
+常用快捷键：
+
+- `j/k`：移动
+- `/`：搜索
+- `s`：suggest
+- `a`：apply
+- `r`：manual rename
+- `f`：freeze / unfreeze
+- `m`：manual override / clear
+- `p`：预览 dirty auto-rename
+- `A`：批量 apply dirty
+- `q`：退出
+
+### 4. 使用 CLI
+
+列出 dirty sessions：
+
+```bash
+npm run cli -- list --dirty
+```
+
+查看详情：
+
+```bash
+npm run cli -- show --id <thread-id>
+```
+
+生成候选标题：
+
+```bash
+npm run cli -- suggest --id <thread-id>
+```
+
+应用候选标题：
+
+```bash
+npm run cli -- apply --id <thread-id>
+```
+
+手动 rename：
+
+```bash
+npm run cli -- rename --id <thread-id> --name "feat(api): add events polling"
+```
+
+批量处理 dirty sessions：
+
+```bash
+npm run cli -- batch apply --dirty --preview
+npm run cli -- batch apply --dirty
+```
+
+### 5. 使用 Local API
+
+会话列表：
+
+```bash
+curl 'http://127.0.0.1:42110/api/v1/sessions?dirty=true&search=api'
+```
+
+单个 suggest：
+
+```bash
+curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/suggest
+```
+
+单个 apply：
+
+```bash
+curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/apply
+```
+
+手动 rename：
+
+```bash
+curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/rename \
+  -H 'content-type: application/json' \
+  -d '{"name":"feat(api): add config writeback"}'
+```
+
+获取配置视图：
+
+```bash
+curl http://127.0.0.1:42110/api/v1/config
+```
+
+写回用户配置：
+
+```bash
+curl -X PUT http://127.0.0.1:42110/api/v1/config \
+  -H 'content-type: application/json' \
+  -d '{
+    "naming": {
+      "template": "{{summary}}",
+      "maxLength": 48
+    },
+    "watch": {
+      "candidateIdleSeconds": 90
+    }
+  }'
+```
+
+轮询事件流：
+
+```bash
+curl 'http://127.0.0.1:42110/api/v1/events/since?cursor=0'
+```
+
+事件流是轻量 polling 接口，适合 WebUI/TUI 在本地环境做增量刷新。当前不会直接上 WebSocket。
+
+## 本地运行说明
 
 推荐先启动本地 API，再启动 WebUI 或 TUI：
 
@@ -118,5 +325,8 @@ npm run tui -- --api-base http://127.0.0.1:42110
 说明：
 
 - `npm run api` / `npm run cli` / `npm run daemon` 会先自动补齐 runtime 相关包的编译产物
+- `npm run clean` 会同时清掉 `dist` 和 `tsbuildinfo`，避免增量构建把 runtime 包留在不完整状态
 - `npm run web` 默认通过 Vite 代理到 `http://127.0.0.1:42110`
 - `npm run tui` 在真实 TTY 下支持快捷键；非交互环境下会退化成只读渲染
+- `PUT /api/v1/config` 只写 `codex-session-manager` 自己的用户配置，不会回写 Codex 自身配置
+- 当前不支持在运行中的 API 进程里热切换 `general.stateDir`；这个字段如果要改，建议停服务后修改配置再重启

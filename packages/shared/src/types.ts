@@ -97,6 +97,50 @@ export interface EffectiveConfig {
   };
 }
 
+export interface ConfigDocument {
+  general?: Partial<GeneralConfig>;
+  rename?: Partial<RenameConfig>;
+  watch?: Partial<WatchConfig>;
+  naming?: Partial<NamingConfig>;
+  ai?: Partial<AiConfig>;
+  providerProfiles?: ProviderProfile[];
+  maintenance?: Partial<MaintenanceConfig>;
+}
+
+export interface ConfigView {
+  paths: {
+    cwd: string;
+    userConfigPath: string;
+    projectConfigPath: string;
+  };
+  userConfig: ConfigDocument;
+  projectOverride: ConfigDocument;
+  effectiveConfig: Record<string, unknown>;
+}
+
+export type ApiEventType =
+  | "scan.completed"
+  | "session.suggested"
+  | "session.applied"
+  | "session.renamed"
+  | "session.freeze.changed"
+  | "session.manual_override.changed"
+  | "batch.apply.completed"
+  | "config.updated"
+  | "maintenance.compact.completed";
+
+export interface ApiEventRecord {
+  cursor: number;
+  type: ApiEventType;
+  at: string;
+  payload: Record<string, unknown>;
+}
+
+export interface ApiEventBatch {
+  items: ApiEventRecord[];
+  nextCursor: number;
+}
+
 export interface SessionIndexEntry {
   id: string;
   threadName: string;

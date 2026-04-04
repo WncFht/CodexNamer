@@ -1,5 +1,9 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
+import { CodexSessionManager } from "@codex-session-manager/core";
 import { buildApiServer } from "../packages/api/src/app.ts";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
@@ -101,7 +105,7 @@ describe("local api", () => {
       url: "/api/v1/config"
     });
     expect(config.statusCode).toBe(200);
-    expect(config.json().general.codexHome).toBe(workspace.codexHome);
+    expect(config.json().effectiveConfig.general.codexHome).toBe(workspace.codexHome);
 
     const doctor = await app.inject({
       method: "GET",
@@ -153,5 +157,72 @@ describe("local api", () => {
     });
     expect(preview.statusCode).toBe(200);
     expect(Array.isArray(preview.json().items)).toBe(true);
+  });
+
+  it("supports config writeback and event polling", async () => {
+    const workspace = await createTempWorkspace();
+    const configPath = path.join(workspace.root, "config.toml");
+    await fs.writeFile(
+      configPath,
+      [
+        "[general]",
+        `codex_home = "${workspace.codexHome}"`,
+        `state_dir = "${workspace.stateDir}"`,
+        "",
+        "[ai]",
+        'backend = "none"',
+        'provider_source = "inherit-codex"',
+        'profile = "default"'
+      ].join("\n"),
+      "utf8"
+    );
+
+    const manager = await CodexSessionManager.create({
+      cwd: workspace.root,
+      configPath,
+      operator: "api-test"
+    });
+    cleanup.push(async () => manager.close());
+
+    await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId: "019d-api-config-1",
+      userMessage: "实现 config writeback",
+      lastAgentMessage: "已经补上 config 接口"
+    });
+    await manager.scan();
+
+    const app = await buildApiServer({ manager, operator: "api-test" });
+    cleanup.push(async () => {
+      await app.close();
+    });
+
+    const update = await app.inject({
+      method: "PUT",
+      url: "/api/v1/config",
+      payload: {
+        naming: {
+          maxLength: 48,
+          template: "{{summary}}"
+        },
+        watch: {
+          candidateIdleSeconds: 33
+        }
+      }
+    });
+    expect(update.statusCode).toBe(200);
+    expect(update.json().config.effectiveConfig.naming.maxLength).toBe(48);
+    expect(update.json().config.effectiveConfig.watch.candidateIdleSeconds).toBe(33);
+
+    const events = await app.inject({
+      method: "GET",
+      url: "/api/v1/events/since?cursor=0"
+    });
+    expect(events.statusCode).toBe(200);
+    expect(events.json().items.some((item: { type: string }) => item.type === "config.updated")).toBe(true);
+
+    const written = await fs.readFile(configPath, "utf8");
+    expect(written).toContain('max_length = 48');
+    expect(written).toContain('candidate_idle_seconds = 33');
   });
 });

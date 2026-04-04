@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
+  type ConfigDocument,
+  type ConfigView,
   SESSION_INDEX_FILENAME,
   type AutoRenamePreview,
   type DoctorReport,
@@ -16,7 +18,7 @@ import {
   type SessionStatusEstimate
 } from "@codex-session-manager/shared";
 
-import { loadEffectiveConfig } from "./config.js";
+import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "./config.js";
 import { StateDatabase } from "./database.js";
 import { createRenameInferenceService, inspectRenameProvider } from "./provider.js";
 import { buildSessionRevision } from "./revision.js";
@@ -51,19 +53,30 @@ function redactSecret(value?: string): string | undefined {
 }
 
 export class CodexSessionManager {
-  private readonly inferenceService;
+  private inferenceService;
   private sessionIndexCache?: {
     size: number;
     mtimeMs: number;
     snapshot: SessionIndexSnapshot;
   };
+  private readonly cwd: string;
+  private readonly configPath?: string;
+  private readonly overrides?: Partial<EffectiveConfig>;
 
   constructor(
-    public readonly config: EffectiveConfig,
+    public config: EffectiveConfig,
     public readonly db: StateDatabase,
-    private readonly operator: string = "cli"
+    private readonly operator: string = "cli",
+    options?: {
+      cwd?: string;
+      configPath?: string;
+      overrides?: Partial<EffectiveConfig>;
+    }
   ) {
     this.inferenceService = createRenameInferenceService(config);
+    this.cwd = options?.cwd ?? process.cwd();
+    this.configPath = options?.configPath;
+    this.overrides = options?.overrides;
   }
 
   static async create(options?: {
@@ -78,7 +91,11 @@ export class CodexSessionManager {
       overrides: options?.overrides
     });
     const db = await StateDatabase.create(path.join(config.general.stateDir, "app.db"));
-    return new CodexSessionManager(config, db, options?.operator);
+    return new CodexSessionManager(config, db, options?.operator, {
+      cwd: options?.cwd,
+      configPath: options?.configPath,
+      overrides: options?.overrides
+    });
   }
 
   get sessionIndexPath(): string {
@@ -91,6 +108,17 @@ export class CodexSessionManager {
 
   async close(): Promise<void> {
     this.db.close();
+  }
+
+  async reloadConfig(): Promise<void> {
+    const nextConfig = await loadEffectiveConfig({
+      cwd: this.cwd,
+      configPath: this.configPath,
+      overrides: this.overrides
+    });
+    this.config = nextConfig;
+    this.inferenceService = createRenameInferenceService(nextConfig);
+    this.sessionIndexCache = undefined;
   }
 
   private requireSessionDetail(threadId: string): SessionDetail {
@@ -385,6 +413,37 @@ export class CodexSessionManager {
           : undefined
       },
       resolvedProvider: providerDiagnostics
+    };
+  }
+
+  async getConfigView(): Promise<ConfigView> {
+    return loadConfigView({
+      cwd: this.cwd,
+      configPath: this.configPath,
+      overrides: this.overrides,
+      effectiveConfig: this.config,
+      effectiveConfigView: await this.printConfig()
+    });
+  }
+
+  async updateConfig(
+    patch: ConfigDocument
+  ): Promise<{ writtenTo: string; restartRequired: boolean; config: ConfigView }> {
+    const nextStateDir = patch.general?.stateDir;
+    if (nextStateDir && nextStateDir !== this.config.general.stateDir) {
+      throw new Error("Updating general.stateDir via the running API is not supported. Restart with a new state dir instead.");
+    }
+
+    const result = await writeUserConfig({
+      cwd: this.cwd,
+      configPath: this.configPath,
+      patch
+    });
+    await this.reloadConfig();
+    return {
+      writtenTo: result.userConfigPath,
+      restartRequired: false,
+      config: await this.getConfigView()
     };
   }
 

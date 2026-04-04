@@ -7,23 +7,15 @@ import {
   DEFAULT_STATE_RELATIVE_PATH,
   DEFAULT_WATCH,
   PROJECT_CONFIG_FILENAME,
+  REDACTED_SECRET,
   type CodexInheritedAuth,
+  type ConfigDocument,
+  type ConfigView,
   type InheritedCodexProvider,
   type EffectiveConfig
 } from "@codex-session-manager/shared";
 
-import { deepMerge, expandHome } from "./util.js";
-
-type RawConfig = {
-  general?: Partial<EffectiveConfig["general"]>;
-  rename?: Partial<EffectiveConfig["rename"]>;
-  watch?: Partial<EffectiveConfig["watch"]>;
-  naming?: Partial<EffectiveConfig["naming"]>;
-  ai?: Partial<EffectiveConfig["ai"]>;
-  providerProfiles?: EffectiveConfig["providerProfiles"];
-  maintenance?: Partial<EffectiveConfig["maintenance"]>;
-  provider?: Record<string, unknown>;
-};
+import { deepMerge, ensureTrailingNewline, expandHome } from "./util.js";
 
 function getString(record: Record<string, unknown>, ...keys: string[]): string | undefined {
   for (const key of keys) {
@@ -118,7 +110,40 @@ async function readTomlFile(filePath: string): Promise<Record<string, unknown> |
   }
 }
 
-function normalizeRawConfig(raw: Record<string, unknown>): RawConfig {
+function normalizeProviderProfileRecords(records: Record<string, unknown>): EffectiveConfig["providerProfiles"] {
+  return Object.entries(records).map(([profileId, value]) => {
+    const record = value as Record<string, unknown>;
+    return {
+      profileId,
+      backendKind:
+        (getString(record, "backend_kind", "backendKind") as EffectiveConfig["ai"]["backend"] | undefined) ??
+        "openai-compatible",
+      displayName: getString(record, "display_name", "displayName") ?? profileId,
+      providerSource:
+        (getString(
+          record,
+          "provider_source",
+          "providerSource"
+        ) as EffectiveConfig["ai"]["providerSource"] | undefined) ?? "explicit",
+      providerRef: getString(record, "provider_ref", "providerRef"),
+      baseUrl: getString(record, "base_url", "baseUrl"),
+      model: getString(record, "model"),
+      apiKey: getString(record, "api_key", "apiKey"),
+      apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
+      headers: (record.headers as Record<string, string> | undefined) ?? {},
+      wireApi:
+        (getString(record, "wire_api", "wireApi") as
+          | "responses"
+          | "chat_completions"
+          | "auto"
+          | undefined) ?? "auto",
+      enabled: getBoolean(record, "enabled") ?? true,
+      isDefault: getBoolean(record, "is_default", "isDefault") ?? profileId === "default"
+    };
+  });
+}
+
+function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocument {
   const general = (raw.general ?? {}) as Record<string, unknown>;
   const rename = (raw.rename ?? {}) as Record<string, unknown>;
   const watch = (raw.watch ?? {}) as Record<string, unknown>;
@@ -126,38 +151,40 @@ function normalizeRawConfig(raw: Record<string, unknown>): RawConfig {
   const ai = (raw.ai ?? {}) as Record<string, unknown>;
   const maintenance = (raw.maintenance ?? {}) as Record<string, unknown>;
 
-  const providerProfiles = Object.entries((raw.provider ?? {}) as Record<string, unknown>).map(
-    ([profileId, value]) => {
-      const record = value as Record<string, unknown>;
-      return {
-        profileId,
-        backendKind:
-          (getString(record, "backend_kind", "backendKind") as EffectiveConfig["ai"]["backend"] | undefined) ??
-          "openai-compatible",
-        displayName: getString(record, "display_name", "displayName") ?? profileId,
-        providerSource:
-          (getString(
-            record,
-            "provider_source",
-            "providerSource"
-          ) as EffectiveConfig["ai"]["providerSource"] | undefined) ?? "explicit",
-        providerRef: getString(record, "provider_ref", "providerRef"),
-        baseUrl: getString(record, "base_url", "baseUrl"),
-        model: getString(record, "model"),
-        apiKey: getString(record, "api_key", "apiKey"),
-        apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
-        headers: (record.headers as Record<string, string> | undefined) ?? {},
-        wireApi:
-          (getString(record, "wire_api", "wireApi") as
-            | "responses"
-            | "chat_completions"
-            | "auto"
-            | undefined) ?? "auto",
-        enabled: getBoolean(record, "enabled") ?? true,
-        isDefault: getBoolean(record, "is_default", "isDefault") ?? profileId === "default"
-      };
-    }
-  );
+  const providerProfiles = Array.isArray(raw.providerProfiles)
+    ? raw.providerProfiles
+        .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+        .map((record) => ({
+          profileId: getString(record, "profile_id", "profileId") ?? "default",
+          backendKind:
+            (getString(record, "backend_kind", "backendKind") as EffectiveConfig["ai"]["backend"] | undefined) ??
+            "openai-compatible",
+          displayName:
+            getString(record, "display_name", "displayName") ??
+            getString(record, "profile_id", "profileId") ??
+            "default",
+          providerSource:
+            (getString(
+              record,
+              "provider_source",
+              "providerSource"
+            ) as EffectiveConfig["ai"]["providerSource"] | undefined) ?? "explicit",
+          providerRef: getString(record, "provider_ref", "providerRef"),
+          baseUrl: getString(record, "base_url", "baseUrl"),
+          model: getString(record, "model"),
+          apiKey: getString(record, "api_key", "apiKey"),
+          apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
+          headers: (record.headers as Record<string, string> | undefined) ?? {},
+          wireApi:
+            (getString(record, "wire_api", "wireApi") as
+              | "responses"
+              | "chat_completions"
+              | "auto"
+              | undefined) ?? "auto",
+          enabled: getBoolean(record, "enabled") ?? true,
+          isDefault: getBoolean(record, "is_default", "isDefault") ?? false
+        }))
+    : normalizeProviderProfileRecords((raw.provider ?? {}) as Record<string, unknown>);
 
   return {
     general: {
@@ -218,6 +245,223 @@ function normalizeRawConfig(raw: Record<string, unknown>): RawConfig {
         "backupBeforeCompact"
       )
     }
+  };
+}
+
+function mergeProviderProfiles(
+  baseProfiles: EffectiveConfig["providerProfiles"] | undefined,
+  patchProfiles: EffectiveConfig["providerProfiles"]
+): EffectiveConfig["providerProfiles"] {
+  const existingById = new Map((baseProfiles ?? []).map((profile) => [profile.profileId, profile]));
+
+  return patchProfiles.map((profile) => {
+    const existing = existingById.get(profile.profileId);
+    return {
+      ...existing,
+      ...profile,
+      apiKey:
+        profile.apiKey === REDACTED_SECRET || profile.apiKey === undefined
+          ? existing?.apiKey
+          : profile.apiKey || undefined,
+      apiKeyRef:
+        profile.apiKeyRef === REDACTED_SECRET || profile.apiKeyRef === undefined
+          ? existing?.apiKeyRef
+          : profile.apiKeyRef || undefined,
+      headers: profile.headers ?? existing?.headers ?? {},
+      enabled: profile.enabled ?? existing?.enabled ?? true,
+      isDefault: profile.isDefault ?? existing?.isDefault ?? false
+    };
+  });
+}
+
+function mergeConfigDocuments(base: ConfigDocument, patch: ConfigDocument): ConfigDocument {
+  const merged = deepMerge(base, patch);
+  if (patch.providerProfiles) {
+    merged.providerProfiles = mergeProviderProfiles(base.providerProfiles, patch.providerProfiles);
+  }
+  return merged;
+}
+
+function stripEmptyRecord(record: Record<string, unknown>): Record<string, unknown> | undefined {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length > 0) {
+        result[key] = value;
+      }
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      const nested = stripEmptyRecord(value as Record<string, unknown>);
+      if (nested && Object.keys(nested).length > 0) {
+        result[key] = nested;
+      }
+      continue;
+    }
+
+    result[key] = value;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function serializeConfigDocument(document: ConfigDocument): string {
+  const providerTable: Record<string, Record<string, unknown>> = {};
+  for (const profile of document.providerProfiles ?? []) {
+    const encoded = stripEmptyRecord({
+      backend_kind: profile.backendKind,
+      display_name: profile.displayName,
+      provider_source: profile.providerSource,
+      provider_ref: profile.providerRef,
+      base_url: profile.baseUrl,
+      model: profile.model,
+      api_key: profile.apiKey,
+      api_key_ref: profile.apiKeyRef,
+      headers: profile.headers,
+      wire_api: profile.wireApi,
+      enabled: profile.enabled,
+      is_default: profile.isDefault
+    });
+    if (encoded) {
+      providerTable[profile.profileId] = encoded;
+    }
+  }
+
+  const payload = stripEmptyRecord({
+    general: stripEmptyRecord({
+      codex_home: document.general?.codexHome,
+      state_dir: document.general?.stateDir
+    }),
+    rename: stripEmptyRecord({
+      mode: document.rename?.mode,
+      auto_apply: document.rename?.autoApply,
+      manual_override_wins: document.rename?.manualOverrideWins,
+      freeze_manual_name: document.rename?.freezeManualName
+    }),
+    watch: stripEmptyRecord({
+      scan_interval_seconds: document.watch?.scanIntervalSeconds,
+      candidate_idle_seconds: document.watch?.candidateIdleSeconds,
+      finalize_idle_seconds: document.watch?.finalizeIdleSeconds,
+      rename_cooldown_seconds: document.watch?.renameCooldownSeconds,
+      min_rollout_growth_bytes: document.watch?.minRolloutGrowthBytes,
+      min_task_complete_delta: document.watch?.minTaskCompleteDelta,
+      max_auto_renames_per_session: document.watch?.maxAutoRenamesPerSession
+    }),
+    naming: stripEmptyRecord({
+      preset: document.naming?.preset,
+      template: document.naming?.template,
+      max_length: document.naming?.maxLength,
+      language: document.naming?.language
+    }),
+    ai: stripEmptyRecord({
+      backend: document.ai?.backend,
+      provider_source: document.ai?.providerSource,
+      profile: document.ai?.profile,
+      timeout_seconds: document.ai?.timeoutSeconds,
+      temperature: document.ai?.temperature
+    }),
+    maintenance: stripEmptyRecord({
+      suggest_compact_index_above_mb: document.maintenance?.suggestCompactIndexAboveMb,
+      suggest_compact_index_above_lines: document.maintenance?.suggestCompactIndexAboveLines,
+      backup_before_compact: document.maintenance?.backupBeforeCompact
+    }),
+    provider: Object.keys(providerTable).length > 0 ? providerTable : undefined
+  });
+
+  return ensureTrailingNewline(TOML.stringify((payload ?? {}) as TOML.JsonMap));
+}
+
+function redactConfigDocument(document: ConfigDocument): ConfigDocument {
+  return {
+    ...document,
+    providerProfiles: document.providerProfiles?.map((profile) => ({
+      ...profile,
+      apiKey: profile.apiKey ? REDACTED_SECRET : undefined
+    }))
+  };
+}
+
+export function resolveConfigPaths(options?: {
+  cwd?: string;
+  configPath?: string;
+}): { cwd: string; userConfigPath: string; projectConfigPath: string } {
+  const cwd = options?.cwd ?? process.cwd();
+  const userConfigPath = options?.configPath ?? path.join(process.env.HOME ?? "", DEFAULT_CONFIG_RELATIVE_PATH);
+  const projectConfigPath = path.join(cwd, PROJECT_CONFIG_FILENAME);
+  return {
+    cwd,
+    userConfigPath,
+    projectConfigPath
+  };
+}
+
+export async function loadConfigView(options?: {
+  cwd?: string;
+  configPath?: string;
+  overrides?: Partial<EffectiveConfig>;
+  effectiveConfig?: EffectiveConfig;
+  effectiveConfigView?: Record<string, unknown>;
+}): Promise<ConfigView> {
+  const paths = resolveConfigPaths(options);
+  const userConfig = normalizeConfigDocumentInput((await readTomlFile(paths.userConfigPath)) ?? {});
+  const projectOverride = normalizeConfigDocumentInput((await readTomlFile(paths.projectConfigPath)) ?? {});
+  const effective =
+    options?.effectiveConfig ??
+    (await loadEffectiveConfig({
+      cwd: paths.cwd,
+      configPath: paths.userConfigPath,
+      overrides: options?.overrides
+    }));
+
+  return {
+    paths,
+    userConfig: redactConfigDocument(userConfig),
+    projectOverride: redactConfigDocument(projectOverride),
+    effectiveConfig: options?.effectiveConfigView ?? {
+      general: effective.general,
+      rename: effective.rename,
+      watch: effective.watch,
+      naming: effective.naming,
+      ai: effective.ai,
+      providerProfiles: redactConfigDocument({
+        providerProfiles: effective.providerProfiles
+      }).providerProfiles,
+      inheritedCodex: {
+        modelProvider: effective.inheritedCodex.modelProvider,
+        model: effective.inheritedCodex.model,
+        providers: effective.inheritedCodex.providers,
+        auth: effective.inheritedCodex.auth
+          ? {
+              authMode: effective.inheritedCodex.auth.authMode,
+              openaiApiKey: effective.inheritedCodex.auth.openaiApiKey ? REDACTED_SECRET : undefined,
+              accessToken: effective.inheritedCodex.auth.accessToken ? REDACTED_SECRET : undefined,
+              hasOpenaiApiKey: Boolean(effective.inheritedCodex.auth.openaiApiKey),
+              hasAccessToken: Boolean(effective.inheritedCodex.auth.accessToken)
+            }
+          : undefined
+      }
+    }
+  };
+}
+
+export async function writeUserConfig(options: {
+  cwd?: string;
+  configPath?: string;
+  patch: ConfigDocument;
+}): Promise<{ userConfigPath: string; userConfig: ConfigDocument }> {
+  const paths = resolveConfigPaths(options);
+  const existing = normalizeConfigDocumentInput((await readTomlFile(paths.userConfigPath)) ?? {});
+  const merged = mergeConfigDocuments(existing, options.patch);
+  await fs.mkdir(path.dirname(paths.userConfigPath), { recursive: true });
+  await fs.writeFile(paths.userConfigPath, serializeConfigDocument(merged), "utf8");
+  return {
+    userConfigPath: paths.userConfigPath,
+    userConfig: merged
   };
 }
 
@@ -288,13 +532,10 @@ export async function loadEffectiveConfig(options?: {
   configPath?: string;
   overrides?: Partial<EffectiveConfig>;
 }): Promise<EffectiveConfig> {
-  const cwd = options?.cwd ?? process.cwd();
-  const userConfigPath = options?.configPath ?? path.join(process.env.HOME ?? "", DEFAULT_CONFIG_RELATIVE_PATH);
-  const projectConfigPath = path.join(cwd, PROJECT_CONFIG_FILENAME);
-
-  const userRaw = normalizeRawConfig((await readTomlFile(userConfigPath)) ?? {});
+  const paths = resolveConfigPaths(options);
+  const userRaw = normalizeConfigDocumentInput((await readTomlFile(paths.userConfigPath)) ?? {});
   const mergedGeneral = deepMerge(DEFAULT_CONFIG.general, userRaw.general ?? {});
-  const projectRaw = normalizeRawConfig((await readTomlFile(projectConfigPath)) ?? {});
+  const projectRaw = normalizeConfigDocumentInput((await readTomlFile(paths.projectConfigPath)) ?? {});
 
   let effective = deepMerge(DEFAULT_CONFIG, userRaw as Partial<EffectiveConfig>);
   effective = deepMerge(effective, projectRaw as Partial<EffectiveConfig>);

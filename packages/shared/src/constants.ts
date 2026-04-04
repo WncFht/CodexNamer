@@ -2,6 +2,7 @@ export const DEFAULT_CONFIG_RELATIVE_PATH = ".config/codex-session-manager/confi
 export const DEFAULT_STATE_RELATIVE_PATH = ".local/state/codex-session-manager";
 export const PROJECT_CONFIG_FILENAME = ".codex-session-manager.toml";
 export const SESSION_INDEX_FILENAME = "session_index.jsonl";
+export const REDACTED_SECRET = "[redacted]";
 
 export const DEFAULT_WATCH = {
   scanIntervalSeconds: 300,
@@ -12,4 +13,3 @@ export const DEFAULT_WATCH = {
   minTaskCompleteDelta: 1,
   maxAutoRenamesPerSession: 2
 } as const;
-
