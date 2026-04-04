@@ -4,6 +4,7 @@ import type {
   DoctorResponse,
   ProviderResponse,
   SessionDetail,
+  SessionTranscriptPage,
   SessionsResponse
 } from "./types.js";
 
@@ -27,6 +28,7 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 export async function fetchSessions(params: {
   search?: string;
   dirtyOnly?: boolean;
+  workspace?: string;
 }): Promise<SessionsResponse> {
   const url = new URL("/api/v1/sessions", window.location.origin);
   if (params.search) {
@@ -35,11 +37,43 @@ export async function fetchSessions(params: {
   if (params.dirtyOnly) {
     url.searchParams.set("dirty", "true");
   }
+  if (params.workspace) {
+    url.searchParams.set("workspace", params.workspace);
+  }
   return requestJson<SessionsResponse>(url.toString());
 }
 
 export async function fetchSessionDetail(threadId: string): Promise<SessionDetail> {
   return requestJson<SessionDetail>(`/api/v1/sessions/${threadId}`);
+}
+
+export async function fetchSessionTranscript(
+  threadId: string,
+  params?: {
+    page?: number;
+    pageSize?: number;
+    includeHidden?: boolean;
+    role?: "all" | "user" | "assistant" | "tool" | "system";
+    query?: string;
+  }
+): Promise<SessionTranscriptPage> {
+  const url = new URL(`/api/v1/sessions/${threadId}/transcript`, window.location.origin);
+  if (params?.page) {
+    url.searchParams.set("page", String(params.page));
+  }
+  if (params?.pageSize) {
+    url.searchParams.set("pageSize", String(params.pageSize));
+  }
+  if (params?.includeHidden) {
+    url.searchParams.set("includeHidden", "true");
+  }
+  if (params?.role && params.role !== "all") {
+    url.searchParams.set("role", params.role);
+  }
+  if (params?.query) {
+    url.searchParams.set("query", params.query);
+  }
+  return requestJson<SessionTranscriptPage>(url.toString());
 }
 
 export async function suggestSession(threadId: string): Promise<void> {

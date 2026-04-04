@@ -15,14 +15,15 @@ import {
   type SessionDetail,
   type SessionIndexSnapshot,
   type SessionSummary,
-  type SessionStatusEstimate
+  type SessionStatusEstimate,
+  type WorkspaceSummary
 } from "@codex-session-manager/shared";
 
 import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "./config.js";
 import { StateDatabase } from "./database.js";
 import { createRenameInferenceService, inspectRenameProvider } from "./provider.js";
 import { buildSessionRevision } from "./revision.js";
-import { discoverRolloutFiles, ingestRolloutFile } from "./rollout.js";
+import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "./rollout.js";
 import {
   appendSessionIndexRename,
   compactSessionIndex,
@@ -205,7 +206,15 @@ export class CodexSessionManager {
     return this.db.listSessions(options);
   }
 
-  async getSessionDetail(threadId: string): Promise<SessionDetail | undefined> {
+  async listWorkspaces(options?: { dirty?: boolean }): Promise<WorkspaceSummary[]> {
+    await this.scan();
+    return this.db.listWorkspaceSummaries(options);
+  }
+
+  async getSessionDetail(
+    threadId: string,
+    options?: { includeTranscript?: boolean }
+  ): Promise<SessionDetail | undefined> {
     await this.scan();
     const detail = this.db.getSessionDetail(threadId);
     if (!detail) {
@@ -213,8 +222,35 @@ export class CodexSessionManager {
     }
     return {
       ...detail,
-      renameHistory: this.db.getRenameHistory(threadId)
+      renameHistory: this.db.getRenameHistory(threadId),
+      transcript: options?.includeTranscript ? await readSessionTranscript(detail.rolloutPath) : undefined
     };
+  }
+
+  async getSessionTranscriptPage(
+    threadId: string,
+    options?: {
+      page?: number;
+      pageSize?: number;
+      includeHidden?: boolean;
+      role?: "all" | "user" | "assistant" | "tool" | "system";
+      query?: string;
+    }
+  ) {
+    await this.scan();
+    const detail = this.db.getSessionDetail(threadId);
+    if (!detail) {
+      throw new Error(`Unknown session: ${threadId}`);
+    }
+
+    return readSessionTranscriptPage({
+      rolloutPath: detail.rolloutPath,
+      page: options?.page,
+      pageSize: options?.pageSize,
+      includeHidden: options?.includeHidden,
+      role: options?.role,
+      query: options?.query
+    });
   }
 
   private materializeSessionForSuggestion(detail: SessionDetail): SessionDetail {

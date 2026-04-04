@@ -6,6 +6,8 @@ export type RenameSource = "heuristic" | "ai" | "hybrid" | "manual" | "batch" | 
 export type RenameHistoryKind = "auto" | "manual" | "batch" | "compact-rewrite";
 export type RenameStatus = "applied" | "skipped" | "failed" | "preview_only";
 export type SessionStatusEstimate = "discovered" | "active" | "candidate_ready" | "finalize_ready" | "applied" | "idle" | "archived_hint" | "missing";
+export type SessionTranscriptRole = "user" | "assistant" | "tool" | "system";
+export type SessionTranscriptKind = "message" | "tool_call" | "tool_output" | "reasoning" | "status";
 
 export interface WatchConfig {
   scanIntervalSeconds: number;
@@ -187,6 +189,51 @@ export interface MaterializedSession {
   tokenTotal: number;
 }
 
+export interface WorkspaceSummary {
+  workspaceId: string;
+  workspaceLabel: string;
+  workspacePath?: string;
+  sessionCount: number;
+  dirtyCount: number;
+  frozenCount: number;
+  manualOverrideCount: number;
+  latestUpdatedAt?: string;
+  projects: string[];
+}
+
+export interface SessionTranscriptEntry {
+  id: string;
+  timestamp?: string;
+  role: SessionTranscriptRole;
+  kind: SessionTranscriptKind;
+  content: string;
+  name?: string;
+  callId?: string;
+  phase?: string;
+  hidden?: boolean;
+  hiddenReason?: string;
+}
+
+export interface SessionTranscript {
+  items: SessionTranscriptEntry[];
+  counts: {
+    total: number;
+    visible: number;
+    hidden: number;
+    tools: number;
+  };
+}
+
+export interface SessionTranscriptPage {
+  items: SessionTranscriptEntry[];
+  counts: SessionTranscript["counts"];
+  totalItems: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
 export interface SessionRevision {
   currentRevision: string;
   lastSeenRolloutSize: number;
@@ -243,6 +290,8 @@ export interface SessionSummary {
   threadId: string;
   cwd?: string;
   projectName?: string;
+  workspaceId: string;
+  workspaceLabel: string;
   updatedAt?: string;
   officialName?: string;
   candidateName?: string;
@@ -266,6 +315,7 @@ export interface SessionDetail extends SessionSummary {
   lastAppliedAt?: string;
   lastAppliedRevision?: string;
   renameHistory?: RenameHistoryRecord[];
+  transcript?: SessionTranscript;
 }
 
 export interface ScanReport {

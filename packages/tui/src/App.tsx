@@ -4,39 +4,10 @@ import TextInput from "ink-text-input";
 import { useEffect, useState } from "react";
 
 import { LocalApiClient } from "./api.js";
+import { computeTerminalLayout, truncateDisplayText } from "./layout.js";
 import type { BatchApplyResponse, SessionDetail, SessionSummary } from "./types.js";
 
 type InputMode = "normal" | "search" | "rename";
-
-function clip(value: string | undefined, maxLength: number): string {
-  if (!value) {
-    return "n/a";
-  }
-  if (maxLength <= 1) {
-    return "…";
-  }
-
-  let width = 0;
-  let output = "";
-  for (const char of value) {
-    const codePoint = char.codePointAt(0) ?? 0;
-    const charWidth =
-      codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0xa0)
-        ? 0
-        : codePoint >= 0x1100
-          ? 2
-          : 1;
-
-    if (width + charWidth > maxLength - 1) {
-      return `${output}…`;
-    }
-
-    output += char;
-    width += charWidth;
-  }
-
-  return output;
-}
 
 function formatWhen(value?: string): string {
   if (!value) {
@@ -71,8 +42,123 @@ function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: numbe
   }));
 }
 
-export function App(props: { apiBase: string; interactive: boolean }) {
+function useTerminalMetrics() {
   const { stdout } = useStdout();
+  const [metrics, setMetrics] = useState(() => ({
+    columns: stdout.columns ?? 120,
+    rows: stdout.rows ?? 40
+  }));
+
+  useEffect(() => {
+    const update = () => {
+      setMetrics({
+        columns: stdout.columns ?? 120,
+        rows: stdout.rows ?? 40
+      });
+    };
+
+    update();
+    stdout.on("resize", update);
+    return () => {
+      if (typeof stdout.off === "function") {
+        stdout.off("resize", update);
+      } else {
+        stdout.removeListener("resize", update);
+      }
+    };
+  }, [stdout]);
+
+  return metrics;
+}
+
+function LineValue(props: {
+  label: string;
+  value?: string;
+  width: number;
+  tone?: "muted" | "default" | "accent";
+}) {
+  const labelWidth = Math.min(14, Math.max(8, Math.floor(props.width * 0.24)));
+  const valueWidth = Math.max(12, props.width - labelWidth - 2);
+
+  return (
+    <Box width={props.width} flexWrap="nowrap">
+      <Box width={labelWidth}>
+        <Text color={props.tone === "accent" ? "magenta" : "gray"}>{truncateDisplayText(props.label, labelWidth)}</Text>
+      </Box>
+      <Box width={valueWidth}>
+        <Text color={props.tone === "muted" ? "gray" : undefined} wrap="truncate-end">
+          {truncateDisplayText(props.value, valueWidth)}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+function SessionRow(props: {
+  session: SessionSummary;
+  active: boolean;
+  width: number;
+  compact: boolean;
+}) {
+  const title = props.session.officialName ?? props.session.candidateName ?? props.session.threadId;
+  const meta = [
+    props.session.projectName ?? "unknown",
+    props.session.provider ?? "n/a",
+    props.session.dirty ? "dirty" : "clean",
+    props.session.frozen ? "frozen" : null,
+    props.session.manualOverride ? "manual" : null
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const secondary = [formatWhen(props.session.updatedAt), `${props.session.taskCompleteCount}t`, props.session.statusEstimate ?? "unknown"]
+    .filter(Boolean)
+    .join(" | ");
+
+  return (
+    <Box flexDirection="column" width={props.width} marginBottom={props.compact ? 0 : 1}>
+      <Box width={props.width} flexWrap="nowrap">
+        <Box width={2}>
+          <Text inverse={props.active} color={props.active ? "black" : undefined}>
+            {props.active ? ">" : " "}
+          </Text>
+        </Box>
+        <Box width={props.width - 2}>
+          <Text inverse={props.active} color={props.active ? "black" : undefined} wrap="truncate-end">
+            {title}
+          </Text>
+        </Box>
+      </Box>
+      <Box width={props.width} paddingLeft={2}>
+        <Text color={props.active ? "yellow" : "gray"} wrap="truncate-end">
+          {props.compact ? secondary : meta}
+        </Text>
+      </Box>
+      {!props.compact ? (
+        <Box width={props.width} paddingLeft={2}>
+          <Text color="gray" wrap="truncate-end">
+            {secondary}
+          </Text>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function PreviewRow(props: { item: BatchApplyResponse["items"][number]; width: number }) {
+  const tone = props.item.status === "apply" ? "green" : "gray";
+  const content = `${truncateDisplayText(props.item.threadId, 12)} | ${props.item.status} | ${
+    props.item.candidateName ?? props.item.reason
+  }`;
+  return (
+    <Box width={props.width}>
+      <Text color={tone} wrap="truncate-end">
+        {content}
+      </Text>
+    </Box>
+  );
+}
+
+export function App(props: { apiBase: string; interactive: boolean }) {
   const [client] = useState(() => new LocalApiClient(props.apiBase));
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -86,29 +172,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [message, setMessage] = useState("Loading sessions...");
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<BatchApplyResponse["items"]>([]);
+  const metrics = useTerminalMetrics();
+  const layout = computeTerminalLayout(metrics);
 
   const selected = sessions[selectedIndex];
-  const terminalWidth = stdout.columns ?? 120;
-  const terminalHeight = stdout.rows ?? 40;
-  const stackedLayout = terminalWidth < 132 || terminalHeight < 30;
-  const compactLayout = terminalWidth < 96 || terminalHeight < 26;
-  const listPanelWidth = stackedLayout
-    ? Math.max(terminalWidth - 4, 40)
-    : Math.max(Math.floor(terminalWidth * 0.56), 48);
-  const detailPanelWidth = stackedLayout
-    ? Math.max(terminalWidth - 4, 40)
-    : Math.max(terminalWidth - listPanelWidth - 4, 32);
-  const sessionRowHeight = compactLayout ? 1 : 2;
-  const sessionViewportRows = stackedLayout
-    ? Math.max(8, terminalHeight - (compactLayout ? 24 : 26))
-    : Math.max(10, terminalHeight - 15);
-  const visibleSessionCount = Math.max(4, Math.floor(sessionViewportRows / sessionRowHeight));
-  const visiblePreviewCount = compactLayout ? 4 : 8;
-  const sessionTitleClip = Math.max(20, listPanelWidth - 8);
-  const sessionMetaClip = Math.max(20, listPanelWidth - 6);
-  const detailClip = Math.max(24, detailPanelWidth - 10);
-  const detailMessageClip = Math.max(20, detailPanelWidth - 8);
-  const visibleSessions = windowItemsAround(sessions, selectedIndex, visibleSessionCount);
+  const visibleSessions = windowItemsAround(sessions, selectedIndex, layout.visibleSessionCount);
 
   const reloadSessions = async (nextSelectedId?: string) => {
     setLoading(true);
@@ -117,7 +185,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       const payload = await client.listSessions({
         dirtyOnly,
         search,
-        limit: 40
+        limit: 80
       });
       setSessions(payload.items);
       const nextIndex = nextSelectedId
@@ -184,12 +252,82 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const refreshPreview = async () => {
     try {
       const payload = await client.batchApplyDirty(true);
-      setPreview(payload.items.slice(0, 8));
+      setPreview(payload.items.slice(0, 12));
       setMessage(`Preview refreshed: ${payload.items.filter((item) => item.status === "apply").length} ready`);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unknown error");
     }
   };
+
+  const listPanel = (
+    <Box flexDirection="column" width={layout.listWidth}>
+      <Box justifyContent="space-between" width={layout.listWidth}>
+        <Text color="cyan">Sessions [{sessions.length}]</Text>
+        <Text color="gray">
+          {layout.mode} {layout.columns}x{layout.rows}
+        </Text>
+      </Box>
+      <Box borderStyle="round" flexDirection="column" paddingX={1} width={layout.listWidth}>
+        {sessions.length === 0 ? <Text color="gray">No sessions matched the current filter.</Text> : null}
+        {visibleSessions.map(({ item, index }) => (
+          <SessionRow
+            key={`${index}-${item.threadId}`}
+            session={item}
+            active={index === selectedIndex}
+            width={layout.listWidth - 2}
+            compact={layout.compact}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+
+  const detailPanel = (
+    <Box flexDirection="column" width={layout.detailWidth}>
+      <Text color="cyan">Detail</Text>
+      <Box borderStyle="round" flexDirection="column" paddingX={1} width={layout.detailWidth}>
+        {detail ? (
+          <>
+            <Box width={layout.detailWidth - 2}>
+              <Text color="yellow" wrap="truncate-end">
+                {detail.officialName ?? detail.candidateName ?? detail.threadId}
+              </Text>
+            </Box>
+            <LineValue label="project" value={detail.projectName ?? detail.cwd} width={layout.detailWidth - 2} />
+            <LineValue
+              label="provider"
+              value={[detail.provider ?? "n/a", detail.model ?? "n/a"].join(" | ")}
+              width={layout.detailWidth - 2}
+            />
+            <LineValue
+              label="status"
+              value={[formatWhen(detail.updatedAt), `${detail.tokenTotal} tokens`].join(" | ")}
+              width={layout.detailWidth - 2}
+              tone="muted"
+            />
+            <LineValue label="candidate" value={detail.candidateName} width={layout.detailWidth - 2} tone="accent" />
+            <LineValue label="first" value={detail.firstUserMessage} width={layout.detailWidth - 2} />
+            <LineValue label="last-user" value={detail.lastUserMessage} width={layout.detailWidth - 2} />
+            <LineValue label="last-agent" value={detail.lastAgentMessage} width={layout.detailWidth - 2} />
+
+            <Box marginTop={1} flexDirection="column" width={layout.detailWidth - 2}>
+              <Text color="magenta">Recent rename history</Text>
+              {(detail.renameHistory ?? []).slice(0, layout.compact ? 2 : 4).map((entry, index) => (
+                <Box key={`${index}-${entry.appliedAt}-${entry.newName}`} width={layout.detailWidth - 2}>
+                  <Text color="gray" wrap="truncate-end">
+                    {`${entry.newName} | ${entry.kind}/${entry.source} | ${formatWhen(entry.appliedAt)}`}
+                  </Text>
+                </Box>
+              ))}
+              {(detail.renameHistory ?? []).length === 0 ? <Text color="gray">No rename history yet.</Text> : null}
+            </Box>
+          </>
+        ) : (
+          <Text color="gray">No session selected.</Text>
+        )}
+      </Box>
+    </Box>
+  );
 
   return (
     <Box flexDirection="column">
@@ -259,102 +397,32 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               if (!detail || !nextName) {
                 return;
               }
-              void runAction(() => client.rename(detail.threadId, nextName), `Renamed ${clip(detail.threadId, 12)}`);
+              void runAction(
+                () => client.rename(detail.threadId, nextName),
+                `Renamed ${truncateDisplayText(detail.threadId, 12)}`
+              );
             }}
           />
         </Box>
       ) : null}
 
-      <Box marginTop={1} gap={2} flexDirection={stackedLayout ? "column" : "row"}>
-        <Box flexDirection="column" width={listPanelWidth}>
-          <Text color="cyan">
-            Sessions {loading ? "(loading)" : ""} [{sessions.length}] {stackedLayout ? `(h ${terminalHeight})` : ""}
-          </Text>
-          <Box borderStyle="round" flexDirection="column" paddingX={1}>
-            {sessions.length === 0 ? <Text color="gray">No sessions matched the current filter.</Text> : null}
-            {visibleSessions.map(({ item: session, index }) => {
-              const active = index === selectedIndex;
-              const label = session.officialName ?? session.candidateName ?? session.threadId;
-              const flags = [
-                session.dirty ? "dirty" : "clean",
-                session.frozen ? "frozen" : null,
-                session.manualOverride ? "manual" : null
-              ]
-                .filter(Boolean)
-                .join("/");
-              const meta = clip(
-                [session.projectName ?? "unknown", session.provider ?? "n/a", flags, `${session.taskCompleteCount}t`]
-                  .filter(Boolean)
-                  .join(" | "),
-                sessionMetaClip
-              );
-
-              return (
-                <Box key={`${index}-${session.threadId}`} flexDirection="column" marginBottom={compactLayout ? 0 : 1}>
-                  <Text inverse={active} color={active ? "black" : undefined}>
-                    {active ? ">" : " "} {clip(label, sessionTitleClip)}
-                  </Text>
-                  {!compactLayout ? (
-                    <Text color={active ? "yellow" : "gray"}>
-                      {active ? "  " : "  "}
-                      {meta}
-                    </Text>
-                  ) : null}
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
-
-        <Box flexDirection="column" width={detailPanelWidth}>
-          <Text color="cyan">Detail</Text>
-          <Box borderStyle="round" flexDirection="column" paddingX={1}>
-            {detail ? (
-              <>
-                <Text color="yellow">{clip(detail.officialName ?? detail.candidateName ?? detail.threadId, detailClip)}</Text>
-                <Text color="gray">
-                  {clip(detail.projectName ?? "n/a", Math.max(12, Math.floor(detailPanelWidth / 4)))} | {clip(detail.provider ?? "n/a", 12)} | {clip(detail.model ?? "n/a", 14)}
-                </Text>
-                <Text color="gray">
-                  updated {formatWhen(detail.updatedAt)} | tokens {detail.tokenTotal}
-                </Text>
-                <Text>candidate: {clip(detail.candidateName, detailMessageClip)}</Text>
-                <Text>first: {clip(detail.firstUserMessage, detailMessageClip)}</Text>
-                <Text>last user: {clip(detail.lastUserMessage, detailMessageClip)}</Text>
-                <Text>last agent: {clip(detail.lastAgentMessage, detailMessageClip)}</Text>
-                <Box marginTop={1} flexDirection="column">
-                  <Text color="magenta">Recent rename history</Text>
-                  {(detail.renameHistory ?? []).slice(0, compactLayout ? 2 : 4).map((entry, index) => (
-                    <Text key={`${index}-${entry.appliedAt}-${entry.newName}`} color="gray">
-                      {clip(entry.newName, Math.max(18, detailPanelWidth - 24))} | {entry.kind}/{entry.source} | {formatWhen(entry.appliedAt)}
-                    </Text>
-                  ))}
-                  {(detail.renameHistory ?? []).length === 0 ? (
-                    <Text color="gray">No rename history yet.</Text>
-                  ) : null}
-                </Box>
-              </>
-            ) : (
-              <Text color="gray">No session selected.</Text>
-            )}
-          </Box>
-        </Box>
+      <Box marginTop={1} gap={2} flexDirection={layout.stacked ? "column" : "row"}>
+        {listPanel}
+        {detailPanel}
       </Box>
 
       <Box marginTop={1} flexDirection="column">
         <Text color="cyan">Batch preview</Text>
         <Box borderStyle="round" flexDirection="column" paddingX={1}>
           {preview.length === 0 ? <Text color="gray">Press p to preview dirty auto-rename actions.</Text> : null}
-          {preview.slice(0, visiblePreviewCount).map((item, index) => (
-            <Text key={`${index}-${item.threadId}`} color={item.status === "apply" ? "green" : "gray"}>
-              {clip(item.threadId, 12)} | {item.status} | {clip(item.candidateName ?? item.reason, Math.max(20, terminalWidth - 24))}
-            </Text>
+          {preview.slice(0, layout.visiblePreviewCount).map((item, index) => (
+            <PreviewRow key={`${index}-${item.threadId}`} item={item} width={layout.columns - 6} />
           ))}
         </Box>
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text color="gray">
+        <Text color="gray" wrap="truncate-end">
           j/k move  d dirty  / search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch-apply  q quit
         </Text>
       </Box>
@@ -406,10 +474,8 @@ function InteractiveBindings(props: {
   const refreshPreview = async () => {
     try {
       const payload = await props.client.batchApplyDirty(true);
-      props.setPreview(payload.items.slice(0, 8));
-      props.setMessage(
-        `Preview refreshed: ${payload.items.filter((item) => item.status === "apply").length} ready`
-      );
+      props.setPreview(payload.items.slice(0, 12));
+      props.setMessage(`Preview refreshed: ${payload.items.filter((item) => item.status === "apply").length} ready`);
     } catch (nextError) {
       props.setError(nextError instanceof Error ? nextError.message : "Unknown error");
     }
@@ -470,33 +536,37 @@ function InteractiveBindings(props: {
     }
 
     if (input === "s" && props.selected) {
+      const selected = props.selected;
       void runAction(
-        () => props.client.suggest(props.selected!.threadId),
-        `Suggested ${clip(props.selected.threadId, 12)}`
+        () => props.client.suggest(selected.threadId),
+        `Suggested ${truncateDisplayText(selected.threadId, 12)}`
       );
       return;
     }
 
     if (input === "a" && props.selected) {
+      const selected = props.selected;
       void runAction(
-        () => props.client.apply(props.selected!.threadId),
-        `Applied ${clip(props.selected.threadId, 12)}`
+        () => props.client.apply(selected.threadId),
+        `Applied ${truncateDisplayText(selected.threadId, 12)}`
       );
       return;
     }
 
     if (input === "f" && props.detail) {
+      const detail = props.detail;
       void runAction(
-        () => props.client.freeze(props.detail!.threadId, !props.detail!.frozen),
-        `${props.detail.frozen ? "Unfroze" : "Froze"} ${clip(props.detail.threadId, 12)}`
+        () => props.client.freeze(detail.threadId, !detail.frozen),
+        `${detail.frozen ? "Unfroze" : "Froze"} ${truncateDisplayText(detail.threadId, 12)}`
       );
       return;
     }
 
     if (input === "m" && props.detail) {
+      const detail = props.detail;
       void runAction(
-        () => props.client.setManualOverride(props.detail!.threadId, !props.detail!.manualOverride),
-        `${props.detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${clip(props.detail.threadId, 12)}`
+        () => props.client.setManualOverride(detail.threadId, !detail.manualOverride),
+        `${detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${truncateDisplayText(detail.threadId, 12)}`
       );
       return;
     }
@@ -512,7 +582,7 @@ function InteractiveBindings(props: {
       void props.client
         .batchApplyDirty(false)
         .then(async (payload) => {
-          props.setPreview(payload.items.slice(0, 8));
+          props.setPreview(payload.items.slice(0, 12));
           props.setMessage(
             `Batch apply finished: ${payload.items.filter((item) => item.status === "apply").length} applied candidates`
           );
@@ -528,7 +598,7 @@ function InteractiveBindings(props: {
       return;
     }
 
-    if (input === "q") {
+    if (input === "q" || key.escape) {
       exit();
     }
   });

@@ -56,6 +56,8 @@ describe("local api", () => {
     const payload = sessions.json();
     expect(payload.total).toBeGreaterThanOrEqual(1);
     expect(payload.items[0]?.threadId).toBe("019d-api-1");
+    expect(payload.workspaces).toHaveLength(1);
+    expect(payload.workspaces[0]?.workspacePath).toBe("/tmp/project-alpha");
   });
 
   it("supports session actions and config/provider endpoints", async () => {
@@ -133,7 +135,8 @@ describe("local api", () => {
       codexHome: workspace.codexHome,
       threadId: "019d-api-filter-2",
       userMessage: "实现 tui 页面",
-      lastAgentMessage: "已经补上 tui 页面"
+      lastAgentMessage: "已经补上 tui 页面",
+      cwd: "/tmp/project-beta"
     });
     await manager.scan();
     await manager.freeze("019d-api-filter-2");
@@ -145,11 +148,12 @@ describe("local api", () => {
 
     const filtered = await app.inject({
       method: "GET",
-      url: "/api/v1/sessions?search=web&frozen=false"
+      url: "/api/v1/sessions?search=web&frozen=false&workspace=project-alpha"
     });
     expect(filtered.statusCode).toBe(200);
     expect(filtered.json().items).toHaveLength(1);
     expect(filtered.json().items[0].threadId).toBe("019d-api-filter-1");
+    expect(filtered.json().workspaces).toHaveLength(2);
 
     const preview = await app.inject({
       method: "GET",
@@ -157,6 +161,49 @@ describe("local api", () => {
     });
     expect(preview.statusCode).toBe(200);
     expect(Array.isArray(preview.json().items)).toBe(true);
+  });
+
+  it("returns paginated session transcript details", async () => {
+    const workspace = await createTempWorkspace();
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir
+    });
+    cleanup.push(async () => manager.close());
+
+    await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId: "019d-api-transcript-1",
+      userMessage: "把 transcript 浏览做出来",
+      lastAgentMessage: "已经把 transcript 和 workspace sidebar 做出来",
+      toolCallName: "shell_command",
+      toolCallArguments: {
+        command: "jj st",
+        workdir: "/tmp/project-alpha"
+      },
+      toolCallOutput: "Working copy clean"
+    });
+    await manager.scan();
+
+    const app = await buildApiServer({ manager, operator: "api-test" });
+    cleanup.push(async () => {
+      await app.close();
+    });
+
+    const detail = await app.inject({
+      method: "GET",
+      url: "/api/v1/sessions/019d-api-transcript-1"
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().transcript).toBeUndefined();
+
+    const transcript = await app.inject({
+      method: "GET",
+      url: "/api/v1/sessions/019d-api-transcript-1/transcript?page=1&pageSize=2"
+    });
+    expect(transcript.statusCode).toBe(200);
+    expect(transcript.json().items.some((item: { role: string }) => item.role === "assistant" || item.role === "tool")).toBe(true);
+    expect(transcript.json().totalPages).toBeGreaterThanOrEqual(2);
   });
 
   it("supports config writeback and event polling", async () => {

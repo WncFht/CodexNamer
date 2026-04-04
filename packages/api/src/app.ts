@@ -59,6 +59,7 @@ async function filterAndSortSessions(
   const status = typeof query?.status === "string" ? query.status : undefined;
   const project = normalizeSearchValue(typeof query?.project === "string" ? query.project : undefined);
   const provider = normalizeSearchValue(typeof query?.provider === "string" ? query.provider : undefined);
+  const workspace = normalizeSearchValue(typeof query?.workspace === "string" ? query.workspace : undefined);
   const search = normalizeSearchValue(typeof query?.search === "string" ? query.search : undefined);
   const sort = typeof query?.sort === "string" ? query.sort : "updatedAt";
   const order = query?.order === "asc" ? "asc" : "desc";
@@ -84,11 +85,22 @@ async function filterAndSortSessions(
     if (provider && !item.provider?.toLowerCase().includes(provider)) {
       continue;
     }
+    if (workspace) {
+      const workspaceHaystack = [item.workspaceId, item.workspaceLabel, item.cwd]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!workspaceHaystack.includes(workspace)) {
+        continue;
+      }
+    }
     if (search) {
       const detail = options?.loadDetailText?.(item.threadId);
       const haystack = [
         item.threadId,
         item.projectName,
+        item.workspaceLabel,
+        item.workspaceId,
         item.officialName,
         item.candidateName,
         item.provider,
@@ -197,7 +209,13 @@ export async function buildApiServer(options?: {
 
   app.get("/api/v1/sessions", async (request) => {
     const query = (request.query as Record<string, unknown> | undefined) ?? {};
-    const allSessions = await manager.listSessions();
+    const dirtyFilter = parseBooleanQuery(query.dirty);
+    const allSessions = await manager.listSessions({
+      dirty: dirtyFilter
+    });
+    const workspaces = await manager.listWorkspaces({
+      dirty: dirtyFilter
+    });
     const items = await filterAndSortSessions(allSessions, query, {
       loadDetailText: (threadId) => manager.db.getSessionDetail(threadId)
     });
@@ -205,12 +223,23 @@ export async function buildApiServer(options?: {
     return {
       items,
       total: items.length,
+      workspaces,
       counts: {
         dirty: allSessions.filter((item) => item.dirty).length,
         frozen: allSessions.filter((item) => item.frozen).length,
         manualOverride: allSessions.filter((item) => item.manualOverride).length
       },
       nextCursor: null
+    };
+  });
+
+  app.get("/api/v1/workspaces", async (request) => {
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const dirty = parseBooleanQuery(query.dirty);
+    return {
+      items: await manager.listWorkspaces({
+        dirty
+      })
     };
   });
 
@@ -228,7 +257,10 @@ export async function buildApiServer(options?: {
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
     const params = request.params as { id: string };
-    const detail = await manager.getSessionDetail(params.id);
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const detail = await manager.getSessionDetail(params.id, {
+      includeTranscript: parseBooleanQuery(query.includeTranscript) ?? false
+    });
     if (!detail) {
       return reply.status(404).send({
         error: "not_found",
@@ -236,6 +268,21 @@ export async function buildApiServer(options?: {
       });
     }
     return detail;
+  });
+
+  app.get("/api/v1/sessions/:id/transcript", async (request) => {
+    const params = request.params as { id: string };
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const roleValue = typeof query.role === "string" ? query.role : "all";
+    const role = ["all", "user", "assistant", "tool", "system"].includes(roleValue) ? roleValue : "all";
+
+    return manager.getSessionTranscriptPage(params.id, {
+      page: parseNumberQuery(query.page),
+      pageSize: parseNumberQuery(query.pageSize),
+      includeHidden: parseBooleanQuery(query.includeHidden),
+      role: role as "all" | "user" | "assistant" | "tool" | "system",
+      query: typeof query.query === "string" ? query.query : undefined
+    });
   });
 
   app.get("/api/v1/sessions/:id/history", async (request) => {

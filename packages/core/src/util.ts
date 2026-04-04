@@ -53,6 +53,22 @@ export function basenameSafe(input?: string): string | undefined {
   return base && base !== path.sep ? base : undefined;
 }
 
+export const UNKNOWN_WORKSPACE_ID = "__unknown_workspace__";
+
+export function workspaceIdForCwd(cwd?: string): string {
+  return cwd?.trim() ? cwd : UNKNOWN_WORKSPACE_ID;
+}
+
+export function workspaceLabelForCwd(cwd?: string, projectName?: string): string {
+  if (projectName?.trim()) {
+    return projectName.trim();
+  }
+  if (cwd?.trim()) {
+    return basenameSafe(cwd) ?? cwd;
+  }
+  return "No workspace";
+}
+
 export function deepMerge<T>(base: T, override: Partial<T>): T {
   const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
 
@@ -94,4 +110,3 @@ export function stripControl(input?: string): string | undefined {
 
   return input.replace(/[\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim();
 }
-
