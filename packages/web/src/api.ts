@@ -1,5 +1,6 @@
 import type {
   AutoRenamePreviewResponse,
+  ApiEventsResponse,
   DoctorResponse,
   ProviderResponse,
   SessionDetail,
@@ -78,4 +79,10 @@ export async function fetchDoctor(): Promise<DoctorResponse> {
 
 export async function fetchAutoRenamePreview(): Promise<AutoRenamePreviewResponse> {
   return requestJson<AutoRenamePreviewResponse>("/api/v1/auto-rename/preview");
+}
+
+export async function fetchEvents(cursor: number): Promise<ApiEventsResponse> {
+  const url = new URL("/api/v1/events/since", window.location.origin);
+  url.searchParams.set("cursor", String(cursor));
+  return requestJson<ApiEventsResponse>(url.toString());
 }

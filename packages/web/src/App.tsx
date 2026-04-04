@@ -1,7 +1,8 @@
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
 
 import {
   applySession,
+  fetchEvents,
   fetchAutoRenamePreview,
   fetchDoctor,
   fetchProviders,
@@ -13,6 +14,7 @@ import {
 } from "./api.js";
 import type {
   AutoRenamePreviewResponse,
+  ApiEventsResponse,
   DoctorResponse,
   ProviderResponse,
   SessionDetail,
@@ -59,7 +61,15 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [actioning, setActioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
+  const eventCursorRef = useRef(0);
+
+  const reloadSidePanels = async () => {
+    const [providerPayload, doctorPayload] = await Promise.all([fetchProviders(), fetchDoctor()]);
+    setProviders(providerPayload);
+    setDoctor(doctorPayload);
+  };
 
   const reloadSessions = async () => {
     setLoading(true);
@@ -74,6 +84,7 @@ export function App() {
       ]);
       setSessions(sessionPayload.items);
       setPreview(previewPayload);
+      setLastSyncAt(new Date().toISOString());
       if (!selectedId && sessionPayload.items[0]) {
         setSelectedId(sessionPayload.items[0].threadId);
       } else if (selectedId && !sessionPayload.items.some((item) => item.threadId === selectedId)) {
@@ -123,11 +134,10 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([fetchProviders(), fetchDoctor()])
-      .then(([providerPayload, doctorPayload]) => {
+    void reloadSidePanels()
+      .then(() => {
         if (active) {
-          setProviders(providerPayload);
-          setDoctor(doctorPayload);
+          setLastSyncAt((previous) => previous ?? new Date().toISOString());
         }
       })
       .catch((nextError) => {
@@ -140,6 +150,53 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!error) {
+        return;
+      }
+
+      void reloadSessions();
+      void reloadSidePanels().catch(() => undefined);
+      if (selectedId) {
+        void fetchSessionDetail(selectedId)
+          .then(setDetail)
+          .catch(() => undefined);
+      }
+    }, 3_000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [error, selectedId, deferredSearch, dirtyOnly]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchEvents(eventCursorRef.current)
+        .then((payload: ApiEventsResponse) => {
+          eventCursorRef.current = payload.nextCursor;
+          if (payload.items.length === 0) {
+            return;
+          }
+
+          void reloadSessions();
+          void reloadSidePanels().catch(() => undefined);
+          if (selectedId) {
+            void fetchSessionDetail(selectedId)
+              .then(setDetail)
+              .catch(() => undefined);
+          }
+        })
+        .catch(() => {
+          void reloadSessions();
+        });
+    }, 5_000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [selectedId, deferredSearch, dirtyOnly]);
+
   const runAction = async (action: () => Promise<void>) => {
     if (!selectedId) {
       return;
@@ -151,8 +208,7 @@ export function App() {
       await Promise.all([
         reloadSessions(),
         fetchSessionDetail(selectedId).then(setDetail),
-        fetchProviders().then(setProviders),
-        fetchDoctor().then(setDoctor)
+        reloadSidePanels()
       ]);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unknown error");
@@ -202,6 +258,10 @@ export function App() {
             <span>Selected</span>
             <strong>{selectedSummary?.projectName ?? "none"}</strong>
           </div>
+          <div className="sidebar-metric">
+            <span>Last Sync</span>
+            <strong>{lastSyncAt ? formatWhen(lastSyncAt) : "pending"}</strong>
+          </div>
         </section>
       </aside>
 
@@ -249,6 +309,11 @@ export function App() {
           <section className="sessions-grid">
             <div className="session-list">
               {loading ? <p className="loading-state">Loading sessions...</p> : null}
+              {!loading && sessions.length === 0 ? (
+                <div className="detail-card placeholder">
+                  {error ? "API not ready yet. The dashboard will retry automatically." : "No sessions matched the current filter."}
+                </div>
+              ) : null}
               {sessions.map((session) => (
                 <button
                   key={session.threadId}
@@ -349,8 +414,8 @@ export function App() {
                   <div className="detail-card">
                     <h4>Rename history</h4>
                     <div className="history-stack">
-                      {(detail.renameHistory ?? []).slice(0, 6).map((entry) => (
-                        <article className="history-row" key={`${entry.appliedAt}-${entry.newName}`}>
+                      {(detail.renameHistory ?? []).slice(0, 6).map((entry, index) => (
+                        <article className="history-row" key={`${index}-${entry.appliedAt}-${entry.newName}`}>
                           <div>
                             <strong>{entry.newName}</strong>
                             <p>

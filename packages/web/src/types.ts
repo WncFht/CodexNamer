@@ -80,3 +80,13 @@ export type AutoRenamePreviewResponse = {
     reason: string;
   }>;
 };
+
+export type ApiEventsResponse = {
+  items: Array<{
+    cursor: number;
+    type: string;
+    at: string;
+    payload: Record<string, unknown>;
+  }>;
+  nextCursor: number;
+};

@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import { useEffect, useState } from "react";
 
@@ -28,7 +28,28 @@ function formatWhen(value?: string): string {
   });
 }
 
+function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: number): Array<{ item: T; index: number }> {
+  if (items.length === 0 || maxItems <= 0) {
+    return [];
+  }
+
+  if (items.length <= maxItems) {
+    return items.map((item, index) => ({ item, index }));
+  }
+
+  const half = Math.floor(maxItems / 2);
+  let start = Math.max(0, selectedIndex - half);
+  let end = Math.min(items.length, start + maxItems);
+  start = Math.max(0, end - maxItems);
+
+  return items.slice(start, end).map((item, offset) => ({
+    item,
+    index: start + offset
+  }));
+}
+
 export function App(props: { apiBase: string; interactive: boolean }) {
+  const { stdout } = useStdout();
   const [client] = useState(() => new LocalApiClient(props.apiBase));
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -44,6 +65,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [preview, setPreview] = useState<BatchApplyResponse["items"]>([]);
 
   const selected = sessions[selectedIndex];
+  const terminalWidth = stdout.columns ?? 120;
+  const terminalHeight = stdout.rows ?? 40;
+  const stackedLayout = terminalWidth < 110;
+  const compactLayout = terminalWidth < 90 || terminalHeight < 28;
+  const listPanelWidth = stackedLayout
+    ? Math.max(terminalWidth - 4, 40)
+    : Math.max(Math.floor(terminalWidth * 0.56), 48);
+  const detailPanelWidth = stackedLayout
+    ? Math.max(terminalWidth - 4, 40)
+    : Math.max(terminalWidth - listPanelWidth - 4, 32);
+  const visibleSessionCount = stackedLayout
+    ? Math.max(6, terminalHeight - (compactLayout ? 22 : 24))
+    : Math.max(8, terminalHeight - 13);
+  const visiblePreviewCount = compactLayout ? 4 : 8;
+  const sessionTitleClip = Math.max(18, listPanelWidth - (stackedLayout ? 16 : 24));
+  const sessionMetaClip = Math.max(10, Math.floor(listPanelWidth / 3.5));
+  const detailClip = Math.max(24, detailPanelWidth - 10);
+  const detailMessageClip = Math.max(20, detailPanelWidth - 8);
+  const visibleSessions = windowItemsAround(sessions, selectedIndex, visibleSessionCount);
 
   const reloadSessions = async (nextSelectedId?: string) => {
     setLoading(true);
@@ -200,14 +240,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         </Box>
       ) : null}
 
-      <Box marginTop={1} gap={2}>
-        <Box flexDirection="column" width="58%">
+      <Box marginTop={1} gap={2} flexDirection={stackedLayout ? "column" : "row"}>
+        <Box flexDirection="column" width={listPanelWidth}>
           <Text color="cyan">
-            Sessions {loading ? "(loading)" : ""} [{sessions.length}]
+            Sessions {loading ? "(loading)" : ""} [{sessions.length}] {stackedLayout ? `(h ${terminalHeight})` : ""}
           </Text>
           <Box borderStyle="round" flexDirection="column" paddingX={1}>
             {sessions.length === 0 ? <Text color="gray">No sessions matched the current filter.</Text> : null}
-            {sessions.map((session, index) => {
+            {visibleSessions.map(({ item: session, index }) => {
               const active = index === selectedIndex;
               const label = session.officialName ?? session.candidateName ?? session.threadId;
               const flags = [
@@ -220,10 +260,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               return (
                 <Box key={`${index}-${session.threadId}`} justifyContent="space-between">
                   <Text inverse={active}>
-                    {active ? ">" : " "} {clip(label, 44)}
+                    {active ? ">" : " "} {clip(label, sessionTitleClip)}
                   </Text>
                   <Text color={active ? "yellow" : "gray"}>
-                    {clip(session.projectName, 16)} | {flags} | {session.taskCompleteCount}t
+                    {clip(session.projectName, sessionMetaClip)} | {flags} | {session.taskCompleteCount}t
                   </Text>
                 </Box>
               );
@@ -231,27 +271,27 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           </Box>
         </Box>
 
-        <Box flexDirection="column" width="42%">
+        <Box flexDirection="column" width={detailPanelWidth}>
           <Text color="cyan">Detail</Text>
           <Box borderStyle="round" flexDirection="column" paddingX={1}>
             {detail ? (
               <>
-                <Text color="yellow">{clip(detail.officialName ?? detail.candidateName ?? detail.threadId, 54)}</Text>
+                <Text color="yellow">{clip(detail.officialName ?? detail.candidateName ?? detail.threadId, detailClip)}</Text>
                 <Text color="gray">
-                  {detail.projectName ?? "n/a"} | {detail.provider ?? "n/a"} | {detail.model ?? "n/a"}
+                  {clip(detail.projectName ?? "n/a", Math.max(12, Math.floor(detailPanelWidth / 4)))} | {clip(detail.provider ?? "n/a", 12)} | {clip(detail.model ?? "n/a", 14)}
                 </Text>
                 <Text color="gray">
                   updated {formatWhen(detail.updatedAt)} | tokens {detail.tokenTotal}
                 </Text>
-                <Text>candidate: {clip(detail.candidateName, 56)}</Text>
-                <Text>first: {clip(detail.firstUserMessage, 56)}</Text>
-                <Text>last user: {clip(detail.lastUserMessage, 52)}</Text>
-                <Text>last agent: {clip(detail.lastAgentMessage, 51)}</Text>
+                <Text>candidate: {clip(detail.candidateName, detailMessageClip)}</Text>
+                <Text>first: {clip(detail.firstUserMessage, detailMessageClip)}</Text>
+                <Text>last user: {clip(detail.lastUserMessage, detailMessageClip)}</Text>
+                <Text>last agent: {clip(detail.lastAgentMessage, detailMessageClip)}</Text>
                 <Box marginTop={1} flexDirection="column">
                   <Text color="magenta">Recent rename history</Text>
-                  {(detail.renameHistory ?? []).slice(0, 4).map((entry, index) => (
+                  {(detail.renameHistory ?? []).slice(0, compactLayout ? 2 : 4).map((entry, index) => (
                     <Text key={`${index}-${entry.appliedAt}-${entry.newName}`} color="gray">
-                      {clip(entry.newName, 40)} | {entry.kind}/{entry.source} | {formatWhen(entry.appliedAt)}
+                      {clip(entry.newName, Math.max(18, detailPanelWidth - 24))} | {entry.kind}/{entry.source} | {formatWhen(entry.appliedAt)}
                     </Text>
                   ))}
                   {(detail.renameHistory ?? []).length === 0 ? (
@@ -270,9 +310,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color="cyan">Batch preview</Text>
         <Box borderStyle="round" flexDirection="column" paddingX={1}>
           {preview.length === 0 ? <Text color="gray">Press p to preview dirty auto-rename actions.</Text> : null}
-          {preview.map((item, index) => (
+          {preview.slice(0, visiblePreviewCount).map((item, index) => (
             <Text key={`${index}-${item.threadId}`} color={item.status === "apply" ? "green" : "gray"}>
-              {clip(item.threadId, 12)} | {item.status} | {clip(item.candidateName ?? item.reason, 60)}
+              {clip(item.threadId, 12)} | {item.status} | {clip(item.candidateName ?? item.reason, Math.max(20, terminalWidth - 24))}
             </Text>
           ))}
         </Box>
