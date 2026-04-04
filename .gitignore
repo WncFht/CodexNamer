@@ -1,9 +1,10 @@
 node_modules
 dist
+packages/*/dist
+packages/*/dist-ts
 .DS_Store
 .turbo
 coverage
 *.log
 tmp
 *.tsbuildinfo
-

@@ -8,10 +8,12 @@
   ],
   "scripts": {
     "build": "tsc -b",
-    "clean": "rm -rf packages/*/dist coverage",
+    "clean": "rm -rf packages/*/dist packages/*/dist-ts coverage",
     "cli": "tsx packages/cli/src/index.ts",
     "daemon": "tsx packages/daemon/src/index.ts",
     "api": "tsx packages/api/src/index.ts",
+    "web": "npm run dev --workspace @codex-session-manager/web",
+    "web:build": "npm run build --workspace @codex-session-manager/web",
     "test": "vitest run",
     "test:watch": "vitest"
   },
