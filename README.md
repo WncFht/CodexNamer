@@ -30,7 +30,11 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 优先直接走 Responses / Chat Completions
 - 只有直连不可用时才回退 `codex exec`
 
-Local API 已开始落地，当前已有基础 server 与第一批核心路由；WebUI / TUI 仍主要停留在详细设计阶段。
+Local API、WebUI 与 TUI 都已经有第一版可运行实现：
+
+- Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact
+- WebUI：本地 session dashboard，支持会话浏览、详情查看、suggest/apply/freeze/manual override、provider 与 maintenance 视图
+- TUI：终端列表 + 详情布局，支持搜索、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
 ## 文档导航
 
@@ -94,3 +98,25 @@ v1 完成后，项目至少应支持：
 当前还可通过本地 API 启动命令运行服务：
 
 - `npm run api -- --host 127.0.0.1 --port 42110`
+
+当前前端入口：
+
+- `npm run web`
+- `npm run tui`
+
+## 本地运行
+
+推荐先启动本地 API，再启动 WebUI 或 TUI：
+
+```bash
+npm run api -- --host 127.0.0.1 --port 42110
+npm run web
+# 或
+npm run tui -- --api-base http://127.0.0.1:42110
+```
+
+说明：
+
+- `npm run api` / `npm run cli` / `npm run daemon` 会先自动补齐 runtime 相关包的编译产物
+- `npm run web` 默认通过 Vite 代理到 `http://127.0.0.1:42110`
+- `npm run tui` 在真实 TTY 下支持快捷键；非交互环境下会退化成只读渲染
