@@ -13,9 +13,11 @@
     "cli": "npm run build:runtime && tsx packages/cli/src/index.ts",
     "daemon": "npm run build:runtime && tsx packages/daemon/src/index.ts",
     "api": "npm run build:runtime && tsx packages/api/src/index.ts",
-    "web": "npm run dev --workspace @codex-session-manager/web",
+    "web": "tsx scripts/launch-ui.ts web",
+    "web:raw": "npm run dev --workspace @codex-session-manager/web",
     "web:build": "npm run build --workspace @codex-session-manager/web",
-    "tui": "tsx packages/tui/src/index.tsx",
+    "tui": "tsx scripts/launch-ui.ts tui",
+    "tui:raw": "tsx packages/tui/src/index.tsx",
     "tui:build": "npm run build --workspace @codex-session-manager/tui",
     "test": "vitest run",
     "test:watch": "vitest"

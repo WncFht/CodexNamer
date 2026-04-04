@@ -191,11 +191,23 @@ curl http://127.0.0.1:42110/api/v1/health
 npm run web
 ```
 
+现在 `npm run web` 会自动：
+
+- 复用一个健康的本地 API
+- 或者在 `42110+` 范围内找可用端口启动 API
+- 然后把 Vite 代理指向对应 API
+
 默认 Vite 地址：
 
 - `http://127.0.0.1:43110`
 
 ### 3. 启动 TUI
+
+```bash
+npm run tui
+```
+
+如果你要显式指定一个已有 API，也可以：
 
 ```bash
 npm run tui -- --api-base http://127.0.0.1:42110
@@ -313,7 +325,15 @@ curl 'http://127.0.0.1:42110/api/v1/events/since?cursor=0'
 
 ## 本地运行说明
 
-推荐先启动本地 API，再启动 WebUI 或 TUI：
+默认推荐直接用一条命令启动：
+
+```bash
+npm run web
+# 或
+npm run tui
+```
+
+如果你想单独调 API，再手动连接 WebUI 或 TUI，也可以这样：
 
 ```bash
 npm run api -- --host 127.0.0.1 --port 42110
@@ -326,7 +346,9 @@ npm run tui -- --api-base http://127.0.0.1:42110
 
 - `npm run api` / `npm run cli` / `npm run daemon` 会先自动补齐 runtime 相关包的编译产物
 - `npm run clean` 会同时清掉 `dist` 和 `tsbuildinfo`，避免增量构建把 runtime 包留在不完整状态
-- `npm run web` 默认通过 Vite 代理到 `http://127.0.0.1:42110`
+- `npm run web` / `npm run tui` 现在会优先复用健康 API；如果默认端口被其他非 CSM 进程占用，会自动换到下一个可用端口
+- `npm run web:raw` 只启动 Vite，不会自动起 API
+- `npm run tui:raw` 只启动 TUI，不会自动起 API
 - `npm run tui` 在真实 TTY 下支持快捷键；非交互环境下会退化成只读渲染
 - `PUT /api/v1/config` 只写 `codex-session-manager` 自己的用户配置，不会回写 Codex 自身配置
 - 当前不支持在运行中的 API 进程里热切换 `general.stateDir`；这个字段如果要改，建议停服务后修改配置再重启
