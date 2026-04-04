@@ -102,5 +102,56 @@ describe("local api", () => {
     });
     expect(config.statusCode).toBe(200);
     expect(config.json().general.codexHome).toBe(workspace.codexHome);
+
+    const doctor = await app.inject({
+      method: "GET",
+      url: "/api/v1/doctor"
+    });
+    expect(doctor.statusCode).toBe(200);
+    expect(doctor.json().provider).toBeDefined();
+  });
+
+  it("supports session filters and auto-rename preview endpoint", async () => {
+    const workspace = await createTempWorkspace();
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir
+    });
+    cleanup.push(async () => manager.close());
+
+    await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId: "019d-api-filter-1",
+      userMessage: "实现 web 页面",
+      lastAgentMessage: "已经补上 sessions 页面"
+    });
+    await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId: "019d-api-filter-2",
+      userMessage: "实现 tui 页面",
+      lastAgentMessage: "已经补上 tui 页面"
+    });
+    await manager.scan();
+    await manager.freeze("019d-api-filter-2");
+
+    const app = await buildApiServer({ manager, operator: "api-test" });
+    cleanup.push(async () => {
+      await app.close();
+    });
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/api/v1/sessions?search=web&frozen=false"
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().items).toHaveLength(1);
+    expect(filtered.json().items[0].threadId).toBe("019d-api-filter-1");
+
+    const preview = await app.inject({
+      method: "GET",
+      url: "/api/v1/auto-rename/preview"
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(Array.isArray(preview.json().items)).toBe(true);
   });
 });

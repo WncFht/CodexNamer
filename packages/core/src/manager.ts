@@ -468,7 +468,8 @@ export class CodexSessionManager {
       autoRename: {
         ...this.config.watch,
         autoApply: this.config.rename.autoApply
-      }
+      },
+      provider: inspectRenameProvider(this.config) as unknown as Record<string, unknown>
     };
   }
 

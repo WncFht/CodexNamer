@@ -238,6 +238,7 @@ export interface DoctorReport {
   dbExists: boolean;
   stats: SessionIndexStats;
   autoRename: WatchConfig & { autoApply: string };
+  provider?: Record<string, unknown>;
 }
 
 export interface AutoRenamePreview {
