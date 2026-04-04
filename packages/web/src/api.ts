@@ -77,8 +77,18 @@ export async function fetchDoctor(): Promise<DoctorResponse> {
   return requestJson<DoctorResponse>("/api/v1/doctor");
 }
 
-export async function fetchAutoRenamePreview(): Promise<AutoRenamePreviewResponse> {
-  return requestJson<AutoRenamePreviewResponse>("/api/v1/auto-rename/preview");
+export async function fetchAutoRenamePreview(params?: {
+  includeCandidateNames?: boolean;
+  limit?: number;
+}): Promise<AutoRenamePreviewResponse> {
+  const url = new URL("/api/v1/auto-rename/preview", window.location.origin);
+  if (params?.includeCandidateNames) {
+    url.searchParams.set("includeCandidateNames", "true");
+  }
+  if (params?.limit && params.limit > 0) {
+    url.searchParams.set("limit", String(params.limit));
+  }
+  return requestJson<AutoRenamePreviewResponse>(url.toString());
 }
 
 export async function fetchEvents(cursor: number): Promise<ApiEventsResponse> {

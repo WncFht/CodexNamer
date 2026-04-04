@@ -532,12 +532,23 @@ export class CodexSessionManager {
     };
   }
 
-  async previewAutoRename(): Promise<AutoRenamePreview[]> {
+  async previewAutoRename(options?: {
+    includeCandidateNames?: boolean;
+    limit?: number;
+  }): Promise<AutoRenamePreview[]> {
     await this.scan();
     const now = new Date();
     const previews: AutoRenamePreview[] = [];
+    const dirtySessions = this.db.getDirtySessions();
+    const limit =
+      typeof options?.limit === "number" && Number.isFinite(options.limit) && options.limit > 0
+        ? Math.trunc(options.limit)
+        : dirtySessions.length;
 
-    for (const session of this.db.getDirtySessions()) {
+    for (const session of dirtySessions) {
+      if (previews.length >= limit) {
+        break;
+      }
       const detail = this.db.getSessionDetail(session.threadId);
       if (!detail) {
         continue;
@@ -578,10 +589,11 @@ export class CodexSessionManager {
         continue;
       }
 
-      const suggestion = await this.inferenceService.suggest(this.materializeSessionForSuggestion(detail));
       previews.push({
         threadId: detail.threadId,
-        candidateName: suggestion.name,
+        candidateName: options?.includeCandidateNames
+          ? (await this.inferenceService.suggest(this.materializeSessionForSuggestion(detail))).name
+          : undefined,
         status: "apply",
         reason: "finalize_ready"
       });

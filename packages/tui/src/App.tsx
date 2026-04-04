@@ -12,7 +12,30 @@ function clip(value: string | undefined, maxLength: number): string {
   if (!value) {
     return "n/a";
   }
-  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+  if (maxLength <= 1) {
+    return "…";
+  }
+
+  let width = 0;
+  let output = "";
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    const charWidth =
+      codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0xa0)
+        ? 0
+        : codePoint >= 0x1100
+          ? 2
+          : 1;
+
+    if (width + charWidth > maxLength - 1) {
+      return `${output}…`;
+    }
+
+    output += char;
+    width += charWidth;
+  }
+
+  return output;
 }
 
 function formatWhen(value?: string): string {
@@ -67,20 +90,22 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const selected = sessions[selectedIndex];
   const terminalWidth = stdout.columns ?? 120;
   const terminalHeight = stdout.rows ?? 40;
-  const stackedLayout = terminalWidth < 110;
-  const compactLayout = terminalWidth < 90 || terminalHeight < 28;
+  const stackedLayout = terminalWidth < 132 || terminalHeight < 30;
+  const compactLayout = terminalWidth < 96 || terminalHeight < 26;
   const listPanelWidth = stackedLayout
     ? Math.max(terminalWidth - 4, 40)
     : Math.max(Math.floor(terminalWidth * 0.56), 48);
   const detailPanelWidth = stackedLayout
     ? Math.max(terminalWidth - 4, 40)
     : Math.max(terminalWidth - listPanelWidth - 4, 32);
-  const visibleSessionCount = stackedLayout
-    ? Math.max(6, terminalHeight - (compactLayout ? 22 : 24))
-    : Math.max(8, terminalHeight - 13);
+  const sessionRowHeight = compactLayout ? 1 : 2;
+  const sessionViewportRows = stackedLayout
+    ? Math.max(8, terminalHeight - (compactLayout ? 24 : 26))
+    : Math.max(10, terminalHeight - 15);
+  const visibleSessionCount = Math.max(4, Math.floor(sessionViewportRows / sessionRowHeight));
   const visiblePreviewCount = compactLayout ? 4 : 8;
-  const sessionTitleClip = Math.max(18, listPanelWidth - (stackedLayout ? 16 : 24));
-  const sessionMetaClip = Math.max(10, Math.floor(listPanelWidth / 3.5));
+  const sessionTitleClip = Math.max(20, listPanelWidth - 8);
+  const sessionMetaClip = Math.max(20, listPanelWidth - 6);
   const detailClip = Math.max(24, detailPanelWidth - 10);
   const detailMessageClip = Math.max(20, detailPanelWidth - 8);
   const visibleSessions = windowItemsAround(sessions, selectedIndex, visibleSessionCount);
@@ -257,14 +282,24 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               ]
                 .filter(Boolean)
                 .join("/");
+              const meta = clip(
+                [session.projectName ?? "unknown", session.provider ?? "n/a", flags, `${session.taskCompleteCount}t`]
+                  .filter(Boolean)
+                  .join(" | "),
+                sessionMetaClip
+              );
+
               return (
-                <Box key={`${index}-${session.threadId}`} justifyContent="space-between">
-                  <Text inverse={active}>
+                <Box key={`${index}-${session.threadId}`} flexDirection="column" marginBottom={compactLayout ? 0 : 1}>
+                  <Text inverse={active} color={active ? "black" : undefined}>
                     {active ? ">" : " "} {clip(label, sessionTitleClip)}
                   </Text>
-                  <Text color={active ? "yellow" : "gray"}>
-                    {clip(session.projectName, sessionMetaClip)} | {flags} | {session.taskCompleteCount}t
-                  </Text>
+                  {!compactLayout ? (
+                    <Text color={active ? "yellow" : "gray"}>
+                      {active ? "  " : "  "}
+                      {meta}
+                    </Text>
+                  ) : null}
                 </Box>
               );
             })}

@@ -62,6 +62,7 @@ export function App() {
   const [actioning, setActioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const deferredSearch = useDeferredValue(search);
   const eventCursorRef = useRef(0);
 
@@ -75,15 +76,11 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const [sessionPayload, previewPayload] = await Promise.all([
-        fetchSessions({
-          search: deferredSearch,
-          dirtyOnly
-        }),
-        fetchAutoRenamePreview()
-      ]);
+      const sessionPayload = await fetchSessions({
+        search: deferredSearch,
+        dirtyOnly
+      });
       setSessions(sessionPayload.items);
-      setPreview(previewPayload);
       setLastSyncAt(new Date().toISOString());
       if (!selectedId && sessionPayload.items[0]) {
         setSelectedId(sessionPayload.items[0].threadId);
@@ -97,9 +94,39 @@ export function App() {
     }
   };
 
+  const reloadPreview = async (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => {
+    if (options?.urgent) {
+      setPreviewRefreshing(true);
+    }
+    try {
+      const previewPayload = await fetchAutoRenamePreview({
+        includeCandidateNames: options?.includeCandidateNames ?? false,
+        limit: 50
+      });
+      setPreview(previewPayload);
+    } catch {
+      // Keep the last successful preview. Session browsing should not block on this endpoint.
+    } finally {
+      if (options?.urgent) {
+        setPreviewRefreshing(false);
+      }
+    }
+  };
+
   useEffect(() => {
     void reloadSessions();
   }, [deferredSearch, dirtyOnly]);
+
+  useEffect(() => {
+    void reloadPreview({ urgent: true });
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "maintenance") {
+      return;
+    }
+    void reloadPreview({ includeCandidateNames: true, urgent: true });
+  }, [tab]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -158,6 +185,7 @@ export function App() {
 
       void reloadSessions();
       void reloadSidePanels().catch(() => undefined);
+      void reloadPreview().catch(() => undefined);
       if (selectedId) {
         void fetchSessionDetail(selectedId)
           .then(setDetail)
@@ -181,6 +209,7 @@ export function App() {
 
           void reloadSessions();
           void reloadSidePanels().catch(() => undefined);
+          void reloadPreview().catch(() => undefined);
           if (selectedId) {
             void fetchSessionDetail(selectedId)
               .then(setDetail)
@@ -205,11 +234,8 @@ export function App() {
     setError(null);
     try {
       await action();
-      await Promise.all([
-        reloadSessions(),
-        fetchSessionDetail(selectedId).then(setDetail),
-        reloadSidePanels()
-      ]);
+      await Promise.all([reloadSessions(), fetchSessionDetail(selectedId).then(setDetail), reloadSidePanels()]);
+      void reloadPreview({ includeCandidateNames: tab === "maintenance" });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unknown error");
     } finally {
@@ -252,7 +278,9 @@ export function App() {
           </div>
           <div className="sidebar-metric">
             <span>Apply Queue</span>
-            <strong>{preview?.items.filter((item) => item.status === "apply").length ?? 0}</strong>
+            <strong>
+              {previewRefreshing && !preview ? "..." : preview?.items.filter((item) => item.status === "apply").length ?? 0}
+            </strong>
           </div>
           <div className="sidebar-metric">
             <span>Selected</span>
@@ -460,6 +488,13 @@ export function App() {
             </div>
             <div className="detail-card">
               <h3>Auto rename preview</h3>
+              <button
+                className="ghost-button"
+                onClick={() => void reloadPreview({ includeCandidateNames: true, urgent: true })}
+                type="button"
+              >
+                {previewRefreshing ? "Refreshing..." : "Refresh Preview"}
+              </button>
               <pre>{JSON.stringify(preview?.items ?? [], null, 2)}</pre>
             </div>
           </section>

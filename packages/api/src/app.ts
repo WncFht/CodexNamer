@@ -214,9 +214,17 @@ export async function buildApiServer(options?: {
     };
   });
 
-  app.get("/api/v1/auto-rename/preview", async () => ({
-    items: await manager.previewAutoRename()
-  }));
+  app.get("/api/v1/auto-rename/preview", async (request) => {
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const includeCandidateNames = parseBooleanQuery(query.includeCandidateNames) ?? false;
+    const limit = parseNumberQuery(query.limit);
+    return {
+      items: await manager.previewAutoRename({
+        includeCandidateNames,
+        limit
+      })
+    };
+  });
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
     const params = request.params as { id: string };
