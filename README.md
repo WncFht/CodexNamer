@@ -30,7 +30,7 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 优先直接走 Responses / Chat Completions
 - 只有直连不可用时才回退 `codex exec`
 
-WebUI / TUI / 本地 API 目前仍处于详细设计阶段，见下方设计文档。
+Local API 已开始落地，当前已有基础 server 与第一批核心路由；WebUI / TUI 仍主要停留在详细设计阶段。
 
 ## 文档导航
 
@@ -90,3 +90,7 @@ v1 完成后，项目至少应支持：
 - `codex-session doctor`
 - `codex-session config print`
 - `codex-session provider test`
+
+当前还可通过本地 API 启动命令运行服务：
+
+- `npm run api -- --host 127.0.0.1 --port 42110`

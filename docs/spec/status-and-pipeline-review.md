@@ -30,7 +30,13 @@
 
 还没真正落地的部分：
 
-- Local API 还未实现
+- Local API 已完成第一阶段基础实现：
+  - `packages/api`
+  - health
+  - sessions list/detail/history
+  - suggest/apply/rename/freeze/manual-override
+  - batch apply/suggest
+  - config/providers/doctor/compact routes
 - WebUI 还未实现
 - TUI 还未实现
 - SSE / events 游标接口还只是设计，没有运行时代码
@@ -66,6 +72,7 @@
 - `config print`
 - `provider test`
 - auto-rename preview 的 cooldown / max-auto-rename 守卫
+- Local API foundation
 
 ## 3. 当前 Pipeline 仍然存在的问题
 
@@ -163,9 +170,9 @@
 - 继续保持 compact 为手动维护命令
 - 在 WebUI / CLI 上明确风险
 
-### 3.6 Local API / WebUI / TUI 缺失导致 pipeline 的“可操作性”还不完整
+### 3.6 WebUI / TUI 缺失导致 pipeline 的“可操作性”还不完整
 
-领域层已经可用，但用户态入口仍然偏 CLI。
+领域层已经可用，本地 API 也已有基础实现，但用户态入口仍然偏 CLI。
 
 影响：
 
@@ -173,12 +180,12 @@
 
 建议：
 
-- 优先做 Local API
+- 先扩展 Local API 的剩余契约
 - 再做 WebUI 的 `Sessions / Session Detail / Batch / Providers`
 
 ## 4. 建议的下一阶段顺序
 
-1. Local API
+1. 完善 Local API 契约
 2. `doctor` 合并 provider 诊断
 3. auto-apply 真正闭环
 4. 持久化“实质更新信号”
@@ -189,8 +196,8 @@
 
 目前最关键的结论有两条：
 
-- Web / TUI / API 设计书已经够用了，当前不是设计不足，而是实现尚未开始。
+- Web / TUI / API 设计书已经够用了，当前不是设计不足，而是 Local API 已起步、WebUI/TUI 尚未接上。
 - 现有 pipeline 最大的真实缺口不在 rename 核心，而在：
   - auto-apply 还没闭环
   - “实质更新”阈值还没真正进入调度判断
-  - Local API / WebUI / TUI 还没接上
+  - WebUI / TUI 还没接上

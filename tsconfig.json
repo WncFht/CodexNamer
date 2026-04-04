@@ -12,7 +12,9 @@
     },
     {
       "path": "./packages/daemon"
+    },
+    {
+      "path": "./packages/api"
     }
   ]
 }
-

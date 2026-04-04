@@ -11,6 +11,7 @@
     "clean": "rm -rf packages/*/dist coverage",
     "cli": "tsx packages/cli/src/index.ts",
     "daemon": "tsx packages/daemon/src/index.ts",
+    "api": "tsx packages/api/src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
