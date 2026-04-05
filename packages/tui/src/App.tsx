@@ -1,42 +1,23 @@
 import React from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { LocalApiClient } from "./api.js";
-import type { BatchApplyResponse, SessionDetail, SessionSummary } from "./types.js";
+import { computeTerminalLayout, truncateDisplayText } from "./layout.js";
+import type {
+  BatchApplyResponse,
+  SessionDetail,
+  SessionSummary,
+  SessionTranscriptEntry,
+  SessionTranscriptPage
+} from "./types.js";
 
 type InputMode = "normal" | "search" | "rename";
+type FocusPane = "sessions" | "transcript";
+type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
 
-function clip(value: string | undefined, maxLength: number): string {
-  if (!value) {
-    return "n/a";
-  }
-  if (maxLength <= 1) {
-    return "…";
-  }
-
-  let width = 0;
-  let output = "";
-  for (const char of value) {
-    const codePoint = char.codePointAt(0) ?? 0;
-    const charWidth =
-      codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0xa0)
-        ? 0
-        : codePoint >= 0x1100
-          ? 2
-          : 1;
-
-    if (width + charWidth > maxLength - 1) {
-      return `${output}…`;
-    }
-
-    output += char;
-    width += charWidth;
-  }
-
-  return output;
-}
+const TRANSCRIPT_PAGE_SIZE = 18;
 
 function formatWhen(value?: string): string {
   if (!value) {
@@ -49,6 +30,10 @@ function formatWhen(value?: string): string {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function compactWhitespace(value: string | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: number): Array<{ item: T; index: number }> {
@@ -71,8 +56,165 @@ function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: numbe
   }));
 }
 
-export function App(props: { apiBase: string; interactive: boolean }) {
+function useTerminalMetrics() {
   const { stdout } = useStdout();
+  const readMetrics = () => ({
+    columns: process.stdout.columns ?? stdout.columns ?? 120,
+    rows: process.stdout.rows ?? stdout.rows ?? 40
+  });
+  const [metrics, setMetrics] = useState(readMetrics);
+
+  useEffect(() => {
+    const update = () => {
+      setMetrics(readMetrics());
+    };
+
+    update();
+    stdout.on("resize", update);
+    process.stdout.on("resize", update);
+    process.on("SIGWINCH", update);
+
+    return () => {
+      if (typeof stdout.off === "function") {
+        stdout.off("resize", update);
+      } else {
+        stdout.removeListener("resize", update);
+      }
+      if (typeof process.stdout.off === "function") {
+        process.stdout.off("resize", update);
+      } else {
+        process.stdout.removeListener("resize", update);
+      }
+      process.off("SIGWINCH", update);
+    };
+  }, [stdout]);
+
+  return metrics;
+}
+
+function roleColor(role: SessionTranscriptEntry["role"]): "cyan" | "green" | "yellow" | "gray" {
+  if (role === "user") {
+    return "cyan";
+  }
+  if (role === "assistant") {
+    return "green";
+  }
+  if (role === "tool") {
+    return "yellow";
+  }
+  return "gray";
+}
+
+function SessionRow(props: {
+  session: SessionSummary;
+  active: boolean;
+  width: number;
+  compact: boolean;
+}) {
+  const title = props.session.officialName ?? props.session.candidateName ?? props.session.threadId;
+  const meta = [
+    props.session.projectName ?? "unknown",
+    props.session.provider ?? "n/a",
+    props.session.dirty ? "dirty" : "clean",
+    props.session.frozen ? "frozen" : null,
+    props.session.manualOverride ? "manual" : null
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const secondary = [formatWhen(props.session.updatedAt), `${props.session.taskCompleteCount}t`, props.session.statusEstimate ?? "unknown"]
+    .filter(Boolean)
+    .join(" | ");
+
+  return (
+    <Box flexDirection="column" width={props.width} marginBottom={props.compact ? 0 : 1}>
+      <Box width={props.width} flexWrap="nowrap">
+        <Box width={2}>
+          <Text inverse={props.active} color={props.active ? "black" : undefined}>
+            {props.active ? ">" : " "}
+          </Text>
+        </Box>
+        <Box width={props.width - 2}>
+          <Text inverse={props.active} color={props.active ? "black" : undefined} wrap="truncate-end">
+            {title}
+          </Text>
+        </Box>
+      </Box>
+      <Box width={props.width} paddingLeft={2}>
+        <Text color={props.active ? "yellow" : "gray"} wrap="truncate-end">
+          {props.compact ? secondary : meta}
+        </Text>
+      </Box>
+      {!props.compact ? (
+        <Box width={props.width} paddingLeft={2}>
+          <Text color="gray" wrap="truncate-end">
+            {secondary}
+          </Text>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function TranscriptRow(props: {
+  entry: SessionTranscriptEntry;
+  active: boolean;
+  width: number;
+  compact: boolean;
+}) {
+  const header = [
+    props.entry.role,
+    props.entry.kind,
+    props.entry.name ?? props.entry.phase ?? props.entry.hiddenReason ?? null
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const content = compactWhitespace(props.entry.content) || "(empty)";
+
+  return (
+    <Box flexDirection="column" width={props.width} marginBottom={props.compact ? 0 : 1}>
+      {props.compact ? (
+        <Box width={props.width}>
+          <Text color={roleColor(props.entry.role)} inverse={props.active} wrap="truncate-end">
+            {truncateDisplayText(`[${props.entry.role}] ${content}`, props.width)}
+          </Text>
+        </Box>
+      ) : (
+        <>
+          <Box justifyContent="space-between" width={props.width}>
+            <Text color={roleColor(props.entry.role)} inverse={props.active}>
+              {truncateDisplayText(header, Math.max(12, props.width - 15))}
+            </Text>
+            <Text color="gray" inverse={props.active}>
+              {truncateDisplayText(formatWhen(props.entry.timestamp), 12, "")}
+            </Text>
+          </Box>
+          <Box width={props.width}>
+            <Text color={props.active ? "white" : undefined} inverse={props.active} wrap="truncate-end">
+              {truncateDisplayText(content, props.width)}
+            </Text>
+          </Box>
+        </>
+      )}
+    </Box>
+  );
+}
+
+function PreviewRow(props: { item: BatchApplyResponse["items"][number]; width: number }) {
+  const tone = props.item.status === "apply" ? "green" : "gray";
+  const content = `${truncateDisplayText(props.item.threadId, 12)} | ${props.item.status} | ${
+    props.item.candidateName ?? props.item.reason
+  }`;
+  return (
+    <Box width={props.width}>
+      <Text color={tone} wrap="truncate-end">
+        {content}
+      </Text>
+    </Box>
+  );
+}
+
+export function App(props: { apiBase: string; interactive: boolean }) {
+  const { exit } = useApp();
   const [client] = useState(() => new LocalApiClient(props.apiBase));
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -82,33 +224,36 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [searchDraft, setSearchDraft] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("normal");
+  const [focusPane, setFocusPane] = useState<FocusPane>("sessions");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading sessions...");
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<BatchApplyResponse["items"]>([]);
+  const [transcriptPage, setTranscriptPage] = useState<SessionTranscriptPage | null>(null);
+  const [transcriptItems, setTranscriptItems] = useState<SessionTranscriptEntry[]>([]);
+  const [transcriptIndex, setTranscriptIndex] = useState(0);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [showHiddenTranscript, setShowHiddenTranscript] = useState(false);
+  const [transcriptRole, setTranscriptRole] = useState<TranscriptRoleFilter>("all");
+  const metrics = useTerminalMetrics();
+  const layout = computeTerminalLayout(metrics);
 
   const selected = sessions[selectedIndex];
-  const terminalWidth = stdout.columns ?? 120;
-  const terminalHeight = stdout.rows ?? 40;
-  const stackedLayout = terminalWidth < 132 || terminalHeight < 30;
-  const compactLayout = terminalWidth < 96 || terminalHeight < 26;
-  const listPanelWidth = stackedLayout
-    ? Math.max(terminalWidth - 4, 40)
-    : Math.max(Math.floor(terminalWidth * 0.56), 48);
-  const detailPanelWidth = stackedLayout
-    ? Math.max(terminalWidth - 4, 40)
-    : Math.max(terminalWidth - listPanelWidth - 4, 32);
-  const sessionRowHeight = compactLayout ? 1 : 2;
-  const sessionViewportRows = stackedLayout
-    ? Math.max(8, terminalHeight - (compactLayout ? 24 : 26))
-    : Math.max(10, terminalHeight - 15);
-  const visibleSessionCount = Math.max(4, Math.floor(sessionViewportRows / sessionRowHeight));
-  const visiblePreviewCount = compactLayout ? 4 : 8;
-  const sessionTitleClip = Math.max(20, listPanelWidth - 8);
-  const sessionMetaClip = Math.max(20, listPanelWidth - 6);
-  const detailClip = Math.max(24, detailPanelWidth - 10);
-  const detailMessageClip = Math.max(20, detailPanelWidth - 8);
-  const visibleSessions = windowItemsAround(sessions, selectedIndex, visibleSessionCount);
+  const visibleSessions = windowItemsAround(sessions, selectedIndex, layout.visibleSessionCount);
+  const visibleTranscriptCount = Math.max(
+    3,
+    Math.floor(Math.max(6, layout.detailHeight - (layout.compact ? 12 : 16)) / (layout.compact ? 2 : 3))
+  );
+  const visibleTranscript = windowItemsAround(transcriptItems, transcriptIndex, visibleTranscriptCount);
+
+  const requestExit = () => {
+    exit();
+    const timer = setTimeout(() => {
+      process.exit(0);
+    }, 20);
+    timer.unref?.();
+  };
 
   const reloadSessions = async (nextSelectedId?: string) => {
     setLoading(true);
@@ -117,7 +262,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       const payload = await client.listSessions({
         dirtyOnly,
         search,
-        limit: 40
+        limit: 80
       });
       setSessions(payload.items);
       const nextIndex = nextSelectedId
@@ -126,9 +271,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           ? payload.items.findIndex((item) => item.threadId === selected.threadId)
           : 0;
       setSelectedIndex(nextIndex >= 0 ? nextIndex : 0);
-      setMessage(
-        `Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`
-      );
+      setMessage(`Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unknown error");
       setSessions([]);
@@ -154,13 +297,60 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
   };
 
-  useEffect(() => {
-    void reloadSessions();
-  }, [dirtyOnly, search]);
+  const reloadTranscript = async (threadId: string | undefined) => {
+    if (!threadId) {
+      setTranscriptPage(null);
+      setTranscriptItems([]);
+      setTranscriptIndex(0);
+      return;
+    }
 
-  useEffect(() => {
-    void reloadDetail(selected?.threadId);
-  }, [selected?.threadId]);
+    setTranscriptLoading(true);
+    setTranscriptError(null);
+    try {
+      const payload = await client.getSessionTranscript(threadId, {
+        page: 1,
+        pageSize: TRANSCRIPT_PAGE_SIZE,
+        includeHidden: showHiddenTranscript,
+        role: transcriptRole
+      });
+      setTranscriptPage(payload);
+      setTranscriptItems(payload.items);
+      setTranscriptIndex(Math.max(0, payload.items.length - 1));
+    } catch (nextError) {
+      setTranscriptError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setTranscriptPage(null);
+      setTranscriptItems([]);
+      setTranscriptIndex(0);
+    } finally {
+      setTranscriptLoading(false);
+    }
+  };
+
+  const loadOlderTranscript = async () => {
+    if (!selected?.threadId || !transcriptPage?.hasMore || transcriptLoading) {
+      return;
+    }
+
+    setTranscriptLoading(true);
+    setTranscriptError(null);
+    try {
+      const payload = await client.getSessionTranscript(selected.threadId, {
+        page: transcriptPage.page + 1,
+        pageSize: transcriptPage.pageSize,
+        includeHidden: showHiddenTranscript,
+        role: transcriptRole
+      });
+      setTranscriptItems((previous) => [...payload.items, ...previous]);
+      setTranscriptPage(payload);
+      setTranscriptIndex((previous) => previous + payload.items.length);
+      setMessage(`Loaded ${payload.items.length} earlier transcript events`);
+    } catch (nextError) {
+      setTranscriptError(nextError instanceof Error ? nextError.message : "Unknown error");
+    } finally {
+      setTranscriptLoading(false);
+    }
+  };
 
   const runAction = async (operation: () => Promise<unknown>, successMessage: string) => {
     if (!selected) {
@@ -169,6 +359,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
     setLoading(true);
     setError(null);
+    setMessage("Running action...");
     try {
       await operation();
       await reloadSessions(selected.threadId);
@@ -183,43 +374,390 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
   const refreshPreview = async () => {
     try {
+      setMessage("Refreshing preview...");
       const payload = await client.batchApplyDirty(true);
-      setPreview(payload.items.slice(0, 8));
+      setPreview(payload.items.slice(0, 12));
       setMessage(`Preview refreshed: ${payload.items.filter((item) => item.status === "apply").length} ready`);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unknown error");
     }
   };
 
-  return (
-    <Box flexDirection="column">
-      {props.interactive ? (
-        <InteractiveBindings
-          client={client}
-          detail={detail}
-          inputMode={inputMode}
-          reloadDetail={reloadDetail}
-          reloadSessions={reloadSessions}
-          renameDraftDefault={detail?.candidateName ?? detail?.officialName ?? ""}
-          search={search}
-          selected={selected}
-          setDirtyOnly={setDirtyOnly}
-          setError={setError}
-          setInputMode={setInputMode}
-          setLoading={setLoading}
-          setMessage={setMessage}
-          setPreview={setPreview}
-          setRenameDraft={setRenameDraft}
-          setSearchDraft={setSearchDraft}
-          setSelectedIndex={setSelectedIndex}
-          sessionsLength={sessions.length}
-        />
-      ) : null}
+  useEffect(() => {
+    void reloadSessions();
+  }, [dirtyOnly, search]);
 
+  useEffect(() => {
+    void reloadDetail(selected?.threadId);
+  }, [selected?.threadId]);
+
+  useEffect(() => {
+    void reloadTranscript(selected?.threadId);
+  }, [selected?.threadId, showHiddenTranscript, transcriptRole]);
+
+  useInput((input, key) => {
+    if (!props.interactive) {
+      return;
+    }
+
+    if (inputMode === "search") {
+      if (key.escape) {
+        setSearchDraft(search);
+        setInputMode("normal");
+      }
+      return;
+    }
+
+    if (inputMode === "rename") {
+      if (key.escape) {
+        setRenameDraft(detail?.candidateName ?? detail?.officialName ?? "");
+        setInputMode("normal");
+      }
+      return;
+    }
+
+    if ((key.ctrl && input === "c") || input === "q") {
+      requestExit();
+      return;
+    }
+
+    if (key.escape) {
+      requestExit();
+      return;
+    }
+
+    if (key.tab) {
+      setFocusPane((current) => (current === "sessions" ? "transcript" : "sessions"));
+      return;
+    }
+
+    if (input === "d") {
+      setDirtyOnly((value) => !value);
+      return;
+    }
+
+    if (input === "/") {
+      setSearchDraft(search);
+      setInputMode("search");
+      return;
+    }
+
+    if (input === "r" && detail) {
+      setRenameDraft(detail.candidateName ?? detail.officialName ?? "");
+      setInputMode("rename");
+      return;
+    }
+
+    if (input === "h") {
+      setShowHiddenTranscript((value) => !value);
+      return;
+    }
+
+    if (input === "1") {
+      setTranscriptRole("all");
+      return;
+    }
+    if (input === "2") {
+      setTranscriptRole("user");
+      return;
+    }
+    if (input === "3") {
+      setTranscriptRole("assistant");
+      return;
+    }
+    if (input === "4") {
+      setTranscriptRole("tool");
+      return;
+    }
+    if (input === "5") {
+      setTranscriptRole("system");
+      return;
+    }
+
+    if (input === "o") {
+      void loadOlderTranscript();
+      return;
+    }
+
+    if (key.upArrow || input === "k") {
+      if (focusPane === "sessions") {
+        setSelectedIndex((value) => Math.max(0, value - 1));
+      } else {
+        if (transcriptIndex <= 0 && transcriptPage?.hasMore) {
+          void loadOlderTranscript();
+        } else {
+          setTranscriptIndex((value) => Math.max(0, value - 1));
+        }
+      }
+      return;
+    }
+
+    if (key.downArrow || input === "j") {
+      if (focusPane === "sessions") {
+        setSelectedIndex((value) => Math.min(Math.max(0, sessions.length - 1), value + 1));
+      } else {
+        setTranscriptIndex((value) => Math.min(Math.max(0, transcriptItems.length - 1), value + 1));
+      }
+      return;
+    }
+
+    if (input === "g") {
+      if (focusPane === "sessions") {
+        setSelectedIndex(0);
+      } else {
+        setTranscriptIndex(0);
+      }
+      return;
+    }
+
+    if (input === "G") {
+      if (focusPane === "sessions") {
+        setSelectedIndex(Math.max(0, sessions.length - 1));
+      } else {
+        setTranscriptIndex(Math.max(0, transcriptItems.length - 1));
+      }
+      return;
+    }
+
+    if (input === "s" && selected) {
+      void runAction(() => client.suggest(selected.threadId), `Suggested ${truncateDisplayText(selected.threadId, 12)}`);
+      return;
+    }
+
+    if (input === "a" && selected) {
+      void runAction(() => client.apply(selected.threadId), `Applied ${truncateDisplayText(selected.threadId, 12)}`);
+      return;
+    }
+
+    if (input === "f" && detail) {
+      void runAction(
+        () => client.freeze(detail.threadId, !detail.frozen),
+        `${detail.frozen ? "Unfroze" : "Froze"} ${truncateDisplayText(detail.threadId, 12)}`
+      );
+      return;
+    }
+
+    if (input === "m" && detail) {
+      void runAction(
+        () => client.setManualOverride(detail.threadId, !detail.manualOverride),
+        `${detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${truncateDisplayText(detail.threadId, 12)}`
+      );
+      return;
+    }
+
+    if (input === "p") {
+      void refreshPreview();
+      return;
+    }
+
+    if (input === "A") {
+      setLoading(true);
+      setError(null);
+      setMessage("Applying batch rename...");
+      void client
+        .batchApplyDirty(false)
+        .then(async (payload) => {
+          setPreview(payload.items.slice(0, 12));
+          setMessage(`Batch apply finished: ${payload.items.filter((item) => item.status === "apply").length} applied candidates`);
+          await reloadSessions(selected?.threadId);
+          await reloadDetail(selected?.threadId);
+        })
+        .catch((nextError) => {
+          setError(nextError instanceof Error ? nextError.message : "Unknown error");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  });
+
+  const transcriptSummary = useMemo(() => {
+    if (!transcriptPage) {
+      return "Transcript not loaded";
+    }
+    return `${transcriptItems.length}/${transcriptPage.totalItems} loaded · ${transcriptRole} · ${showHiddenTranscript ? "hidden:on" : "hidden:off"}`;
+  }, [showHiddenTranscript, transcriptItems.length, transcriptPage, transcriptRole]);
+
+  const selectedTranscript = transcriptItems[transcriptIndex];
+  const detailTitle = detail ? detail.officialName ?? detail.candidateName ?? detail.threadId : "No session selected";
+
+  const listPanel = (
+    <Box flexDirection="column" width={layout.listWidth} height={layout.listHeight}>
+      <Box justifyContent="space-between" width={layout.listWidth}>
+        <Text color={focusPane === "sessions" ? "cyan" : "gray"}>Sessions [{sessions.length}]</Text>
+        <Text color="gray">
+          {layout.mode} {layout.columns}x{layout.rows}
+        </Text>
+      </Box>
+      <Box
+        borderStyle="round"
+        flexDirection="column"
+        paddingX={1}
+        width={layout.listWidth}
+        height={Math.max(4, layout.listHeight - 1)}
+        overflow="hidden"
+      >
+        {sessions.length === 0 ? <Text color="gray">No sessions matched the current filter.</Text> : null}
+        {visibleSessions.map(({ item, index }) => (
+          <SessionRow
+            key={`${index}-${item.threadId}`}
+            session={item}
+            active={focusPane === "sessions" && index === selectedIndex}
+            width={layout.listInnerWidth}
+            compact={layout.compact}
+          />
+        ))}
+      </Box>
+    </Box>
+  );
+
+  const detailPanel = (
+    <Box flexDirection="column" width={layout.detailWidth} height={layout.detailHeight}>
+      <Box justifyContent="space-between" width={layout.detailWidth}>
+        <Text color={focusPane === "transcript" ? "cyan" : "gray"}>Transcript</Text>
+        <Text color="gray">{transcriptSummary}</Text>
+      </Box>
+      <Box
+        borderStyle="round"
+        flexDirection="column"
+        paddingX={1}
+        width={layout.detailWidth}
+        height={Math.max(4, layout.detailHeight - 1)}
+        overflow="hidden"
+      >
+        {layout.compact ? (
+          <>
+            <Box width={layout.detailInnerWidth}>
+              <Text color="yellow" wrap="truncate-end">
+                {truncateDisplayText(detailTitle, layout.detailInnerWidth)}
+              </Text>
+            </Box>
+            <Box width={layout.detailInnerWidth}>
+              <Text color="magenta" wrap="truncate-end">
+                {detail?.candidateName
+                  ? `candidate: ${truncateDisplayText(detail.candidateName, Math.max(12, layout.detailInnerWidth - 11))}`
+                  : "candidate: n/a"}
+              </Text>
+            </Box>
+            {transcriptError ? (
+              <Box width={layout.detailInnerWidth}>
+                <Text color="red" wrap="truncate-end">
+                  {transcriptError}
+                </Text>
+              </Box>
+            ) : null}
+            {visibleTranscript.length === 0 && !transcriptLoading ? (
+              <Box width={layout.detailInnerWidth}>
+                <Text color="gray">No transcript events matched the current filter.</Text>
+              </Box>
+            ) : null}
+            {visibleTranscript.map(({ item, index }) => (
+              <TranscriptRow
+                key={`${index}-${item.id}`}
+                entry={item}
+                active={focusPane === "transcript" && index === transcriptIndex}
+                width={layout.detailInnerWidth}
+                compact
+              />
+            ))}
+            <Box width={layout.detailInnerWidth}>
+              <Text color="gray" wrap="truncate-end">
+                {selectedTranscript
+                  ? `${selectedTranscript.role}/${selectedTranscript.kind} · ${formatWhen(selectedTranscript.timestamp)}`
+                  : transcriptPage?.hasMore
+                    ? "Press o to load earlier transcript events."
+                    : "No more transcript events."}
+              </Text>
+            </Box>
+          </>
+        ) : (
+          <>
+            <Box width={layout.detailInnerWidth}>
+              <Text color="yellow" wrap="truncate-end">
+                {truncateDisplayText(detailTitle, layout.detailInnerWidth)}
+              </Text>
+            </Box>
+            <Box width={layout.detailInnerWidth}>
+              <Text color="gray" wrap="truncate-end">
+                {truncateDisplayText(
+                  [detail?.projectName ?? detail?.cwd ?? "n/a", detail?.provider ?? "n/a", detail?.model ?? "n/a"].join(" | "),
+                  layout.detailInnerWidth
+                )}
+              </Text>
+            </Box>
+            <Box width={layout.detailInnerWidth}>
+              <Text color="gray" wrap="truncate-end">
+                {truncateDisplayText(
+                  [`updated ${formatWhen(detail?.updatedAt)}`, `${detail?.tokenTotal ?? 0} tokens`, detail?.dirty ? "dirty" : "clean", detail?.frozen ? "frozen" : null, detail?.manualOverride ? "manual" : null]
+                    .filter(Boolean)
+                    .join(" | "),
+                  layout.detailInnerWidth
+                )}
+              </Text>
+            </Box>
+            <Box marginTop={1} width={layout.detailInnerWidth}>
+              <Text color="magenta" wrap="truncate-end">
+                {detail?.candidateName
+                  ? `candidate: ${truncateDisplayText(detail.candidateName, Math.max(12, layout.detailInnerWidth - 11))}`
+                  : "candidate: n/a"}
+              </Text>
+            </Box>
+
+            <Box marginTop={1} width={layout.detailInnerWidth}>
+              <Text color="cyan">{transcriptLoading ? "Loading transcript..." : "Conversation"}</Text>
+            </Box>
+            {transcriptError ? (
+              <Box width={layout.detailInnerWidth}>
+                <Text color="red" wrap="truncate-end">
+                  {transcriptError}
+                </Text>
+              </Box>
+            ) : null}
+            {visibleTranscript.length === 0 && !transcriptLoading ? (
+              <Box width={layout.detailInnerWidth}>
+                <Text color="gray">No transcript events matched the current filter.</Text>
+              </Box>
+            ) : null}
+            {visibleTranscript.map(({ item, index }) => (
+              <TranscriptRow
+                key={`${index}-${item.id}`}
+                entry={item}
+                active={focusPane === "transcript" && index === transcriptIndex}
+                width={layout.detailInnerWidth}
+                compact={false}
+              />
+            ))}
+            <Box marginTop={1} width={layout.detailInnerWidth}>
+              <Text color="gray" wrap="truncate-end">
+                {selectedTranscript
+                  ? `selected: ${selectedTranscript.role}/${selectedTranscript.kind} · ${formatWhen(selectedTranscript.timestamp)}`
+                  : transcriptPage?.hasMore
+                    ? "Press o to load earlier transcript events."
+                    : "No more transcript events."}
+              </Text>
+            </Box>
+            <Box width={layout.detailInnerWidth}>
+              <Text color="gray" wrap="truncate-end">
+                {detail?.renameHistory?.[0]
+                  ? `rename: ${truncateDisplayText(
+                      `${detail.renameHistory[0].newName} | ${detail.renameHistory[0].kind}/${detail.renameHistory[0].source} | ${formatWhen(detail.renameHistory[0].appliedAt)}`,
+                      layout.detailInnerWidth
+                    )}`
+                  : "rename: no history"}
+              </Text>
+            </Box>
+          </>
+        )}
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box flexDirection="column" width={layout.columns}>
       <Box justifyContent="space-between">
         <Text color="yellow">Codex Session Manager TUI</Text>
         <Text color="gray">
-          {dirtyOnly ? "dirty-only" : "all"} | api {props.apiBase}
+          {dirtyOnly ? "dirty-only" : "all"} | focus {focusPane} | api {props.apiBase}
         </Text>
       </Box>
 
@@ -259,279 +797,32 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               if (!detail || !nextName) {
                 return;
               }
-              void runAction(() => client.rename(detail.threadId, nextName), `Renamed ${clip(detail.threadId, 12)}`);
+              void runAction(() => client.rename(detail.threadId, nextName), `Renamed ${truncateDisplayText(detail.threadId, 12)}`);
             }}
           />
         </Box>
       ) : null}
 
-      <Box marginTop={1} gap={2} flexDirection={stackedLayout ? "column" : "row"}>
-        <Box flexDirection="column" width={listPanelWidth}>
-          <Text color="cyan">
-            Sessions {loading ? "(loading)" : ""} [{sessions.length}] {stackedLayout ? `(h ${terminalHeight})` : ""}
-          </Text>
-          <Box borderStyle="round" flexDirection="column" paddingX={1}>
-            {sessions.length === 0 ? <Text color="gray">No sessions matched the current filter.</Text> : null}
-            {visibleSessions.map(({ item: session, index }) => {
-              const active = index === selectedIndex;
-              const label = session.officialName ?? session.candidateName ?? session.threadId;
-              const flags = [
-                session.dirty ? "dirty" : "clean",
-                session.frozen ? "frozen" : null,
-                session.manualOverride ? "manual" : null
-              ]
-                .filter(Boolean)
-                .join("/");
-              const meta = clip(
-                [session.projectName ?? "unknown", session.provider ?? "n/a", flags, `${session.taskCompleteCount}t`]
-                  .filter(Boolean)
-                  .join(" | "),
-                sessionMetaClip
-              );
-
-              return (
-                <Box key={`${index}-${session.threadId}`} flexDirection="column" marginBottom={compactLayout ? 0 : 1}>
-                  <Text inverse={active} color={active ? "black" : undefined}>
-                    {active ? ">" : " "} {clip(label, sessionTitleClip)}
-                  </Text>
-                  {!compactLayout ? (
-                    <Text color={active ? "yellow" : "gray"}>
-                      {active ? "  " : "  "}
-                      {meta}
-                    </Text>
-                  ) : null}
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
-
-        <Box flexDirection="column" width={detailPanelWidth}>
-          <Text color="cyan">Detail</Text>
-          <Box borderStyle="round" flexDirection="column" paddingX={1}>
-            {detail ? (
-              <>
-                <Text color="yellow">{clip(detail.officialName ?? detail.candidateName ?? detail.threadId, detailClip)}</Text>
-                <Text color="gray">
-                  {clip(detail.projectName ?? "n/a", Math.max(12, Math.floor(detailPanelWidth / 4)))} | {clip(detail.provider ?? "n/a", 12)} | {clip(detail.model ?? "n/a", 14)}
-                </Text>
-                <Text color="gray">
-                  updated {formatWhen(detail.updatedAt)} | tokens {detail.tokenTotal}
-                </Text>
-                <Text>candidate: {clip(detail.candidateName, detailMessageClip)}</Text>
-                <Text>first: {clip(detail.firstUserMessage, detailMessageClip)}</Text>
-                <Text>last user: {clip(detail.lastUserMessage, detailMessageClip)}</Text>
-                <Text>last agent: {clip(detail.lastAgentMessage, detailMessageClip)}</Text>
-                <Box marginTop={1} flexDirection="column">
-                  <Text color="magenta">Recent rename history</Text>
-                  {(detail.renameHistory ?? []).slice(0, compactLayout ? 2 : 4).map((entry, index) => (
-                    <Text key={`${index}-${entry.appliedAt}-${entry.newName}`} color="gray">
-                      {clip(entry.newName, Math.max(18, detailPanelWidth - 24))} | {entry.kind}/{entry.source} | {formatWhen(entry.appliedAt)}
-                    </Text>
-                  ))}
-                  {(detail.renameHistory ?? []).length === 0 ? (
-                    <Text color="gray">No rename history yet.</Text>
-                  ) : null}
-                </Box>
-              </>
-            ) : (
-              <Text color="gray">No session selected.</Text>
-            )}
-          </Box>
-        </Box>
+      <Box marginTop={1} gap={1} flexDirection={layout.stacked ? "column" : "row"} height={layout.topSectionHeight}>
+        {listPanel}
+        {detailPanel}
       </Box>
 
-      <Box marginTop={1} flexDirection="column">
+      <Box marginTop={1} flexDirection="column" height={layout.previewHeight}>
         <Text color="cyan">Batch preview</Text>
-        <Box borderStyle="round" flexDirection="column" paddingX={1}>
+        <Box borderStyle="round" flexDirection="column" paddingX={1} height={Math.max(4, layout.previewHeight - 1)} overflow="hidden">
           {preview.length === 0 ? <Text color="gray">Press p to preview dirty auto-rename actions.</Text> : null}
-          {preview.slice(0, visiblePreviewCount).map((item, index) => (
-            <Text key={`${index}-${item.threadId}`} color={item.status === "apply" ? "green" : "gray"}>
-              {clip(item.threadId, 12)} | {item.status} | {clip(item.candidateName ?? item.reason, Math.max(20, terminalWidth - 24))}
-            </Text>
+          {preview.slice(0, layout.visiblePreviewCount).map((item, index) => (
+            <PreviewRow key={`${index}-${item.threadId}`} item={item} width={layout.previewInnerWidth} />
           ))}
         </Box>
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text color="gray">
-          j/k move  d dirty  / search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch-apply  q quit
+        <Text color="gray" wrap="truncate-end">
+          tab switch-pane  j/k move  o older  h hidden  1-5 role  d dirty  / search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch-apply  q quit
         </Text>
       </Box>
     </Box>
   );
-}
-
-function InteractiveBindings(props: {
-  client: LocalApiClient;
-  detail: SessionDetail | null;
-  inputMode: InputMode;
-  reloadDetail: (threadId: string | undefined) => Promise<void>;
-  reloadSessions: (nextSelectedId?: string) => Promise<void>;
-  renameDraftDefault: string;
-  search: string;
-  selected: SessionSummary | undefined;
-  setDirtyOnly: React.Dispatch<React.SetStateAction<boolean>>;
-  setError: React.Dispatch<React.SetStateAction<string | null>>;
-  setInputMode: React.Dispatch<React.SetStateAction<InputMode>>;
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  setMessage: React.Dispatch<React.SetStateAction<string>>;
-  setPreview: React.Dispatch<React.SetStateAction<BatchApplyResponse["items"]>>;
-  setRenameDraft: React.Dispatch<React.SetStateAction<string>>;
-  setSearchDraft: React.Dispatch<React.SetStateAction<string>>;
-  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
-  sessionsLength: number;
-}) {
-  const { exit } = useApp();
-
-  const runAction = async (operation: () => Promise<unknown>, successMessage: string) => {
-    if (!props.selected) {
-      return;
-    }
-
-    props.setLoading(true);
-    props.setError(null);
-    try {
-      await operation();
-      await props.reloadSessions(props.selected.threadId);
-      await props.reloadDetail(props.selected.threadId);
-      props.setMessage(successMessage);
-    } catch (nextError) {
-      props.setError(nextError instanceof Error ? nextError.message : "Unknown error");
-    } finally {
-      props.setLoading(false);
-    }
-  };
-
-  const refreshPreview = async () => {
-    try {
-      const payload = await props.client.batchApplyDirty(true);
-      props.setPreview(payload.items.slice(0, 8));
-      props.setMessage(
-        `Preview refreshed: ${payload.items.filter((item) => item.status === "apply").length} ready`
-      );
-    } catch (nextError) {
-      props.setError(nextError instanceof Error ? nextError.message : "Unknown error");
-    }
-  };
-
-  useInput((input, key) => {
-    if (props.inputMode === "search") {
-      if (key.escape) {
-        props.setSearchDraft(props.search);
-        props.setInputMode("normal");
-      }
-      return;
-    }
-
-    if (props.inputMode === "rename") {
-      if (key.escape) {
-        props.setRenameDraft(props.renameDraftDefault);
-        props.setInputMode("normal");
-      }
-      return;
-    }
-
-    if (key.upArrow || input === "k") {
-      props.setSelectedIndex((value) => Math.max(0, value - 1));
-      return;
-    }
-
-    if (key.downArrow || input === "j") {
-      props.setSelectedIndex((value) => Math.min(Math.max(0, props.sessionsLength - 1), value + 1));
-      return;
-    }
-
-    if (input === "g") {
-      props.setSelectedIndex(0);
-      return;
-    }
-
-    if (input === "G") {
-      props.setSelectedIndex(Math.max(0, props.sessionsLength - 1));
-      return;
-    }
-
-    if (input === "d") {
-      props.setDirtyOnly((value) => !value);
-      return;
-    }
-
-    if (input === "/") {
-      props.setSearchDraft(props.search);
-      props.setInputMode("search");
-      return;
-    }
-
-    if (input === "r" && props.detail) {
-      props.setRenameDraft(props.renameDraftDefault);
-      props.setInputMode("rename");
-      return;
-    }
-
-    if (input === "s" && props.selected) {
-      void runAction(
-        () => props.client.suggest(props.selected!.threadId),
-        `Suggested ${clip(props.selected.threadId, 12)}`
-      );
-      return;
-    }
-
-    if (input === "a" && props.selected) {
-      void runAction(
-        () => props.client.apply(props.selected!.threadId),
-        `Applied ${clip(props.selected.threadId, 12)}`
-      );
-      return;
-    }
-
-    if (input === "f" && props.detail) {
-      void runAction(
-        () => props.client.freeze(props.detail!.threadId, !props.detail!.frozen),
-        `${props.detail.frozen ? "Unfroze" : "Froze"} ${clip(props.detail.threadId, 12)}`
-      );
-      return;
-    }
-
-    if (input === "m" && props.detail) {
-      void runAction(
-        () => props.client.setManualOverride(props.detail!.threadId, !props.detail!.manualOverride),
-        `${props.detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${clip(props.detail.threadId, 12)}`
-      );
-      return;
-    }
-
-    if (input === "p") {
-      void refreshPreview();
-      return;
-    }
-
-    if (input === "A") {
-      props.setLoading(true);
-      props.setError(null);
-      void props.client
-        .batchApplyDirty(false)
-        .then(async (payload) => {
-          props.setPreview(payload.items.slice(0, 8));
-          props.setMessage(
-            `Batch apply finished: ${payload.items.filter((item) => item.status === "apply").length} applied candidates`
-          );
-          await props.reloadSessions(props.selected?.threadId);
-          await props.reloadDetail(props.selected?.threadId);
-        })
-        .catch((nextError) => {
-          props.setError(nextError instanceof Error ? nextError.message : "Unknown error");
-        })
-        .finally(() => {
-          props.setLoading(false);
-        });
-      return;
-    }
-
-    if (input === "q") {
-      exit();
-    }
-  });
-
-  return null;
 }

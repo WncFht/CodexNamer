@@ -25,6 +25,9 @@ export async function writeRolloutFixture(params: {
   lastAgentMessage: string;
   updatedAt?: string;
   cwd?: string;
+  toolCallName?: string;
+  toolCallArguments?: Record<string, unknown>;
+  toolCallOutput?: string;
 }): Promise<string> {
   const updatedAt = params.updatedAt ?? "2026-04-04T12:10:00.000Z";
   const rolloutDir = path.join(params.codexHome, "sessions", "2026", "04", "04");
@@ -43,10 +46,70 @@ export async function writeRolloutFixture(params: {
     }),
     JSON.stringify({
       timestamp: "2026-04-04T12:00:01.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: params.userMessage
+          }
+        ]
+      }
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-04T12:00:01.000Z",
       type: "event_msg",
       payload: {
         type: "user_message",
         message: params.userMessage
+      }
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-04T12:00:02.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        phase: "commentary",
+        content: [
+          {
+            type: "output_text",
+            text: params.lastAgentMessage
+          }
+        ]
+      }
+    }),
+    ...(params.toolCallName
+      ? [
+          JSON.stringify({
+            timestamp: "2026-04-04T12:00:03.000Z",
+            type: "response_item",
+            payload: {
+              type: "function_call",
+              name: params.toolCallName,
+              arguments: JSON.stringify(params.toolCallArguments ?? {}),
+              call_id: "call_test_1"
+            }
+          }),
+          JSON.stringify({
+            timestamp: "2026-04-04T12:00:04.000Z",
+            type: "response_item",
+            payload: {
+              type: "function_call_output",
+              call_id: "call_test_1",
+              output: params.toolCallOutput ?? "ok"
+            }
+          })
+        ]
+      : []),
+    JSON.stringify({
+      timestamp: updatedAt,
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        last_agent_message: params.lastAgentMessage
       }
     }),
     JSON.stringify({
@@ -94,4 +157,3 @@ export async function createManagerForTest(overrides: Partial<EffectiveConfig> &
     operator: "test"
   });
 }
-

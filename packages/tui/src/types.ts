@@ -37,6 +37,34 @@ export type SessionDetail = SessionSummary & {
   }>;
 };
 
+export type SessionTranscriptEntry = {
+  id: string;
+  timestamp?: string;
+  role: "user" | "assistant" | "tool" | "system";
+  kind: "message" | "tool_call" | "tool_output" | "reasoning" | "status";
+  content: string;
+  name?: string;
+  callId?: string;
+  phase?: string;
+  hidden?: boolean;
+  hiddenReason?: string;
+};
+
+export type SessionTranscriptPage = {
+  items: SessionTranscriptEntry[];
+  counts: {
+    total: number;
+    visible: number;
+    hidden: number;
+    tools: number;
+  };
+  totalItems: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
 export type SessionsResponse = {
   items: SessionSummary[];
   total: number;

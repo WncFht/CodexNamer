@@ -12,10 +12,12 @@ import type {
   SessionIndexEntry,
   SessionRevision,
   SessionSummary,
-  SessionStatusEstimate
+  SessionStatusEstimate,
+  WorkspaceSummary
 } from "@codex-session-manager/shared";
 
 import { isDirtySinceRename } from "./revision.js";
+import { workspaceIdForCwd, workspaceLabelForCwd } from "./util.js";
 
 type SessionRow = {
   thread_id: string;
@@ -504,6 +506,11 @@ export class StateDatabase {
         threadId: row.thread_id as string,
         cwd: (row.cwd as string | null) ?? undefined,
         projectName: (row.project_name as string | null) ?? undefined,
+        workspaceId: workspaceIdForCwd((row.cwd as string | null) ?? undefined),
+        workspaceLabel: workspaceLabelForCwd(
+          (row.cwd as string | null) ?? undefined,
+          (row.project_name as string | null) ?? undefined
+        ),
         updatedAt: (row.updated_at as string | null) ?? undefined,
         officialName: (row.latest_official_name as string | null) ?? undefined,
         candidateName: (row.current_candidate_name as string | null) ?? undefined,
@@ -516,6 +523,43 @@ export class StateDatabase {
         statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined
       }))
       .filter((row) => (filters?.dirty === undefined ? true : row.dirty === filters.dirty));
+  }
+
+  listWorkspaceSummaries(filters?: { dirty?: boolean }): WorkspaceSummary[] {
+    const groups = new Map<string, WorkspaceSummary>();
+
+    for (const session of this.listSessions(filters)) {
+      const existing = groups.get(session.workspaceId);
+      if (existing) {
+        existing.sessionCount += 1;
+        existing.dirtyCount += session.dirty ? 1 : 0;
+        existing.frozenCount += session.frozen ? 1 : 0;
+        existing.manualOverrideCount += session.manualOverride ? 1 : 0;
+        if (session.projectName && !existing.projects.includes(session.projectName)) {
+          existing.projects.push(session.projectName);
+        }
+        if ((session.updatedAt ?? "") > (existing.latestUpdatedAt ?? "")) {
+          existing.latestUpdatedAt = session.updatedAt;
+        }
+        continue;
+      }
+
+      groups.set(session.workspaceId, {
+        workspaceId: session.workspaceId,
+        workspaceLabel: session.workspaceLabel,
+        workspacePath: session.cwd,
+        sessionCount: 1,
+        dirtyCount: session.dirty ? 1 : 0,
+        frozenCount: session.frozen ? 1 : 0,
+        manualOverrideCount: session.manualOverride ? 1 : 0,
+        latestUpdatedAt: session.updatedAt,
+        projects: session.projectName ? [session.projectName] : []
+      });
+    }
+
+    return Array.from(groups.values()).sort((left, right) =>
+      (right.latestUpdatedAt ?? "").localeCompare(left.latestUpdatedAt ?? "")
+    );
   }
 
   getSessionDetail(threadId: string): SessionDetail | undefined {
@@ -542,6 +586,8 @@ export class StateDatabase {
       rolloutPath: row.rollout_path,
       cwd: row.cwd ?? undefined,
       projectName: row.project_name ?? undefined,
+      workspaceId: workspaceIdForCwd(row.cwd ?? undefined),
+      workspaceLabel: workspaceLabelForCwd(row.cwd ?? undefined, row.project_name ?? undefined),
       createdAt: row.created_at ?? undefined,
       updatedAt: row.updated_at ?? undefined,
       officialName: row.latest_official_name ?? undefined,

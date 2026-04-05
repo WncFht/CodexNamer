@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import fg from "fast-glob";
-import type { MaterializedSession } from "@codex-session-manager/shared";
+import type {
+  MaterializedSession,
+  SessionTranscript,
+  SessionTranscriptPage,
+  SessionTranscriptEntry,
+  SessionTranscriptRole
+} from "@codex-session-manager/shared";
 
 import { basenameSafe, excerpt, normalizeWhitespace, stripControl } from "./util.js";
 
@@ -27,6 +33,103 @@ interface RolloutEvent {
   timestamp?: string;
   type?: string;
   payload?: Record<string, unknown>;
+}
+
+function normalizeTranscriptText(input: unknown): string | undefined {
+  if (typeof input !== "string") {
+    return undefined;
+  }
+
+  const normalized = input
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\u0000/g, "")
+    .trim();
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function shouldHideTranscriptMessage(role: SessionTranscriptRole, content: string): {
+  hidden: boolean;
+  reason?: string;
+} {
+  if (role === "system") {
+    return {
+      hidden: true,
+      reason: "system_bootstrap"
+    };
+  }
+
+  if (
+    content.includes("AGENTS.md instructions") ||
+    content.includes("<environment_context>") ||
+    content.includes("<permissions instructions>") ||
+    content.includes("<skills_instructions>")
+  ) {
+    return {
+      hidden: true,
+      reason: "bootstrap_context"
+    };
+  }
+
+  return {
+    hidden: false
+  };
+}
+
+function flattenContentItems(
+  content: unknown,
+  allowedTypes?: string[]
+): string | undefined {
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const values = content
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .filter((item) =>
+      allowedTypes
+        ? typeof item.type === "string" && allowedTypes.includes(item.type)
+        : typeof item.text === "string"
+    )
+    .map((item) => normalizeTranscriptText(item.text))
+    .filter((value): value is string => Boolean(value))
+    .join("\n\n")
+    .trim();
+
+  return values.length > 0 ? values : undefined;
+}
+
+function summarizeFunctionArguments(name: string | undefined, rawArguments: unknown): string | undefined {
+  if (typeof rawArguments !== "string" || rawArguments.trim().length === 0) {
+    return name ? `${name}()` : undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(rawArguments) as Record<string, unknown>;
+    if (name === "shell_command") {
+      const command = normalizeTranscriptText(parsed.command);
+      const workdir = normalizeTranscriptText(parsed.workdir);
+      return [command, workdir ? `cwd: ${workdir}` : undefined].filter(Boolean).join("\n");
+    }
+    return normalizeTranscriptText(JSON.stringify(parsed, null, 2)) ?? normalizeTranscriptText(rawArguments);
+  } catch {
+    return normalizeTranscriptText(rawArguments);
+  }
+}
+
+function transcriptEntryId(index: number, fallback: string): string {
+  return `${String(index).padStart(6, "0")}-${fallback}`;
+}
+
+function pushTranscriptEntry(
+  items: SessionTranscriptEntry[],
+  entry: Omit<SessionTranscriptEntry, "id">
+): void {
+  items.push({
+    id: transcriptEntryId(items.length + 1, entry.callId ?? entry.kind),
+    ...entry
+  });
 }
 
 function extractContentText(
@@ -251,5 +354,198 @@ export async function ingestRolloutFile(params: {
     taskCompleteDelta,
     lastAgentChanged,
     lastUserChanged
+  };
+}
+
+export async function readSessionTranscript(rolloutPath: string): Promise<SessionTranscript> {
+  const raw = await fs.readFile(rolloutPath, "utf8");
+  const items: SessionTranscriptEntry[] = [];
+
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.trim().length === 0) {
+      continue;
+    }
+
+    let event: RolloutEvent;
+    try {
+      event = JSON.parse(line) as RolloutEvent;
+    } catch {
+      continue;
+    }
+
+    const payload = event.payload ?? {};
+
+    if (event.type === "response_item") {
+      const itemType = payload.type as string | undefined;
+      if (itemType === "message") {
+        const role = payload.role as string | undefined;
+        const transcriptRole: SessionTranscriptRole =
+          role === "assistant" ? "assistant" : role === "user" ? "user" : "system";
+        const content = flattenContentItems(
+          payload.content,
+          transcriptRole === "assistant" ? ["output_text", "input_text"] : ["input_text", "output_text"]
+        );
+        if (!content) {
+          continue;
+        }
+        const hidden = shouldHideTranscriptMessage(transcriptRole, content);
+        pushTranscriptEntry(items, {
+          timestamp: event.timestamp,
+          role: transcriptRole,
+          kind: "message",
+          content,
+          phase: typeof payload.phase === "string" ? payload.phase : undefined,
+          hidden: hidden.hidden,
+          hiddenReason: hidden.reason
+        });
+        continue;
+      }
+
+      if (itemType === "function_call") {
+        const content = summarizeFunctionArguments(
+          payload.name as string | undefined,
+          payload.arguments
+        );
+        if (!content) {
+          continue;
+        }
+        pushTranscriptEntry(items, {
+          timestamp: event.timestamp,
+          role: "tool",
+          kind: "tool_call",
+          name: (payload.name as string | undefined) ?? "tool",
+          callId: (payload.call_id as string | undefined) ?? undefined,
+          content
+        });
+        continue;
+      }
+
+      if (itemType === "function_call_output") {
+        const content = normalizeTranscriptText(payload.output);
+        if (!content) {
+          continue;
+        }
+        pushTranscriptEntry(items, {
+          timestamp: event.timestamp,
+          role: "tool",
+          kind: "tool_output",
+          callId: (payload.call_id as string | undefined) ?? undefined,
+          content
+        });
+        continue;
+      }
+
+      if (itemType === "reasoning") {
+        const summary = Array.isArray(payload.summary)
+          ? payload.summary
+              .map((item) => {
+                if (typeof item === "string") {
+                  return item;
+                }
+                if (item && typeof item === "object" && typeof (item as Record<string, unknown>).text === "string") {
+                  return (item as Record<string, unknown>).text as string;
+                }
+                return undefined;
+              })
+              .filter((value): value is string => Boolean(value))
+              .join("\n")
+          : undefined;
+        if (!summary) {
+          continue;
+        }
+        pushTranscriptEntry(items, {
+          timestamp: event.timestamp,
+          role: "assistant",
+          kind: "reasoning",
+          content: summary,
+          hidden: true,
+          hiddenReason: "reasoning"
+        });
+      }
+
+      continue;
+    }
+
+    if (event.type === "event_msg") {
+      const eventType = payload.type as string | undefined;
+      if (eventType === "task_started") {
+        pushTranscriptEntry(items, {
+          timestamp: event.timestamp,
+          role: "system",
+          kind: "status",
+          content: "Task started",
+          hidden: true,
+          hiddenReason: "task_status"
+        });
+        continue;
+      }
+
+      if (eventType === "task_complete") {
+        const content = normalizeTranscriptText(payload.last_agent_message) ?? "Task completed";
+        pushTranscriptEntry(items, {
+          timestamp: event.timestamp,
+          role: "system",
+          kind: "status",
+          content,
+          hidden: true,
+          hiddenReason: "task_status"
+        });
+      }
+    }
+  }
+
+  return {
+    items,
+    counts: {
+      total: items.length,
+      visible: items.filter((item) => !item.hidden).length,
+      hidden: items.filter((item) => item.hidden).length,
+      tools: items.filter((item) => item.role === "tool").length
+    }
+  };
+}
+
+export async function readSessionTranscriptPage(params: {
+  rolloutPath: string;
+  page?: number;
+  pageSize?: number;
+  includeHidden?: boolean;
+  role?: SessionTranscriptRole | "all";
+  query?: string;
+}): Promise<SessionTranscriptPage> {
+  const transcript = await readSessionTranscript(params.rolloutPath);
+  const pageSize = Math.max(1, Math.floor(params.pageSize ?? 40));
+  const page = Math.max(1, Math.floor(params.page ?? 1));
+  const query = normalizeWhitespace(params.query)?.toLowerCase();
+  const role = params.role ?? "all";
+
+  const filteredItems = transcript.items.filter((item) => {
+    if (!params.includeHidden && item.hidden) {
+      return false;
+    }
+    if (role !== "all" && item.role !== role) {
+      return false;
+    }
+    if (query && !item.content.toLowerCase().includes(query)) {
+      return false;
+    }
+    return true;
+  });
+
+  const totalItems = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const endExclusive = totalItems - (currentPage - 1) * pageSize;
+  const startInclusive = Math.max(0, endExclusive - pageSize);
+  const items = filteredItems.slice(startInclusive, Math.max(startInclusive, endExclusive));
+
+  return {
+    items,
+    counts: transcript.counts,
+    totalItems,
+    totalPages,
+    page: currentPage,
+    pageSize,
+    hasMore: currentPage < totalPages
   };
 }

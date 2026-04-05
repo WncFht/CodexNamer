@@ -3,17 +3,24 @@ import type {
   ApiEventsResponse,
   DoctorResponse,
   ProviderResponse,
+  RenameApplyResponse,
+  RenameFreezeResponse,
+  RenameManualOverrideResponse,
+  RenameSuggestResponse,
   SessionDetail,
+  SessionTranscriptPage,
   SessionsResponse
 } from "./types.js";
 
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body !== undefined && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
   const response = await fetch(input, {
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {})
-    },
-    ...init
+    ...init,
+    headers
   });
 
   if (!response.ok) {
@@ -27,6 +34,7 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 export async function fetchSessions(params: {
   search?: string;
   dirtyOnly?: boolean;
+  workspace?: string;
 }): Promise<SessionsResponse> {
   const url = new URL("/api/v1/sessions", window.location.origin);
   if (params.search) {
@@ -35,6 +43,9 @@ export async function fetchSessions(params: {
   if (params.dirtyOnly) {
     url.searchParams.set("dirty", "true");
   }
+  if (params.workspace) {
+    url.searchParams.set("workspace", params.workspace);
+  }
   return requestJson<SessionsResponse>(url.toString());
 }
 
@@ -42,26 +53,58 @@ export async function fetchSessionDetail(threadId: string): Promise<SessionDetai
   return requestJson<SessionDetail>(`/api/v1/sessions/${threadId}`);
 }
 
-export async function suggestSession(threadId: string): Promise<void> {
-  await requestJson(`/api/v1/sessions/${threadId}/suggest`, {
+export async function fetchSessionTranscript(
+  threadId: string,
+  params?: {
+    page?: number;
+    pageSize?: number;
+    includeHidden?: boolean;
+    role?: "all" | "user" | "assistant" | "tool" | "system";
+    query?: string;
+  }
+): Promise<SessionTranscriptPage> {
+  const url = new URL(`/api/v1/sessions/${threadId}/transcript`, window.location.origin);
+  if (params?.page) {
+    url.searchParams.set("page", String(params.page));
+  }
+  if (params?.pageSize) {
+    url.searchParams.set("pageSize", String(params.pageSize));
+  }
+  if (params?.includeHidden) {
+    url.searchParams.set("includeHidden", "true");
+  }
+  if (params?.role && params.role !== "all") {
+    url.searchParams.set("role", params.role);
+  }
+  if (params?.query) {
+    url.searchParams.set("query", params.query);
+  }
+  return requestJson<SessionTranscriptPage>(url.toString());
+}
+
+export async function suggestSession(threadId: string): Promise<RenameSuggestResponse> {
+  return requestJson<RenameSuggestResponse>(`/api/v1/sessions/${threadId}/suggest`, {
     method: "POST"
   });
 }
 
-export async function applySession(threadId: string): Promise<void> {
-  await requestJson(`/api/v1/sessions/${threadId}/apply`, {
+export async function applySession(threadId: string): Promise<RenameApplyResponse> {
+  return requestJson<RenameApplyResponse>(`/api/v1/sessions/${threadId}/apply`, {
     method: "POST"
   });
 }
 
-export async function freezeSession(threadId: string, frozen: boolean): Promise<void> {
-  await requestJson(`/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`, {
+export async function freezeSession(threadId: string, frozen: boolean): Promise<RenameFreezeResponse> {
+  return requestJson<RenameFreezeResponse>(`/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`, {
     method: "POST"
   });
 }
 
-export async function toggleManualOverride(threadId: string, enabled: boolean): Promise<void> {
-  await requestJson(
+export async function toggleManualOverride(
+  threadId: string,
+  enabled: boolean
+): Promise<RenameManualOverrideResponse> {
+  return requestJson<RenameManualOverrideResponse>(
     `/api/v1/sessions/${threadId}/${enabled ? "manual-override" : "clear-manual-override"}`,
     {
       method: "POST"

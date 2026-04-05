@@ -2,6 +2,8 @@ export type SessionSummary = {
   threadId: string;
   cwd?: string;
   projectName?: string;
+  workspaceId: string;
+  workspaceLabel: string;
   updatedAt?: string;
   officialName?: string;
   candidateName?: string;
@@ -24,6 +26,26 @@ export type SessionDetail = SessionSummary & {
   revision?: string;
   lastAppliedAt?: string;
   lastAppliedRevision?: string;
+  transcript?: {
+    items: Array<{
+      id: string;
+      timestamp?: string;
+      role: "user" | "assistant" | "tool" | "system";
+      kind: "message" | "tool_call" | "tool_output" | "reasoning" | "status";
+      content: string;
+      name?: string;
+      callId?: string;
+      phase?: string;
+      hidden?: boolean;
+      hiddenReason?: string;
+    }>;
+    counts: {
+      total: number;
+      visible: number;
+      hidden: number;
+      tools: number;
+    };
+  };
   renameHistory?: Array<{
     kind: string;
     oldName?: string;
@@ -37,8 +59,45 @@ export type SessionDetail = SessionSummary & {
   }>;
 };
 
+export type SessionTranscriptPage = {
+  items: Array<{
+    id: string;
+    timestamp?: string;
+    role: "user" | "assistant" | "tool" | "system";
+    kind: "message" | "tool_call" | "tool_output" | "reasoning" | "status";
+    content: string;
+    name?: string;
+    callId?: string;
+    phase?: string;
+    hidden?: boolean;
+    hiddenReason?: string;
+  }>;
+  counts: {
+    total: number;
+    visible: number;
+    hidden: number;
+    tools: number;
+  };
+  totalItems: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
 export type SessionsResponse = {
   items: SessionSummary[];
+  workspaces: Array<{
+    workspaceId: string;
+    workspaceLabel: string;
+    workspacePath?: string;
+    sessionCount: number;
+    dirtyCount: number;
+    frozenCount: number;
+    manualOverrideCount: number;
+    latestUpdatedAt?: string;
+    projects: string[];
+  }>;
   total: number;
   counts: {
     dirty: number;
@@ -89,4 +148,29 @@ export type ApiEventsResponse = {
     payload: Record<string, unknown>;
   }>;
   nextCursor: number;
+};
+
+export type RenameSuggestResponse = {
+  threadId: string;
+  name: string;
+  source: string;
+  kind: string;
+  summary: string;
+  scope?: string;
+  generatedAt: string;
+};
+
+export type RenameApplyResponse = {
+  written: boolean;
+  name: string;
+};
+
+export type RenameFreezeResponse = {
+  threadId: string;
+  frozen: boolean;
+};
+
+export type RenameManualOverrideResponse = {
+  threadId: string;
+  manualOverride: boolean;
 };

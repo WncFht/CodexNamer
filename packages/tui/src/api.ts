@@ -1,12 +1,14 @@
-import type { BatchApplyResponse, SessionDetail, SessionsResponse } from "./types.js";
+import type { BatchApplyResponse, SessionDetail, SessionTranscriptPage, SessionsResponse } from "./types.js";
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body !== undefined && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
   const response = await fetch(input, {
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {})
-    },
-    ...init
+    ...init,
+    headers
   });
 
   if (!response.ok) {
@@ -40,6 +42,31 @@ export class LocalApiClient {
 
   getSession(threadId: string): Promise<SessionDetail> {
     return requestJson<SessionDetail>(this.resolve(`/api/v1/sessions/${threadId}`));
+  }
+
+  getSessionTranscript(
+    threadId: string,
+    params?: {
+      page?: number;
+      pageSize?: number;
+      includeHidden?: boolean;
+      role?: "all" | "user" | "assistant" | "tool" | "system";
+    }
+  ): Promise<SessionTranscriptPage> {
+    const url = new URL(this.resolve(`/api/v1/sessions/${threadId}/transcript`));
+    if (params?.page) {
+      url.searchParams.set("page", String(params.page));
+    }
+    if (params?.pageSize) {
+      url.searchParams.set("pageSize", String(params.pageSize));
+    }
+    if (params?.includeHidden) {
+      url.searchParams.set("includeHidden", "true");
+    }
+    if (params?.role && params.role !== "all") {
+      url.searchParams.set("role", params.role);
+    }
+    return requestJson<SessionTranscriptPage>(url.toString());
   }
 
   suggest(threadId: string): Promise<unknown> {
