@@ -190,10 +190,6 @@ export interface MaterializedSession {
   lastAgentMessage?: string;
   taskCompleteCount: number;
   tokenTotal: number;
-  renameUserMessagesText?: string;
-  renameAssistantMessagesText?: string;
-  renameContextText?: string;
-  renameContextStrategy?: RenameContextStrategy;
 }
 
 export interface WorkspaceSummary {

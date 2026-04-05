@@ -121,8 +121,7 @@ export function App() {
         <div className="sidebar-header">
           <div>
             <p className="sidebar-kicker">Claude Design MD</p>
-            <h1 className="home-link">Codex Session</h1>
-            <p className="subtitle home-link">Manager</p>
+            <h1 className="home-link">Codex Session Manager</h1>
             <p className="sidebar-copy">Warm editorial control surface for session naming, history, and maintenance.</p>
           </div>
           <div className="pane-controls">

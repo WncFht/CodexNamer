@@ -4,7 +4,6 @@ import path from "node:path";
 import fg from "fast-glob";
 import type {
   MaterializedSession,
-  RenameContextStrategy,
   SessionTranscript,
   SessionTranscriptPage,
   SessionTranscriptEntry,
@@ -28,13 +27,6 @@ export interface RolloutIngestResult {
   taskCompleteDelta: number;
   lastAgentChanged: boolean;
   lastUserChanged: boolean;
-}
-
-export interface RenameTranscriptContext {
-  strategy: RenameContextStrategy;
-  userMessagesText?: string;
-  assistantMessagesText?: string;
-  contextText?: string;
 }
 
 interface RolloutEvent {
@@ -510,79 +502,6 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
       hidden: items.filter((item) => item.hidden).length,
       tools: items.filter((item) => item.role === "tool").length
     }
-  };
-}
-
-function clipTranscriptChunk(value: string | undefined, maxChars: number): string | undefined {
-  const normalized = normalizeWhitespace(stripControl(value));
-  if (!normalized) {
-    return undefined;
-  }
-  if (normalized.length <= maxChars) {
-    return normalized;
-  }
-  return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
-}
-
-export async function readRenameTranscriptContext(params: {
-  rolloutPath: string;
-  strategy: RenameContextStrategy;
-  maxChars: number;
-}): Promise<RenameTranscriptContext> {
-  const transcript = await readSessionTranscript(params.rolloutPath);
-  const maxChars = Math.max(500, params.maxChars);
-  const perMessageLimit = Math.max(160, Math.min(1200, Math.floor(maxChars / 8)));
-  const userParts: string[] = [];
-  const assistantParts: string[] = [];
-  const chronologicalParts: string[] = [];
-  let userBudget = maxChars;
-  let assistantBudget = maxChars;
-  let chronologicalBudget = maxChars;
-
-  for (const entry of transcript.items) {
-    if (entry.kind !== "message" || entry.hidden) {
-      continue;
-    }
-    if (entry.role !== "user" && entry.role !== "assistant") {
-      continue;
-    }
-
-    const clipped = clipTranscriptChunk(entry.content, perMessageLimit);
-    if (!clipped) {
-      continue;
-    }
-
-    if (entry.role === "user" && userBudget > 0) {
-      const next = clipTranscriptChunk(clipped, userBudget);
-      if (next) {
-        userParts.push(next);
-        userBudget -= next.length + 2;
-      }
-    }
-
-    if (entry.role === "assistant" && assistantBudget > 0) {
-      const next = clipTranscriptChunk(clipped, assistantBudget);
-      if (next) {
-        assistantParts.push(next);
-        assistantBudget -= next.length + 2;
-      }
-    }
-
-    if (chronologicalBudget > 0) {
-      const prefixed = `${entry.role === "user" ? "User" : "Assistant"}: ${clipped}`;
-      const next = clipTranscriptChunk(prefixed, chronologicalBudget);
-      if (next) {
-        chronologicalParts.push(next);
-        chronologicalBudget -= next.length + 2;
-      }
-    }
-  }
-
-  return {
-    strategy: params.strategy,
-    userMessagesText: userParts.join("\n\n") || undefined,
-    assistantMessagesText: assistantParts.join("\n\n") || undefined,
-    contextText: chronologicalParts.join("\n\n") || undefined
   };
 }
 

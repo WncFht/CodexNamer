@@ -67,6 +67,19 @@ type AiBackend = "none" | "codex" | "openai-compatible";
 type ProviderSource = "inherit-codex" | "explicit";
 
 const TRANSCRIPT_PAGE_SIZE = 18;
+const THEME = {
+  accent: "#c96442",
+  text: "#efe6d8",
+  muted: "#a79d89",
+  border: "#6f675d",
+  borderActive: "#c96442",
+  success: "#9bb06f",
+  warning: "#d7a15b",
+  danger: "#d26a55",
+  manual: "#c58e73",
+  bgAccent: "#d28b6a",
+  bgDark: "#141413"
+} as const;
 
 function formatWhen(value?: string): string {
   if (!value) {
@@ -143,15 +156,15 @@ function useTerminalMetrics() {
 
 function roleColor(role: SessionTranscriptEntry["role"]): "cyan" | "green" | "yellow" | "gray" {
   if (role === "user") {
-    return "cyan";
+    return THEME.accent as never;
   }
   if (role === "assistant") {
-    return "green";
+    return THEME.success as never;
   }
   if (role === "tool") {
-    return "yellow";
+    return THEME.warning as never;
   }
-  return "gray";
+  return THEME.muted as never;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -300,25 +313,34 @@ function SessionRow(props: {
   const title = props.session.officialName ?? props.session.candidateName ?? props.session.threadId;
   const line1 = truncateDisplayText(title, props.width);
   const line2 = truncateDisplayText(
-    [formatWhen(props.session.updatedAt), props.session.statusEstimate ?? "unknown", props.session.projectName ?? props.session.cwd ?? "n/a"]
+    [
+      formatWhen(props.session.updatedAt),
+      props.session.projectName ?? props.session.cwd ?? "n/a",
+      props.session.provider ?? "n/a",
+      props.session.dirty ? "dirty" : "clean",
+      props.session.frozen ? "frozen" : null,
+      props.session.manualOverride ? "manual" : null
+    ]
       .filter(Boolean)
-      .join(" | "),
-    props.width
-  );
-  const line3 = truncateDisplayText(
-    [props.session.provider ?? "n/a", `${props.session.taskCompleteCount}t`, props.session.dirty ? "dirty" : "clean", props.session.frozen ? "frozen" : null, props.session.manualOverride ? "manual" : null]
-      .filter(Boolean)
-      .join(" | "),
+      .join(" · "),
     props.width
   );
 
   return (
     <Box flexDirection="column" width={props.width} marginBottom={1}>
-      <Text inverse={props.active} color={props.active ? "black" : "white"} wrap="truncate-end">
+      <Text
+        color={props.active ? THEME.bgDark : THEME.text}
+        backgroundColor={props.active ? THEME.bgAccent : undefined}
+        wrap="truncate-end"
+      >
         {fitDisplayLine(line1, props.width, "")}
       </Text>
-      <Text color={props.active ? "yellow" : "gray"} inverse={props.active} wrap="truncate-end">
-        {fitDisplayLine(`${line2} | ${line3}`, props.width, "")}
+      <Text
+        color={props.active ? THEME.bgDark : THEME.muted}
+        backgroundColor={props.active ? THEME.bgAccent : undefined}
+        wrap="truncate-end"
+      >
+        {fitDisplayLine(line2, props.width, "")}
       </Text>
     </Box>
   );
@@ -338,14 +360,18 @@ function TranscriptRow(props: {
   return (
     <Box flexDirection="column" width={props.width} marginBottom={props.compact ? 0 : 1}>
       <Box justifyContent="space-between" width={props.width}>
-        <Text color={roleColor(props.entry.role)} inverse={props.active} wrap="truncate-end">
+        <Text
+          color={props.active ? THEME.bgDark : roleColor(props.entry.role)}
+          backgroundColor={props.active ? THEME.bgAccent : undefined}
+          wrap="truncate-end"
+        >
           {fitDisplayLine(header, Math.max(12, props.width - 14), "")}
         </Text>
-        <Text color="gray" inverse={props.active}>
+        <Text color={props.active ? THEME.bgDark : THEME.muted} backgroundColor={props.active ? THEME.bgAccent : undefined}>
           {fitDisplayLine(formatWhen(props.entry.timestamp), 11, "")}
         </Text>
       </Box>
-      <Text color={props.active ? "white" : undefined} inverse={props.active} wrap="truncate-end">
+      <Text color={props.active ? THEME.bgDark : THEME.text} backgroundColor={props.active ? THEME.bgAccent : undefined} wrap="truncate-end">
         {fitDisplayLine(content, props.width)}
       </Text>
     </Box>
@@ -353,7 +379,7 @@ function TranscriptRow(props: {
 }
 
 function PreviewRow(props: { item: BatchApplyResponse["items"][number]; width: number }) {
-  const tone = props.item.status === "apply" ? "green" : "gray";
+  const tone = props.item.status === "apply" ? THEME.success : THEME.muted;
   const content = `${truncateDisplayText(props.item.threadId, 12)} | ${props.item.status} | ${
     props.item.candidateName ?? props.item.reason
   }`;
@@ -374,7 +400,11 @@ function SettingRow(props: {
 }) {
   const content = truncateDisplayText(`${props.label}: ${props.value || "(empty)"}`, props.width);
   return (
-    <Text inverse={props.selected} color={props.selected ? "black" : "white"} wrap="truncate-end">
+    <Text
+      color={props.selected ? THEME.bgDark : THEME.text}
+      backgroundColor={props.selected ? THEME.bgAccent : undefined}
+      wrap="truncate-end"
+    >
       {fitDisplayLine(content, props.width, "")}
     </Text>
   );
@@ -442,25 +472,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const settingsFields = useMemo(() => {
     const profile = selectedProfile;
     return [
-      { key: "namingTemplate", label: "Naming template", value: settingsDraft?.namingTemplate ?? "" },
-      { key: "namingMaxLength", label: "Naming max length", value: settingsDraft?.namingMaxLength ?? "" },
-      { key: "namingLanguage", label: "Naming language", value: settingsDraft?.namingLanguage ?? "" },
-      { key: "namingContextStrategy", label: "Context strategy", value: settingsDraft?.namingContextStrategy ?? "" },
-      { key: "namingContextMaxChars", label: "Context max chars", value: settingsDraft?.namingContextMaxChars ?? "" },
-      { key: "renameMode", label: "Rename mode", value: settingsDraft?.renameMode ?? "" },
-      { key: "renameAutoApply", label: "Rename auto apply", value: settingsDraft?.renameAutoApply ?? "" },
-      { key: "candidateIdleSeconds", label: "Candidate idle sec", value: settingsDraft?.candidateIdleSeconds ?? "" },
-      { key: "finalizeIdleSeconds", label: "Finalize idle sec", value: settingsDraft?.finalizeIdleSeconds ?? "" },
-      { key: "renameCooldownSeconds", label: "Cooldown sec", value: settingsDraft?.renameCooldownSeconds ?? "" },
-      { key: "aiBackend", label: "AI backend", value: settingsDraft?.aiBackend ?? "" },
-      { key: "aiProviderSource", label: "AI provider source", value: settingsDraft?.aiProviderSource ?? "" },
-      { key: "aiProfile", label: "AI profile", value: settingsDraft?.aiProfile ?? "" },
-      { key: "aiTimeoutSeconds", label: "AI timeout", value: settingsDraft?.aiTimeoutSeconds ?? "" },
-      { key: "aiTemperature", label: "AI temperature", value: settingsDraft?.aiTemperature ?? "" },
-      { key: "providerBaseUrl", label: `Profile baseUrl (${profile?.profileId ?? "n/a"})`, value: profile?.baseUrl ?? "" },
-      { key: "providerModel", label: "Profile model", value: profile?.model ?? "" },
-      { key: "providerApiKey", label: "Profile apiKey", value: profile?.apiKey ?? "" },
-      { key: "providerWireApi", label: "Profile wireApi", value: profile?.wireApi ?? "" }
+      { key: "namingTemplate", label: "Naming / Template", value: settingsDraft?.namingTemplate ?? "" },
+      { key: "namingMaxLength", label: "Naming / Max length", value: settingsDraft?.namingMaxLength ?? "" },
+      { key: "namingLanguage", label: "Naming / Language", value: settingsDraft?.namingLanguage ?? "" },
+      { key: "namingContextStrategy", label: "Naming / Context strategy", value: settingsDraft?.namingContextStrategy ?? "" },
+      { key: "namingContextMaxChars", label: "Naming / Context max chars", value: settingsDraft?.namingContextMaxChars ?? "" },
+      { key: "renameMode", label: "Rename / Mode", value: settingsDraft?.renameMode ?? "" },
+      { key: "renameAutoApply", label: "Rename / Auto apply", value: settingsDraft?.renameAutoApply ?? "" },
+      { key: "candidateIdleSeconds", label: "Cadence / Candidate idle sec", value: settingsDraft?.candidateIdleSeconds ?? "" },
+      { key: "finalizeIdleSeconds", label: "Cadence / Finalize idle sec", value: settingsDraft?.finalizeIdleSeconds ?? "" },
+      { key: "renameCooldownSeconds", label: "Cadence / Cooldown sec", value: settingsDraft?.renameCooldownSeconds ?? "" },
+      { key: "aiBackend", label: "AI / Backend", value: settingsDraft?.aiBackend ?? "" },
+      { key: "aiProviderSource", label: "AI / Provider source", value: settingsDraft?.aiProviderSource ?? "" },
+      { key: "aiProfile", label: "AI / Profile", value: settingsDraft?.aiProfile ?? "" },
+      { key: "aiTimeoutSeconds", label: "AI / Timeout", value: settingsDraft?.aiTimeoutSeconds ?? "" },
+      { key: "aiTemperature", label: "AI / Temperature", value: settingsDraft?.aiTemperature ?? "" },
+      { key: "providerBaseUrl", label: `Provider / baseUrl (${profile?.profileId ?? "n/a"})`, value: profile?.baseUrl ?? "" },
+      { key: "providerModel", label: "Provider / model", value: profile?.model ?? "" },
+      { key: "providerApiKey", label: "Provider / apiKey", value: profile?.apiKey ?? "" },
+      { key: "providerWireApi", label: "Provider / wireApi", value: profile?.wireApi ?? "" }
     ] as Array<{ key: SettingKey; label: string; value: string }>;
   }, [selectedProfile, settingsDraft]);
 
@@ -1030,6 +1060,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     normalizedExpandedTranscriptScroll + expandedTranscriptVisibleCount
   );
   const detailTitle = detail ? detail.officialName ?? detail.candidateName ?? detail.threadId : "No session selected";
+  const detailTitleLines = useMemo(
+    () => wrapDisplayText(detailTitle, layout.detailInnerWidth).slice(0, 2),
+    [detailTitle, layout.detailInnerWidth]
+  );
   const resolvedProviderSummary = asRecord(configView?.effectiveConfig).resolvedProvider
     ? JSON.stringify(asRecord(asRecord(configView?.effectiveConfig).resolvedProvider))
     : "n/a";
@@ -1043,22 +1077,23 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const listPanel = (
     <Box flexDirection="column" width={layout.listWidth} height={layout.listHeight}>
       <Box justifyContent="space-between" width={layout.listWidth}>
-        <Text color={focusPane === "sessions" ? "cyan" : "gray"}>
-          {focusPane === "sessions" ? "> " : ""}Sessions [{sessions.length}]
+        <Text color={focusPane === "sessions" ? THEME.accent : THEME.muted}>
+          {focusPane === "sessions" ? "Archive / " : ""}Sessions [{sessions.length}]
         </Text>
-        <Text color="gray">
+        <Text color={THEME.muted}>
           {browserViewMode} {layout.columns}x{layout.rows}
         </Text>
       </Box>
       <Box
         borderStyle="round"
+        borderColor={focusPane === "sessions" ? THEME.borderActive : THEME.border}
         flexDirection="column"
         paddingX={1}
         width={layout.listWidth}
         height={Math.max(4, layout.listHeight - 1)}
         overflow="hidden"
       >
-        {sessions.length === 0 ? <Text color="gray">No sessions matched the current filter.</Text> : null}
+        {sessions.length === 0 ? <Text color={THEME.muted}>No sessions matched the current filter.</Text> : null}
         {visibleSessions.map(({ item, index }) => (
           <SessionRow
             key={`${index}-${item.threadId}`}
@@ -1074,29 +1109,32 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const detailPanel = (
     <Box flexDirection="column" width={layout.detailWidth} height={layout.detailHeight}>
       <Box justifyContent="space-between" width={layout.detailWidth}>
-        <Text color={focusPane === "transcript" ? "cyan" : "gray"}>
-          {focusPane === "transcript" ? "> " : ""}Detail & Transcript
+        <Text color={focusPane === "transcript" ? THEME.accent : THEME.muted}>
+          {focusPane === "transcript" ? "Reading room / " : ""}Detail & Transcript
         </Text>
-        <Text color="gray">{expandedTranscript ? "expanded-entry" : transcriptSummary}</Text>
+        <Text color={THEME.muted}>{expandedTranscript ? "expanded-entry" : transcriptSummary}</Text>
       </Box>
       <Box
         borderStyle="round"
+        borderColor={focusPane === "transcript" ? THEME.borderActive : THEME.border}
         flexDirection="column"
         paddingX={1}
         width={layout.detailWidth}
         height={Math.max(4, layout.detailHeight - 1)}
         overflow="hidden"
       >
-        <Text color="yellow" wrap="truncate-end">
-          {fitDisplayLine(detailTitle, layout.detailInnerWidth)}
-        </Text>
-        <Text color="gray" wrap="truncate-end">
+        {detailTitleLines.map((line, index) => (
+          <Text color={THEME.accent} key={`detail-title-${index}`} wrap="truncate-end">
+            {fitDisplayLine(line, layout.detailInnerWidth, "")}
+          </Text>
+        ))}
+        <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
             [detail?.projectName ?? detail?.cwd ?? "n/a", detail?.provider ?? "n/a", detail?.model ?? "n/a"].join(" | "),
             layout.detailInnerWidth
           )}
         </Text>
-        <Text color="gray" wrap="truncate-end">
+        <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
             [`updated ${formatWhen(detail?.updatedAt)}`, `${detail?.tokenTotal ?? 0} tokens`, detail?.dirty ? "dirty" : "clean", detail?.frozen ? "frozen" : null, detail?.manualOverride ? "manual" : null]
               .filter(Boolean)
@@ -1104,7 +1142,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             layout.detailInnerWidth
           )}
         </Text>
-        <Text color="magenta" wrap="truncate-end">
+        <Text color={THEME.manual} wrap="truncate-end">
           {fitDisplayLine(
             detail?.candidateName
               ? `candidate: ${truncateDisplayText(detail.candidateName, Math.max(12, layout.detailInnerWidth - 11))}`
@@ -1113,25 +1151,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           )}
         </Text>
         {detail?.renameHistory?.[0] ? (
-          <Text color="gray" wrap="truncate-end">
+          <Text color={THEME.muted} wrap="truncate-end">
             {fitDisplayLine(
               `last rename: ${detail.renameHistory[0].newName} | ${detail.renameHistory[0].kind}/${detail.renameHistory[0].source} | ${formatWhen(detail.renameHistory[0].appliedAt)}`,
               layout.detailInnerWidth
             )}
           </Text>
         ) : (
-          <Text color="gray">{fitDisplayLine("last rename: none", layout.detailInnerWidth)}</Text>
+          <Text color={THEME.muted}>{fitDisplayLine("last rename: none", layout.detailInnerWidth)}</Text>
         )}
         <Box marginTop={1} width={layout.detailInnerWidth}>
-          <Text color="cyan">{transcriptLoading ? "Loading transcript..." : expandedTranscript ? "Expanded entry" : "Conversation"}</Text>
+          <Text color={THEME.accent}>{transcriptLoading ? "Loading transcript..." : expandedTranscript ? "Expanded entry" : "Conversation"}</Text>
         </Box>
         {transcriptError ? (
-          <Text color="red" wrap="truncate-end">
+          <Text color={THEME.danger} wrap="truncate-end">
             {transcriptError}
           </Text>
         ) : null}
         {!expandedTranscript && visibleTranscript.length === 0 && !transcriptLoading ? (
-          <Text color="gray">No transcript events matched the current filter.</Text>
+          <Text color={THEME.muted}>No transcript events matched the current filter.</Text>
         ) : null}
         {expandedTranscript
           ? visibleExpandedTranscriptLines.map((line: string, index: number) => (
@@ -1150,7 +1188,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             ))}
         {expandedTranscript ? (
           <Box marginTop={1}>
-            <Text color="gray" wrap="truncate-end">
+            <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(
                 selectedTranscript
                   ? `${selectedTranscript.role}/${selectedTranscript.kind} · lines ${normalizedExpandedTranscriptScroll + 1}-${Math.min(
@@ -1165,7 +1203,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         ) : (
           <>
             <Box marginTop={1}>
-              <Text color="gray" wrap="truncate-end">
+              <Text color={THEME.muted} wrap="truncate-end">
                 {fitDisplayLine(
                   selectedTranscript
                     ? `selected: ${selectedTranscript.role}/${selectedTranscript.kind} · ${formatWhen(selectedTranscript.timestamp)} · enter expand`
@@ -1177,10 +1215,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               </Text>
             </Box>
             <Box marginTop={1}>
-              <Text color="cyan">Rename history</Text>
+              <Text color={THEME.accent}>Rename history</Text>
             </Box>
             {(detail?.renameHistory ?? []).slice(0, browserViewMode === "detail" ? 4 : 2).map((entry, index) => (
-              <Text key={`history-${index}`} color="gray" wrap="truncate-end">
+              <Text key={`history-${index}`} color={THEME.muted} wrap="truncate-end">
                 {fitDisplayLine(
                   `${formatWhen(entry.appliedAt)} | ${entry.kind}/${entry.source}/${entry.status} | ${entry.newName}`,
                   layout.detailInnerWidth
@@ -1188,7 +1226,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               </Text>
             ))}
             {(detail?.renameHistory ?? []).length === 0 ? (
-              <Text color="gray" wrap="truncate-end">
+              <Text color={THEME.muted} wrap="truncate-end">
                 {fitDisplayLine("No rename history yet.", layout.detailInnerWidth)}
               </Text>
             ) : null}
@@ -1201,11 +1239,12 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const settingsPanel = (
     <Box flexDirection="column" width={layout.listWidth} height={layout.topSectionHeight}>
       <Box justifyContent="space-between" width={layout.listWidth}>
-        <Text color="cyan">Settings</Text>
-        <Text color="gray">{settingsDirty ? "dirty" : "synced"}</Text>
+        <Text color={THEME.accent}>Settings</Text>
+        <Text color={THEME.muted}>{settingsDirty ? "dirty" : "synced"}</Text>
       </Box>
       <Box
         borderStyle="round"
+        borderColor={THEME.border}
         flexDirection="column"
         paddingX={1}
         width={layout.listWidth}
@@ -1228,34 +1267,35 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const settingsInfoPanel = (
     <Box flexDirection="column" width={layout.detailWidth} height={layout.topSectionHeight}>
       <Box justifyContent="space-between" width={layout.detailWidth}>
-        <Text color="gray">Config detail</Text>
-        <Text color="gray">{configView?.paths.userConfigPath ?? "n/a"}</Text>
+        <Text color={THEME.accent}>Config detail</Text>
+        <Text color={THEME.muted}>{configView?.paths.userConfigPath ?? "n/a"}</Text>
       </Box>
       <Box
         borderStyle="round"
+        borderColor={THEME.border}
         flexDirection="column"
         paddingX={1}
         width={layout.detailWidth}
         height={Math.max(6, layout.topSectionHeight - 1)}
         overflow="hidden"
       >
-        <Text color="yellow" wrap="truncate-end">
+        <Text color={THEME.accent} wrap="truncate-end">
           {truncateDisplayText(`selected profile: ${selectedProfile?.profileId ?? "n/a"}`, layout.detailInnerWidth)}
         </Text>
-        <Text color="gray" wrap="truncate-end">
+        <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(`baseUrl: ${selectedProfile?.baseUrl ?? "n/a"}`, layout.detailInnerWidth)}
         </Text>
-        <Text color="gray" wrap="truncate-end">
+        <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(`model: ${selectedProfile?.model ?? "n/a"}`, layout.detailInnerWidth)}
         </Text>
-        <Text color="gray" wrap="truncate-end">
+        <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(`wireApi: ${selectedProfile?.wireApi ?? "n/a"}`, layout.detailInnerWidth)}
         </Text>
-        <Text color="gray" wrap="truncate-end">
+        <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(`resolved: ${resolvedProviderSummary}`, layout.detailInnerWidth)}
         </Text>
         <Box marginTop={1}>
-          <Text color="gray" wrap="truncate-end">
+          <Text color={THEME.muted} wrap="truncate-end">
             e/edit field  space cycle enum  s save  R reload  , back to browser
           </Text>
         </Box>
@@ -1266,8 +1306,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   return (
     <Box flexDirection="column" width={layout.columns}>
       <Box justifyContent="space-between">
-        <Text color="yellow">Codex Session Manager TUI</Text>
-        <Text color="gray">
+        <Text color={THEME.accent}>Codex Session Manager TUI</Text>
+        <Text color={THEME.muted}>
           {screenMode === "browser"
             ? `${dirtyOnly ? "dirty-only" : "all"} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
             : `settings | api ${props.apiBase}`}
@@ -1275,18 +1315,18 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       </Box>
 
       <Box marginTop={1}>
-        <Text color={error ? "red" : "green"}>{error ?? message}</Text>
+        <Text color={error ? THEME.danger : THEME.success}>{error ?? message}</Text>
       </Box>
 
       {!props.interactive ? (
         <Box marginTop={1}>
-          <Text color="yellow">Input disabled: current stdin does not support raw mode.</Text>
+          <Text color={THEME.warning}>Input disabled: current stdin does not support raw mode.</Text>
         </Box>
       ) : null}
 
       {inputMode === "search" ? (
         <Box marginTop={1}>
-          <Text color="cyan">Search: </Text>
+          <Text color={THEME.accent}>Search: </Text>
           <TextInput
             value={searchDraft}
             onChange={setSearchDraft}
@@ -1300,7 +1340,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
       {inputMode === "rename" ? (
         <Box marginTop={1}>
-          <Text color="magenta">Rename: </Text>
+          <Text color={THEME.manual}>Rename: </Text>
           <TextInput
             value={renameDraft}
             onChange={setRenameDraft}
@@ -1318,7 +1358,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
       {inputMode === "edit-setting" ? (
         <Box marginTop={1}>
-          <Text color="magenta">{activeSetting?.label ?? "Edit"}: </Text>
+          <Text color={THEME.manual}>{activeSetting?.label ?? "Edit"}: </Text>
           <TextInput
             value={settingDraft}
             onChange={setSettingDraft}
@@ -1346,9 +1386,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
           {showPreviewPanel ? (
             <Box marginTop={1} flexDirection="column" height={Math.max(5, layout.previewHeight || 8)}>
-              <Text color="cyan">Batch preview</Text>
-              <Box borderStyle="round" flexDirection="column" paddingX={1} height={Math.max(4, Math.max(5, layout.previewHeight || 8) - 1)} overflow="hidden">
-                {preview.length === 0 ? <Text color="gray">No preview loaded.</Text> : null}
+              <Text color={THEME.accent}>Batch preview</Text>
+              <Box borderStyle="round" borderColor={THEME.border} flexDirection="column" paddingX={1} height={Math.max(4, Math.max(5, layout.previewHeight || 8) - 1)} overflow="hidden">
+                {preview.length === 0 ? <Text color={THEME.muted}>No preview loaded.</Text> : null}
                 {preview.slice(0, Math.max(3, layout.visiblePreviewCount)).map((item, index) => (
                   <PreviewRow key={`${index}-${item.threadId}`} item={item} width={layout.previewInnerWidth} />
                 ))}
@@ -1359,17 +1399,17 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       ) : layout.compact ? (
         <Box marginTop={1} flexDirection="column" gap={1} height={layout.topSectionHeight}>
           {settingsPanel}
-          <Box borderStyle="round" flexDirection="column" paddingX={1} height={Math.max(5, Math.min(10, layout.rows - layout.topSectionHeight - 6))}>
-            <Text color="yellow" wrap="truncate-end">
+          <Box borderStyle="round" borderColor={THEME.border} flexDirection="column" paddingX={1} height={Math.max(5, Math.min(10, layout.rows - layout.topSectionHeight - 6))}>
+            <Text color={THEME.accent} wrap="truncate-end">
               {fitDisplayLine(activeSetting ? `${activeSetting.label}: ${activeSetting.value}` : "No setting selected", layout.previewInnerWidth)}
             </Text>
-            <Text color="gray" wrap="truncate-end">
+            <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(`profile ${selectedProfile?.profileId ?? "n/a"} | model ${selectedProfile?.model ?? "n/a"}`, layout.previewInnerWidth)}
             </Text>
-            <Text color="gray" wrap="truncate-end">
+            <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(`baseUrl ${selectedProfile?.baseUrl ?? "n/a"}`, layout.previewInnerWidth)}
             </Text>
-            <Text color="gray" wrap="truncate-end">
+            <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine("e edit  space cycle  s save  R reload  , back", layout.previewInnerWidth)}
             </Text>
           </Box>
@@ -1384,15 +1424,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       <Box marginTop={1} flexDirection="column">
         {screenMode === "browser" ? (
           <>
-            <Text color="gray" wrap="truncate-end">
+            <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  o older  H hidden  1-5 role", layout.columns - 2, "")}
             </Text>
-            <Text color="gray" wrap="truncate-end">
+            <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine("/ search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch  q quit", layout.columns - 2, "")}
             </Text>
           </>
         ) : (
-          <Text color="gray" wrap="truncate-end">
+          <Text color={THEME.muted} wrap="truncate-end">
             {fitDisplayLine(", browser  j/k field  e edit  space cycle  s save  R reload  q quit", layout.columns - 2, "")}
           </Text>
         )}

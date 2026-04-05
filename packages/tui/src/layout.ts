@@ -86,39 +86,6 @@ export function truncateDisplayText(value: string | undefined, maxWidth: number,
   return output;
 }
 
-export function wrapDisplayText(value: string | undefined, maxWidth: number): string[] {
-  const safe = value?.replace(/\r\n/g, "\n").replace(/\r/g, "\n") ?? "";
-  if (maxWidth <= 1) {
-    return ["…"];
-  }
-  const sourceLines = safe.length > 0 ? safe.split("\n") : [""];
-  const wrapped: string[] = [];
-
-  for (const sourceLine of sourceLines) {
-    if (sourceLine.length === 0) {
-      wrapped.push("");
-      continue;
-    }
-
-    let current = "";
-    let width = 0;
-    for (const char of sourceLine) {
-      const charWidth = getCharWidth(char);
-      if (width + charWidth > maxWidth) {
-        wrapped.push(current);
-        current = char;
-        width = charWidth;
-      } else {
-        current += char;
-        width += charWidth;
-      }
-    }
-    wrapped.push(current);
-  }
-
-  return wrapped.length > 0 ? wrapped : [""];
-}
-
 export function computeTerminalLayout(
   metrics: TerminalMetrics,
   options?: TerminalLayoutOptions
@@ -131,7 +98,7 @@ export function computeTerminalLayout(
   const showPreview = options?.showPreview ?? false;
 
   const compact = columns < 108 || rows < 26 || area < 2_900;
-  const stacked = screenMode === "settings" ? true : compact || columns < 136 || rows < 31 || area < 4_000;
+  const stacked = screenMode === "settings" ? true : compact || columns < 146 || rows < 33 || area < 4_400;
   const contentWidth = Math.max(columns - 4, 48);
   const previewHeight =
     screenMode !== "browser" || !showPreview ? 0 : compact ? 7 : stacked ? 8 : 9;
@@ -175,8 +142,8 @@ export function computeTerminalLayout(
             ? topSectionHeight
             : Math.max(8, topSectionHeight - listHeight - 1)
           : topSectionHeight;
-  const sessionRowHeight = 3;
-  const visibleSessionCount = Math.max(1, Math.floor(Math.max(3, listHeight - 3) / sessionRowHeight));
+  const sessionRowHeight = compact ? 3 : 4;
+  const visibleSessionCount = Math.max(4, Math.floor(Math.max(6, listHeight - 3) / sessionRowHeight));
   const visiblePreviewCount = Math.max(3, previewHeight - 3);
 
   return {

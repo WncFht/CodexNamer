@@ -209,6 +209,7 @@ WebUI 当前包含 3 个主视图：
 
 - `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
 - `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置，并直接写回 `~/.config/codex-session-manager/config.toml`
+- `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置、AI/dirty/manual/frozen 总览卡片，并直接写回 `~/.config/codex-session-manager/config.toml`
 - `Maintenance`：doctor 与 auto-rename preview
 
 当前 WebUI 的视觉系统已开始按上游 `awesome-design-md/claude` 重构，参考文件位于：

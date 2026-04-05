@@ -7,8 +7,6 @@ type SettingsDraft = {
   namingTemplate: string;
   namingLanguage: string;
   namingMaxLength: string;
-  namingContextStrategy: string;
-  namingContextMaxChars: string;
   renameMode: string;
   renameAutoApply: string;
   manualOverrideWins: boolean;
@@ -88,8 +86,6 @@ function buildDraft(configView: ConfigView): SettingsDraft {
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
     namingLanguage: asString(naming.language, "zh-CN"),
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
-    namingContextStrategy: asString(naming.contextStrategy || naming.context_strategy, "summary-signals"),
-    namingContextMaxChars: asNumberString(naming.contextMaxChars || naming.context_max_chars, "8000"),
     renameMode: asString(rename.mode, "hybrid"),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
     manualOverrideWins: asBoolean(rename.manualOverrideWins || rename.manual_override_wins, true),
@@ -149,9 +145,7 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
       preset: stripEmptyString(draft.namingPreset),
       template: stripEmptyString(draft.namingTemplate),
       language: stripEmptyString(draft.namingLanguage),
-      maxLength: parseNumber(draft.namingMaxLength),
-      contextStrategy: stripEmptyString(draft.namingContextStrategy) as "summary-signals" | "user-assistant-transcript" | undefined,
-      contextMaxChars: parseNumber(draft.namingContextMaxChars)
+      maxLength: parseNumber(draft.namingMaxLength)
     },
     ai: {
       backend: draft.aiBackend as AiBackend,
@@ -372,31 +366,6 @@ export function SettingsPanel(props: {
                 onChange={(event) => {
                   setDirty(true);
                   setDraft({ ...draft, namingMaxLength: event.target.value });
-                }}
-              />
-            </label>
-          </div>
-          <div className="settings-two-up">
-            <label className="settings-field">
-              <span>Context strategy</span>
-              <select
-                value={draft.namingContextStrategy}
-                onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, namingContextStrategy: event.target.value });
-                }}
-              >
-                <option value="summary-signals">summary-signals</option>
-                <option value="user-assistant-transcript">user-assistant-transcript</option>
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>Context max chars</span>
-              <input
-                value={draft.namingContextMaxChars}
-                onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, namingContextMaxChars: event.target.value });
                 }}
               />
             </label>
@@ -802,7 +771,10 @@ export function SettingsPanel(props: {
               <dd>{String(inheritedCodex.model ?? "n/a")}</dd>
             </div>
           </dl>
-          <pre className="settings-json">{JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}</pre>
+          <details className="settings-disclosure">
+            <summary>Inspect resolved provider payload</summary>
+            <pre className="settings-json">{JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}</pre>
+          </details>
         </section>
       </div>
     </section>

@@ -6,11 +6,8 @@ import type {
 
 import { basenameSafe, excerpt, stripControl, toUtcIso } from "./util.js";
 
-function buildNamingCorpus(session: MaterializedSession): string {
-  return [
-    session.renameContextText,
-    session.renameUserMessagesText,
-    session.renameAssistantMessagesText,
+function classifyKind(session: MaterializedSession): string {
+  const joined = [
     session.firstUserMessage,
     session.lastUserMessage,
     session.lastAgentMessage
@@ -18,10 +15,6 @@ function buildNamingCorpus(session: MaterializedSession): string {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
-}
-
-function classifyKind(session: MaterializedSession): string {
-  const joined = buildNamingCorpus(session);
 
   if (/(fix|bug|错误|修复|异常)/.test(joined)) {
     return "fix";
@@ -45,11 +38,8 @@ function classifyKind(session: MaterializedSession): string {
 function buildSummary(session: MaterializedSession, maxLength: number): string {
   const preferred = [
     session.lastUserMessage,
-    session.renameUserMessagesText,
     session.firstUserMessage,
-    session.lastAgentMessage,
-    session.renameAssistantMessagesText,
-    session.renameContextText
+    session.lastAgentMessage
   ];
 
   for (const candidate of preferred) {
@@ -134,3 +124,4 @@ export function suggestNameHeuristically(
     generatedAt: toUtcIso()
   };
 }
+
