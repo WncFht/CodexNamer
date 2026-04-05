@@ -213,7 +213,7 @@ export type ConfigDocument = {
   };
   rename?: {
     mode?: "heuristic" | "ai" | "hybrid";
-    autoApply?: "off" | "idle-finalize" | "suggest-only";
+    autoApply?: "disabled" | "idle-finalize";
     manualOverrideWins?: boolean;
     freezeManualName?: boolean;
   };

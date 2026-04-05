@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import type { ConfigDocument, ConfigView, OverviewResponse, ProviderProfile, ProviderResponse } from "./types.js";
@@ -34,9 +34,13 @@ type SettingsDraft = {
 };
 
 type RenameMode = "heuristic" | "ai" | "hybrid";
-type RenameAutoApply = "off" | "idle-finalize" | "suggest-only";
+type RenameAutoApply = "disabled" | "idle-finalize";
 type AiBackend = "none" | "codex" | "openai-compatible";
 type ProviderSource = "inherit-codex" | "explicit";
+type ChoiceOption<T extends string> = {
+  value: T;
+  label: string;
+};
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -205,6 +209,43 @@ function updateSelectedProfile(
   return profiles.map((profile) => (profile.profileId === profileId ? { ...profile, ...patch } : profile));
 }
 
+function ChoiceGroup<T extends string>(props: {
+  label: string;
+  value: T;
+  options: ChoiceOption<T>[];
+  onChange: (value: T) => void;
+  name?: string;
+}) {
+  const groupId = useId();
+  const groupName = props.name ?? groupId;
+  return (
+    <fieldset className="settings-field settings-choice-field">
+      <legend>{props.label}</legend>
+      <div className="settings-choice-group">
+        {props.options.map((option) => (
+          <label
+            className={option.value === props.value ? "settings-choice active" : "settings-choice"}
+            htmlFor={`${groupName}-${option.value}`}
+            key={option.value}
+            onClick={() => props.onChange(option.value)}
+          >
+            <input
+              checked={option.value === props.value}
+              className="settings-choice-input"
+              id={`${groupName}-${option.value}`}
+              name={groupName}
+              onChange={() => props.onChange(option.value)}
+              type="radio"
+              value={option.value}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 export function SettingsPanel(props: {
   configView: ConfigView | null;
   overview: OverviewResponse | null;
@@ -220,11 +261,42 @@ export function SettingsPanel(props: {
 }) {
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
   const [dirty, setDirty] = useState(false);
+  const draftRef = useRef<SettingsDraft | null>(null);
   const effective = asRecord(props.configView?.effectiveConfig);
   const inheritedCodex = asRecord(effective.inheritedCodex);
   const uiLanguage = draft?.uiLanguage ?? normalizeUiLanguage(props.configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
   const inline = (zh: string, en: string) => (uiLanguage === "zh-CN" ? zh : en);
+  const updateDraftState = (
+    updater: (current: SettingsDraft) => SettingsDraft,
+    options?: {
+      dirty?: boolean;
+    }
+  ) => {
+    if (options?.dirty ?? true) {
+      setDirty(true);
+    }
+    setDraft((current) => (current ? updater(current) : current));
+  };
+  const updateDraftField = <K extends keyof SettingsDraft>(
+    field: K,
+    value: SettingsDraft[K],
+    options?: {
+      dirty?: boolean;
+    }
+  ) => {
+    updateDraftState(
+      (current) => ({
+        ...current,
+        [field]: value
+      }),
+      options
+    );
+  };
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   useEffect(() => {
     if (!props.configView) {
@@ -303,7 +375,11 @@ export function SettingsPanel(props: {
             disabled={!dirty || props.saving}
             onClick={() => {
               void (async () => {
-                await props.onSave(encodeDraft(draft));
+                const currentDraft = draftRef.current;
+                if (!currentDraft) {
+                  return;
+                }
+                await props.onSave(encodeDraft(currentDraft));
               })();
             }}
             type="button"
@@ -389,8 +465,7 @@ export function SettingsPanel(props: {
             <input
               value={draft.namingPreset}
               onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, namingPreset: event.target.value });
+                updateDraftField("namingPreset", event.target.value);
               }}
             />
           </label>
@@ -400,32 +475,31 @@ export function SettingsPanel(props: {
               rows={3}
               value={draft.namingTemplate}
               onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, namingTemplate: event.target.value });
+                updateDraftField("namingTemplate", event.target.value);
               }}
             />
           </label>
           <div className="settings-two-up">
-            <label className="settings-field">
-              <span>{tt("uiLanguage")}</span>
-              <select
-                value={draft.uiLanguage}
-                onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, uiLanguage: event.target.value as "en-US" | "zh-CN" });
-                }}
-              >
-                <option value="en-US">English</option>
-                <option value="zh-CN">中文</option>
-              </select>
-            </label>
+            <ChoiceGroup
+              label={tt("uiLanguage")}
+              onChange={(value) => {
+                updateDraftState((current) => ({
+                  ...current,
+                  uiLanguage: value
+                }));
+              }}
+              options={[
+                { value: "en-US", label: "English" },
+                { value: "zh-CN", label: "中文" }
+              ]}
+              value={draft.uiLanguage}
+            />
             <label className="settings-field">
               <span>{tt("language")}</span>
               <input
                 value={draft.namingLanguage}
                 onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, namingLanguage: event.target.value });
+                  updateDraftField("namingLanguage", event.target.value);
                 }}
               />
             </label>
@@ -434,49 +508,48 @@ export function SettingsPanel(props: {
               <input
                 value={draft.namingMaxLength}
                 onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, namingMaxLength: event.target.value });
+                  updateDraftField("namingMaxLength", event.target.value);
                 }}
               />
             </label>
           </div>
           <div className="settings-two-up">
-            <label className="settings-field">
-              <span>{tt("renameMode")}</span>
-              <select
-                value={draft.renameMode}
-                onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, renameMode: event.target.value });
-                }}
-              >
-                <option value="heuristic">heuristic</option>
-                <option value="hybrid">hybrid</option>
-                <option value="ai">ai</option>
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>{tt("autoApply")}</span>
-              <select
-                value={draft.renameAutoApply}
-                onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, renameAutoApply: event.target.value });
-                }}
-              >
-                <option value="off">off</option>
-                <option value="suggest-only">suggest-only</option>
-                <option value="idle-finalize">idle-finalize</option>
-              </select>
-            </label>
+            <ChoiceGroup
+              label={tt("renameMode")}
+              onChange={(value) => {
+                updateDraftState((current) => ({
+                  ...current,
+                  renameMode: value
+                }));
+              }}
+              options={[
+                { value: "heuristic", label: "heuristic" },
+                { value: "hybrid", label: "hybrid" },
+                { value: "ai", label: "ai" }
+              ]}
+              value={draft.renameMode as RenameMode}
+            />
+            <ChoiceGroup
+              label={tt("autoApply")}
+              onChange={(value) => {
+                updateDraftState((current) => ({
+                  ...current,
+                  renameAutoApply: value
+                }));
+              }}
+              options={[
+                { value: "disabled", label: "disabled" },
+                { value: "idle-finalize", label: "idle-finalize" }
+              ]}
+              value={draft.renameAutoApply as RenameAutoApply}
+            />
           </div>
           <div className="settings-checks">
             <label className="toggle">
               <input
                 checked={draft.manualOverrideWins}
                 onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, manualOverrideWins: event.target.checked });
+                  updateDraftField("manualOverrideWins", event.target.checked);
                 }}
                 type="checkbox"
               />
@@ -486,8 +559,7 @@ export function SettingsPanel(props: {
               <input
                 checked={draft.freezeManualName}
                 onChange={(event) => {
-                  setDirty(true);
-                  setDraft({ ...draft, freezeManualName: event.target.checked });
+                  updateDraftField("freezeManualName", event.target.checked);
                 }}
                 type="checkbox"
               />
@@ -506,50 +578,43 @@ export function SettingsPanel(props: {
             <label className="settings-field">
               <span>{tt("scanInterval")}</span>
               <input value={draft.scanIntervalSeconds} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, scanIntervalSeconds: event.target.value });
+                updateDraftField("scanIntervalSeconds", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("candidateIdle")}</span>
               <input value={draft.candidateIdleSeconds} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, candidateIdleSeconds: event.target.value });
+                updateDraftField("candidateIdleSeconds", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("finalizeIdle")}</span>
               <input value={draft.finalizeIdleSeconds} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, finalizeIdleSeconds: event.target.value });
+                updateDraftField("finalizeIdleSeconds", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("renameCooldown")}</span>
               <input value={draft.renameCooldownSeconds} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, renameCooldownSeconds: event.target.value });
+                updateDraftField("renameCooldownSeconds", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("minRolloutGrowth")}</span>
               <input value={draft.minRolloutGrowthBytes} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, minRolloutGrowthBytes: event.target.value });
+                updateDraftField("minRolloutGrowthBytes", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("minTaskDelta")}</span>
               <input value={draft.minTaskCompleteDelta} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, minTaskCompleteDelta: event.target.value });
+                updateDraftField("minTaskCompleteDelta", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("maxAutoRenames")}</span>
               <input value={draft.maxAutoRenamesPerSession} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, maxAutoRenamesPerSession: event.target.value });
+                updateDraftField("maxAutoRenamesPerSession", event.target.value);
               }} />
             </label>
           </div>
@@ -562,33 +627,44 @@ export function SettingsPanel(props: {
             {inline("选择命名是走继承的 Codex 凭据，还是显式的 OpenAI-compatible 提供方配置，并在下面调整当前配置。", "Pick whether naming runs through inherited Codex credentials or an explicit OpenAI-compatible profile, and tune the active profile below.")}
           </p>
           <div className="settings-two-up">
-            <label className="settings-field">
-              <span>{tt("backend")}</span>
-              <select value={draft.aiBackend} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, aiBackend: event.target.value });
-              }}>
-                <option value="codex">codex</option>
-                <option value="openai-compatible">openai-compatible</option>
-                <option value="none">none</option>
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>{tt("providerSource")}</span>
-              <select value={draft.aiProviderSource} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, aiProviderSource: event.target.value });
-              }}>
-                <option value="inherit-codex">inherit-codex</option>
-                <option value="explicit">explicit</option>
-              </select>
-            </label>
+            <ChoiceGroup
+              label={tt("backend")}
+              onChange={(value) => {
+                updateDraftState((current) => ({
+                  ...current,
+                  aiBackend: value
+                }));
+              }}
+              options={[
+                { value: "codex", label: "codex" },
+                { value: "openai-compatible", label: "openai-compatible" },
+                { value: "none", label: "none" }
+              ]}
+              value={draft.aiBackend as AiBackend}
+            />
+            <ChoiceGroup
+              label={tt("providerSource")}
+              onChange={(value) => {
+                updateDraftState((current) => ({
+                  ...current,
+                  aiProviderSource: value
+                }));
+              }}
+              options={[
+                { value: "inherit-codex", label: "inherit-codex" },
+                { value: "explicit", label: "explicit" }
+              ]}
+              value={draft.aiProviderSource as ProviderSource}
+            />
             <label className="settings-field">
               <span>{tt("activeProfile")}</span>
               <select value={draft.aiProfile} onChange={(event) => {
                 const nextProfileId = event.target.value;
-                setDirty(true);
-                setDraft({ ...draft, aiProfile: nextProfileId, selectedProfileId: nextProfileId });
+                updateDraftState((current) => ({
+                  ...current,
+                  aiProfile: nextProfileId,
+                  selectedProfileId: nextProfileId
+                }));
               }}>
                 {draft.providerProfiles.length === 0 ? (
                   <option value="">{selectedProfileLabel}</option>
@@ -603,7 +679,15 @@ export function SettingsPanel(props: {
             <label className="settings-field">
               <span>{tt("editProfile")}</span>
               <select value={draft.selectedProfileId} onChange={(event) => {
-                setDraft({ ...draft, selectedProfileId: event.target.value });
+                updateDraftState(
+                  (current) => ({
+                    ...current,
+                    selectedProfileId: event.target.value
+                  }),
+                  {
+                    dirty: false
+                  }
+                );
               }}>
                 {draft.providerProfiles.length === 0 ? (
                   <option value="">{selectedProfileLabel}</option>
@@ -618,15 +702,13 @@ export function SettingsPanel(props: {
             <label className="settings-field">
               <span>{tt("timeoutSeconds")}</span>
               <input value={draft.aiTimeoutSeconds} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, aiTimeoutSeconds: event.target.value });
+                updateDraftField("aiTimeoutSeconds", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("temperature")}</span>
               <input value={draft.aiTemperature} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, aiTemperature: event.target.value });
+                updateDraftField("aiTemperature", event.target.value);
               }} />
             </label>
           </div>
@@ -637,146 +719,141 @@ export function SettingsPanel(props: {
                 <label className="settings-field">
                   <span>{tt("displayName")}</span>
                   <input value={selectedProfile.displayName ?? ""} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         displayName: event.target.value
                       })
-                    });
+                    }));
                   }} />
                 </label>
-                <label className="settings-field">
-                  <span>{tt("backendKind")}</span>
-                  <select value={selectedProfile.backendKind ?? "openai-compatible"} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
-                        backendKind: event.target.value as ProviderProfile["backendKind"]
+                <ChoiceGroup<NonNullable<ProviderProfile["backendKind"]>>
+                  label={tt("backendKind")}
+                  onChange={(value) => {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                        backendKind: value
                       })
-                    });
-                  }}>
-                    <option value="openai-compatible">openai-compatible</option>
-                    <option value="codex">codex</option>
-                    <option value="none">none</option>
-                  </select>
-                </label>
-                <label className="settings-field">
-                  <span>{tt("profileSource")}</span>
-                  <select value={selectedProfile.providerSource ?? "explicit"} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
-                        providerSource: event.target.value as ProviderProfile["providerSource"]
+                    }));
+                  }}
+                  options={[
+                    { value: "openai-compatible", label: "openai-compatible" },
+                    { value: "codex", label: "codex" },
+                    { value: "none", label: "none" }
+                  ]}
+                  value={selectedProfile.backendKind ?? "openai-compatible"}
+                />
+                <ChoiceGroup<NonNullable<ProviderProfile["providerSource"]>>
+                  label={tt("profileSource")}
+                  onChange={(value) => {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                        providerSource: value
                       })
-                    });
-                  }}>
-                    <option value="explicit">explicit</option>
-                    <option value="inherit-codex">inherit-codex</option>
-                  </select>
-                </label>
+                    }));
+                  }}
+                  options={[
+                    { value: "explicit", label: "explicit" },
+                    { value: "inherit-codex", label: "inherit-codex" }
+                  ]}
+                  value={selectedProfile.providerSource ?? "explicit"}
+                />
                 <label className="settings-field">
                   <span>{tt("providerRef")}</span>
                   <input value={selectedProfile.providerRef ?? ""} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         providerRef: event.target.value
                       })
-                    });
+                    }));
                   }} />
                 </label>
                 <label className="settings-field">
                   <span>{tt("baseUrl")}</span>
                   <input value={selectedProfile.baseUrl ?? ""} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         baseUrl: event.target.value
                       })
-                    });
+                    }));
                   }} />
                 </label>
                 <label className="settings-field">
                   <span>{tt("model")}</span>
                   <input value={selectedProfile.model ?? ""} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         model: event.target.value
                       })
-                    });
+                    }));
                   }} />
                 </label>
-                <label className="settings-field">
-                  <span>{tt("wireApi")}</span>
-                  <select value={selectedProfile.wireApi ?? "auto"} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
-                        wireApi: event.target.value as ProviderProfile["wireApi"]
+                <ChoiceGroup<NonNullable<ProviderProfile["wireApi"]>>
+                  label={tt("wireApi")}
+                  onChange={(value) => {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                        wireApi: value
                       })
-                    });
-                  }}>
-                    <option value="auto">auto</option>
-                    <option value="responses">responses</option>
-                    <option value="chat_completions">chat_completions</option>
-                  </select>
-                </label>
+                    }));
+                  }}
+                  options={[
+                    { value: "auto", label: "auto" },
+                    { value: "responses", label: "responses" },
+                    { value: "chat_completions", label: "chat_completions" }
+                  ]}
+                  value={selectedProfile.wireApi ?? "auto"}
+                />
                 <label className="settings-field">
                   <span>{tt("apiKey")}</span>
                   <input value={selectedProfile.apiKey ?? ""} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         apiKey: event.target.value
                       })
-                    });
+                    }));
                   }} />
                 </label>
                 <label className="settings-field">
                   <span>{tt("apiKeyRef")}</span>
                   <input value={selectedProfile.apiKeyRef ?? ""} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         apiKeyRef: event.target.value
                       })
-                    });
+                    }));
                   }} />
                 </label>
               </div>
               <div className="settings-checks">
                 <label className="toggle">
                   <input checked={selectedProfile.enabled ?? true} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
                         enabled: event.target.checked
                       })
-                    });
+                    }));
                   }} type="checkbox" />
                   {tt("enabled")}
                 </label>
                 <label className="toggle">
                   <input checked={selectedProfile.isDefault ?? false} onChange={(event) => {
-                    setDirty(true);
-                    setDraft({
-                      ...draft,
-                      providerProfiles: draft.providerProfiles.map((profile) => ({
+                    updateDraftState((current) => ({
+                      ...current,
+                      providerProfiles: current.providerProfiles.map((profile) => ({
                         ...profile,
-                        isDefault: profile.profileId === draft.selectedProfileId ? event.target.checked : false
+                        isDefault: profile.profileId === current.selectedProfileId ? event.target.checked : false
                       }))
-                    });
+                    }));
                   }} type="checkbox" />
                   {tt("defaultProfile")}
                 </label>
@@ -799,23 +876,20 @@ export function SettingsPanel(props: {
             <label className="settings-field">
               <span>{tt("suggestCompactMb")}</span>
               <input value={draft.maintenanceCompactMb} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, maintenanceCompactMb: event.target.value });
+                updateDraftField("maintenanceCompactMb", event.target.value);
               }} />
             </label>
             <label className="settings-field">
               <span>{tt("suggestCompactLines")}</span>
               <input value={draft.maintenanceCompactLines} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, maintenanceCompactLines: event.target.value });
+                updateDraftField("maintenanceCompactLines", event.target.value);
               }} />
             </label>
           </div>
           <div className="settings-checks">
             <label className="toggle">
               <input checked={draft.maintenanceBackupBeforeCompact} onChange={(event) => {
-                setDirty(true);
-                setDraft({ ...draft, maintenanceBackupBeforeCompact: event.target.checked });
+                updateDraftField("maintenanceBackupBeforeCompact", event.target.checked);
               }} type="checkbox" />
               {tt("backupBeforeCompact")}
             </label>

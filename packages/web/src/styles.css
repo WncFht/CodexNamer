@@ -646,11 +646,24 @@ pre {
   gap: 5px;
 }
 
-.settings-field span {
+.settings-field span,
+.settings-choice-field legend {
   color: var(--text-secondary);
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.settings-choice-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-choice-field legend {
+  margin-bottom: 5px;
+  padding: 0;
 }
 
 .settings-field input,
@@ -669,6 +682,46 @@ pre {
 .settings-field textarea {
   resize: vertical;
   min-height: 80px;
+}
+
+.settings-choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--ring-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-choice-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.settings-choice:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.settings-choice.active {
+  background: rgba(201, 100, 66, 0.12);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--ring-accent);
 }
 
 .settings-field-wide {
