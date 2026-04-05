@@ -9,6 +9,7 @@ type SettingsDraft = {
   namingPreset: string;
   namingTemplate: string;
   namingLanguage: string;
+  namingDefaultStyle: "brief" | "detailed";
   namingMaxLength: string;
   namingContextStrategy: string;
   namingContextMaxChars: string;
@@ -93,6 +94,7 @@ function buildDraft(configView: ConfigView): SettingsDraft {
     namingPreset: asString(naming.preset, "conventional"),
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
     namingLanguage: asString(naming.language, "zh-CN"),
+    namingDefaultStyle: (asString(naming.defaultStyle || naming.default_style, "detailed") as "brief" | "detailed"),
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
     namingContextStrategy: asString(
       naming.contextStrategy || naming.context_strategy,
@@ -175,6 +177,7 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
       preset: stripEmptyString(draft.namingPreset),
       template: stripEmptyString(draft.namingTemplate),
       language: stripEmptyString(draft.namingLanguage),
+      defaultStyle: draft.namingDefaultStyle,
       maxLength: parseNumber(draft.namingMaxLength),
       contextStrategy: stripEmptyString(draft.namingContextStrategy) as
         | "summary-signals"
@@ -519,6 +522,20 @@ export function SettingsPanel(props: {
                 { value: "zh-CN", label: "中文" }
               ]}
               value={draft.uiLanguage}
+            />
+            <ChoiceGroup
+              label={tt("defaultNamingStyle")}
+              onChange={(value) => {
+                updateDraftState((current) => ({
+                  ...current,
+                  namingDefaultStyle: value
+                }));
+              }}
+              options={[
+                { value: "detailed", label: tt("detailed") },
+                { value: "brief", label: tt("brief") }
+              ]}
+              value={draft.namingDefaultStyle}
             />
             <label className="settings-field">
               <span>{tt("language")}</span>

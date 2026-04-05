@@ -15,6 +15,11 @@ export type SessionSummary = {
   provider?: string;
   model?: string;
   statusEstimate?: string;
+  preferredNamingStyle?: "brief" | "detailed";
+  effectiveNamingStyle?: "brief" | "detailed";
+  officialNamingStyle?: "brief" | "detailed";
+  candidateNamingStyle?: "brief" | "detailed";
+  defaultNamingStyle?: "brief" | "detailed";
 };
 
 export type SessionDetail = SessionSummary & {
@@ -52,6 +57,7 @@ export type SessionDetail = SessionSummary & {
     oldName?: string;
     newName: string;
     source: string;
+    style: "brief" | "detailed";
     status: string;
     reason?: string;
     appliedAt: string;
@@ -240,6 +246,7 @@ export type ConfigDocument = {
     template?: string;
     maxLength?: number;
     language?: string;
+    defaultStyle?: "brief" | "detailed";
     contextStrategy?: "summary-signals" | "user-assistant-transcript";
     contextMaxChars?: number;
   };
@@ -357,6 +364,7 @@ export type RenameSuggestResponse = {
   threadId: string;
   name: string;
   source: string;
+  style: "brief" | "detailed";
   kind: string;
   summary: string;
   scope?: string;
@@ -366,6 +374,12 @@ export type RenameSuggestResponse = {
 export type RenameApplyResponse = {
   written: boolean;
   name: string;
+};
+
+export type RenameNamingStyleResponse = {
+  threadId: string;
+  preferredStyle?: "brief" | "detailed";
+  effectiveStyle: "brief" | "detailed";
 };
 
 export type RenameFreezeResponse = {

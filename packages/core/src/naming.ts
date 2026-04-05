@@ -1,6 +1,7 @@
 import type {
   EffectiveConfig,
   MaterializedSession,
+  NamingStyle,
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
@@ -162,6 +163,13 @@ const TOPIC_RULES: TopicRule[] = [
 
 function prefersChinese(language: string): boolean {
   return /^zh\b/i.test(language);
+}
+
+export function resolveNamingStyle(
+  session: Pick<MaterializedSession, "namingStyle"> | undefined,
+  config: Pick<EffectiveConfig, "naming">
+): NamingStyle {
+  return session?.namingStyle ?? config.naming.defaultStyle;
 }
 
 function normalizeTaskText(value?: string): string | undefined {
@@ -359,7 +367,83 @@ function fallbackExcerptSummary(session: MaterializedSession, maxLength: number)
   return session.projectName ?? session.threadId;
 }
 
-function buildSummary(session: MaterializedSession, kind: string, maxLength: number, language: string): string {
+function removeDuplicateFocus(summary: string, focus: string): boolean {
+  const comparableSummary = summary.toLowerCase();
+  const comparableFocus = focus.toLowerCase();
+  return comparableFocus.length === 0 || comparableSummary.includes(comparableFocus);
+}
+
+function normalizeFocusClause(value: string | undefined): string | undefined {
+  const normalized = normalizeTaskText(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const cleaned = normalized
+    .replace(
+      /^(请你|请先|请|帮我|帮忙|麻烦|看看|看下|先把|先|现在|然后|另外|以及|需要|希望|我希望|我觉得|我发现|能不能|可以|要不要|你先)\s*/gi,
+      ""
+    )
+    .replace(/\b(topic|session|rename)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned || undefined;
+}
+
+function chooseConcreteFocus(session: MaterializedSession, language: string): string | undefined {
+  const renameContext = session.renameContext;
+  const latestTranscriptUser = renameContext?.segments
+    .slice()
+    .reverse()
+    .find((segment) => segment.role === "user")?.content;
+  const candidates = [
+    session.lastUserMessage,
+    latestTranscriptUser,
+    session.firstUserMessage,
+    session.lastAgentMessage
+  ];
+
+  const clauses = candidates
+    .flatMap((candidate) => {
+      const normalized = normalizeFocusClause(candidate);
+      if (!normalized) {
+        return [];
+      }
+      return normalized
+        .split(/(?:[，,。；;！？!?]| 然后 | 并且 | 同时 | 以及 )+/)
+        .map((part) => normalizeFocusClause(part))
+        .filter((value): value is string => Boolean(value));
+    })
+    .map((value) => {
+      const identifierBonus = /[`"'_-]|[A-Za-z]+\d*|[A-Za-z]+-[A-Za-z]+/.test(value) ? 8 : 0;
+      const configBonus = /(config|setting|provider|prompt|context|daemon|rename|history|apply|auto|默认|详细|简略|配置|命名|上下文|自动)/i.test(
+        value
+      )
+        ? 6
+        : 0;
+      return {
+        value,
+        score: Math.min(value.length, prefersChinese(language) ? 36 : 52) + identifierBonus + configBonus
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  const focus = clauses[0]?.value;
+  if (!focus) {
+    return undefined;
+  }
+
+  return excerpt(focus, prefersChinese(language) ? 20 : 30);
+}
+
+function buildSummary(
+  session: MaterializedSession,
+  kind: string,
+  maxLength: number,
+  language: string,
+  style: NamingStyle
+): string {
   const topics = detectTopics(session, language);
   const joined = collectTaskTexts(session)
     .map((item) => item.text)
@@ -387,7 +471,20 @@ function buildSummary(session: MaterializedSession, kind: string, maxLength: num
   const joinedSummary = prefersChinese(language)
     ? fragments.join("")
     : fragments.join(" ");
-  return excerpt(joinedSummary, maxLength) ?? fallbackExcerptSummary(session, maxLength);
+
+  if (style === "brief") {
+    return excerpt(joinedSummary, maxLength) ?? fallbackExcerptSummary(session, maxLength);
+  }
+
+  const focus = chooseConcreteFocus(session, language);
+  if (!focus || removeDuplicateFocus(joinedSummary, focus)) {
+    return excerpt(joinedSummary, maxLength) ?? fallbackExcerptSummary(session, maxLength);
+  }
+
+  const detailedSummary = prefersChinese(language)
+    ? `${joinedSummary}，聚焦${focus}`
+    : `${joinedSummary}; focus ${focus}`;
+  return excerpt(detailedSummary, maxLength) ?? excerpt(joinedSummary, maxLength) ?? fallbackExcerptSummary(session, maxLength);
 }
 
 function formatTime(timestamp: string | undefined, pattern: string): string {
@@ -442,6 +539,7 @@ export function suggestNameHeuristically(
   config: EffectiveConfig
 ): RenameSuggestion {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
+  const style = resolveNamingStyle(session, config);
   const materialized = {
     ...session,
     renameContext
@@ -450,8 +548,9 @@ export function suggestNameHeuristically(
   const summary = buildSummary(
     materialized,
     kind,
-    Math.min(56, config.naming.maxLength),
-    config.naming.language
+    Math.min(style === "detailed" ? 72 : 56, config.naming.maxLength),
+    config.naming.language,
+    style
   );
   const topicScope = detectTopics(materialized, config.naming.language)[0]?.scope;
   const scope =
@@ -470,6 +569,7 @@ export function suggestNameHeuristically(
     threadId: materialized.threadId,
     name,
     source: "heuristic",
+    style,
     kind,
     summary,
     scope,

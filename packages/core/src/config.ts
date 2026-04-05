@@ -67,6 +67,7 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     template: "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
     maxLength: 72,
     language: "zh-CN",
+    defaultStyle: "detailed",
     contextStrategy: "summary-signals",
     contextMaxChars: 8_000
   },
@@ -221,6 +222,11 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       template: getString(naming, "template"),
       maxLength: getNumber(naming, "max_length", "maxLength"),
       language: getString(naming, "language"),
+      defaultStyle: getString(
+        naming,
+        "default_style",
+        "defaultStyle"
+      ) as EffectiveConfig["naming"]["defaultStyle"] | undefined,
       contextStrategy: getString(
         naming,
         "context_strategy",
@@ -368,6 +374,7 @@ function serializeConfigDocument(document: ConfigDocument): string {
       template: document.naming?.template,
       max_length: document.naming?.maxLength,
       language: document.naming?.language,
+      default_style: document.naming?.defaultStyle,
       context_strategy: document.naming?.contextStrategy,
       context_max_chars: document.naming?.contextMaxChars
     }),

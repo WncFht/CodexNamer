@@ -106,6 +106,7 @@ describe("config loading", () => {
       patch: {
         naming: {
           maxLength: 48,
+          defaultStyle: "brief",
           contextStrategy: "user-assistant-transcript",
           contextMaxChars: 4096
         },
@@ -137,12 +138,14 @@ describe("config loading", () => {
     const written = await fs.readFile(configPath, "utf8");
 
     expect(effective.naming.maxLength).toBe(48);
+    expect(effective.naming.defaultStyle).toBe("brief");
     expect(effective.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(effective.naming.contextMaxChars).toBe(4096);
     expect(effective.providerProfiles[0]?.apiKey).toBe("keep-me");
     expect(view.userConfig.providerProfiles?.[0]?.apiKey).toBe(REDACTED_SECRET);
     expect(written).toContain('api_key = "keep-me"');
     expect(written).toContain('model = "gpt-next"');
+    expect(written).toContain('default_style = "brief"');
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
   });

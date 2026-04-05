@@ -60,6 +60,7 @@ describe("rename name collision handling", () => {
       manager.db.saveCandidate("dup-apply-2", {
         name: "Shared title",
         source: "ai",
+        style: "detailed",
         generatedAt: "2026-04-04T12:10:00.000Z"
       });
 
@@ -107,6 +108,7 @@ describe("rename name collision handling", () => {
         newName: "Shared title",
         source: "manual",
         kind: "manual",
+        style: "detailed",
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:00.000Z",
@@ -118,6 +120,7 @@ describe("rename name collision handling", () => {
         newName: "Shared title",
         source: "manual",
         kind: "manual",
+        style: "detailed",
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:01.000Z",

@@ -5,6 +5,7 @@ export type ProviderWireApi = "responses" | "chat_completions" | "auto";
 export type AiRequestTransport = "responses" | "chat_completions" | "codex-exec";
 export type AiRequestStatus = "running" | "succeeded" | "failed";
 export type RenameContextStrategy = "summary-signals" | "user-assistant-transcript";
+export type NamingStyle = "brief" | "detailed";
 export type UiLanguage = "en-US" | "zh-CN";
 export type RenameContextSegmentSource =
   | "summary_first_user"
@@ -57,6 +58,7 @@ export interface NamingConfig {
   template: string;
   maxLength: number;
   language: string;
+  defaultStyle: NamingStyle;
   contextStrategy: RenameContextStrategy;
   contextMaxChars: number;
 }
@@ -168,6 +170,7 @@ export type ApiEventType =
   | "session.suggested"
   | "session.applied"
   | "session.renamed"
+  | "session.naming_style.changed"
   | "session.freeze.changed"
   | "session.manual_override.changed"
   | "batch.apply.completed"
@@ -228,6 +231,7 @@ export interface MaterializedSession {
   firstUserMessage?: string;
   lastUserMessage?: string;
   lastAgentMessage?: string;
+  namingStyle?: NamingStyle;
   taskCompleteCount: number;
   tokenTotal: number;
   renameContext?: RenameContext;
@@ -291,6 +295,7 @@ export interface RenameSuggestion {
   threadId: string;
   name: string;
   source: RenameSource;
+  style: NamingStyle;
   kind: string;
   summary: string;
   scope?: string;
@@ -303,12 +308,15 @@ export interface RenameStateRecord {
   currentCandidateName?: string;
   currentCandidateSource?: RenameSource;
   currentCandidateGeneratedAt?: string;
+  currentCandidateStyle?: NamingStyle;
   lastAutoName?: string;
   lastManualName?: string;
   lastAppliedName?: string;
   lastAppliedSource?: RenameSource;
   lastAppliedAt?: string;
   lastAppliedRevision?: string;
+  lastAppliedStyle?: NamingStyle;
+  preferredStyle?: NamingStyle;
   dirtySinceRename: boolean;
   manualOverride: boolean;
   frozen: boolean;
@@ -323,6 +331,7 @@ export interface RenameHistoryRecord {
   oldName?: string;
   newName: string;
   source: RenameSource;
+  style: NamingStyle;
   status: RenameStatus;
   reason?: string;
   appliedAt: string;
@@ -347,6 +356,11 @@ export interface SessionSummary {
   provider?: string;
   model?: string;
   statusEstimate?: SessionStatusEstimate;
+  preferredNamingStyle?: NamingStyle;
+  effectiveNamingStyle?: NamingStyle;
+  officialNamingStyle?: NamingStyle;
+  candidateNamingStyle?: NamingStyle;
+  defaultNamingStyle?: NamingStyle;
 }
 
 export interface SessionDetail extends SessionSummary {

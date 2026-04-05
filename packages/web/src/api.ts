@@ -11,6 +11,7 @@ import type {
   ProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
+  RenameNamingStyleResponse,
   RenameManualOverrideResponse,
   RenameSuggestResponse,
   SessionDetail,
@@ -125,6 +126,18 @@ export async function suggestSession(threadId: string): Promise<RenameSuggestRes
 export async function applySession(threadId: string): Promise<RenameApplyResponse> {
   return requestJson<RenameApplyResponse>(`/api/v1/sessions/${threadId}/apply`, {
     method: "POST"
+  });
+}
+
+export async function setSessionNamingStyle(
+  threadId: string,
+  style: "brief" | "detailed" | "default"
+): Promise<RenameNamingStyleResponse> {
+  return requestJson<RenameNamingStyleResponse>(`/api/v1/sessions/${threadId}/naming-style`, {
+    method: "POST",
+    body: JSON.stringify({
+      style: style === "default" ? null : style
+    })
   });
 }
 

@@ -23,6 +23,8 @@ function parseArgs(argv: string[]): { once: boolean; intervalSeconds: number } {
 export class SessionSweepDaemon {
   private timer?: NodeJS.Timeout;
   private pendingTimer?: NodeJS.Timeout;
+  private sweepRunning = false;
+  private rerunRequested = false;
 
   constructor(
     private readonly manager: CodexSessionManager,
@@ -48,18 +50,44 @@ export class SessionSweepDaemon {
     console.log(JSON.stringify({ type: "daemon_sweep", summary, previews, applied: sweep.applied }, null, 2));
   }
 
+  private triggerSweep(): void {
+    if (this.sweepRunning) {
+      this.rerunRequested = true;
+      return;
+    }
+
+    this.sweepRunning = true;
+    void (async () => {
+      try {
+        await this.runOnce();
+      } catch (error) {
+        console.error("[daemon] sweep failed", error);
+      } finally {
+        this.sweepRunning = false;
+        if (this.rerunRequested) {
+          this.rerunRequested = false;
+          this.triggerSweep();
+        }
+      }
+    })();
+  }
+
   private scheduleSoon(): void {
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
     }
 
     this.pendingTimer = setTimeout(() => {
-      void this.runOnce();
+      this.triggerSweep();
     }, 1000);
   }
 
   async start(): Promise<void> {
-    await this.runOnce();
+    try {
+      await this.runOnce();
+    } catch (error) {
+      console.error("[daemon] initial sweep failed", error);
+    }
 
     const codexHome = this.manager.config.general.codexHome;
     const watcher = chokidar.watch(
@@ -76,7 +104,7 @@ export class SessionSweepDaemon {
     watcher.on("change", () => this.scheduleSoon());
 
     this.timer = setInterval(() => {
-      void this.runOnce();
+      this.triggerSweep();
     }, this.intervalSeconds * 1000);
   }
 

@@ -18,6 +18,7 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 计算 revision 与 dirty 状态
 - 单个与批量 rename
 - rename history、freeze、manual override
+- 默认命名风格版本与单会话风格切换
 - AI rename backend:
   - `none`
   - `openai-compatible`
@@ -54,6 +55,15 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 新的候选名或手动名在落盘前会先做重名检查
 - 如果和别的 session 正式名重复，会自动追加 ` (2) / (3) ...` 后缀
 - 已经历史上形成的重复正式名，也会把后出现的那几个重新打回待处理队列
+
+当前命名还有一条新的风格版本约定：
+
+- 全局默认风格由 `naming.default_style` 控制
+- 当前支持：
+  - `detailed`
+  - `brief`
+- 单会话可以单独切换“跟随默认 / 详细 / 简略”
+- `rename_history` 现在会记录每次 rename 对应的风格版本
 
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
@@ -178,6 +188,7 @@ profile = "default"
 template = "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"
 max_length = 72
 language = "zh-CN"
+default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 ```
@@ -236,7 +247,7 @@ npm run web
 WebUI 当前包含 3 个主视图：
 
 - `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
-- `Settings`：命名模板、context 策略与 `context_max_chars`、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
+- `Settings`：命名模板、默认命名风格、context 策略与 `context_max_chars`、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
 - `Rename Ops / 运行态`：自动重命名运行态、近期应用活动、命名来源分布、工作区 token 压力、预览队列与原始 doctor 信息
 
 运行态页现在会明确展示：

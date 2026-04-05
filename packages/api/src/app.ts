@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { CodexSessionManager } from "@codex-session-manager/core";
-import type { ConfigDocument, SessionSummary } from "@codex-session-manager/shared";
+import type { ConfigDocument, NamingStyle, SessionSummary } from "@codex-session-manager/shared";
 
 import { ApiEventLog } from "./event-log.js";
 
@@ -40,6 +40,10 @@ function parseNumberQuery(value: unknown): number | undefined {
 function normalizeSearchValue(value: string | undefined): string | undefined {
   const trimmed = value?.trim().toLowerCase();
   return trimmed ? trimmed : undefined;
+}
+
+function parseNamingStyle(value: unknown): NamingStyle | undefined {
+  return value === "brief" || value === "detailed" ? value : undefined;
 }
 
 async function filterAndSortSessions(
@@ -306,23 +310,39 @@ export async function buildApiServer(options?: {
 
   app.post("/api/v1/sessions/:id/suggest", async (request) => {
     const params = request.params as { id: string };
-    const suggestion = await manager.suggest(params.id);
+    const body = (request.body as { style?: string } | undefined) ?? {};
+    const suggestion = await manager.suggest(params.id, {
+      style: parseNamingStyle(body.style)
+    });
     eventLog.publish("session.suggested", {
       threadId: params.id,
       name: suggestion.name,
-      source: suggestion.source
+      source: suggestion.source,
+      style: suggestion.style
     });
     return suggestion;
   });
 
   app.post("/api/v1/sessions/:id/apply", async (request) => {
     const params = request.params as { id: string };
-    const result = await manager.apply(params.id);
+    const body = (request.body as { style?: string } | undefined) ?? {};
+    const result = await manager.apply(params.id, {
+      style: parseNamingStyle(body.style)
+    });
     eventLog.publish("session.applied", {
       threadId: params.id,
       name: result.name,
       written: result.written
     });
+    return result;
+  });
+
+  app.post("/api/v1/sessions/:id/naming-style", async (request) => {
+    const params = request.params as { id: string };
+    const body = (request.body as { style?: string | null } | undefined) ?? {};
+    const style = body.style == null || body.style === "default" ? undefined : parseNamingStyle(body.style);
+    const result = await manager.setNamingStyle(params.id, style);
+    eventLog.publish("session.naming_style.changed", result as unknown as Record<string, unknown>);
     return result;
   });
 

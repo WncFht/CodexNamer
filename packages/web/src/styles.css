@@ -925,6 +925,54 @@ pre {
   flex-wrap: wrap;
 }
 
+.session-style-bar {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.session-style-copy {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.session-style-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.session-style-option {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 88%, white 12%);
+  color: var(--text);
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.session-style-option:hover {
+  border-color: var(--focus);
+  transform: translateY(-1px);
+}
+
+.session-style-option.active {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 12%, var(--bg-secondary) 88%);
+  color: var(--focus);
+}
+
+.session-style-option:disabled {
+  cursor: progress;
+  opacity: 0.72;
+  transform: none;
+}
+
 .session-status-dot {
   width: 9px;
   height: 9px;

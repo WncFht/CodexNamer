@@ -371,6 +371,7 @@ export function App() {
               onStartSessionResize={startSessionResize}
               onSuggest={() => state.actions.suggest()}
               onApply={() => state.actions.apply()}
+              onSetNamingStyle={(style) => state.actions.setNamingStyle(style)}
               onToggleFreeze={() => state.actions.toggleFreeze()}
               onToggleManualOverride={() => state.actions.toggleManualOverride()}
             />

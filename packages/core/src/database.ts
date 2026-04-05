@@ -9,6 +9,7 @@ import type {
   AiRequestStatus,
   AiRequestTransport,
   MaterializedSession,
+  NamingStyle,
   OverviewReport,
   RenameHistoryRecord,
   RenameHistoryKind,
@@ -45,17 +46,24 @@ type SessionRow = {
   archived_hint: number;
   current_revision: string | null;
   current_candidate_name: string | null;
+  current_candidate_style: string | null;
   dirty_since_rename: number | null;
   last_applied_name: string | null;
   last_applied_source: string | null;
+  last_applied_style: string | null;
   last_applied_revision: string | null;
   last_applied_at: string | null;
+  preferred_style: string | null;
   manual_override: number | null;
   frozen: number | null;
 };
 
 function toBoolean(value: number | null | undefined): boolean {
   return value === 1;
+}
+
+function normalizeNamingStyle(value: unknown): NamingStyle | undefined {
+  return value === "brief" || value === "detailed" ? value : undefined;
 }
 
 export class StateDatabase {
@@ -177,6 +185,32 @@ export class StateDatabase {
       CREATE INDEX IF NOT EXISTS idx_ai_request_logs_started_at ON ai_request_logs(started_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_ai_request_logs_status ON ai_request_logs(status);
     `);
+    this.ensureColumn("rename_state", "current_candidate_style", "TEXT");
+    this.ensureColumn("rename_state", "last_applied_style", "TEXT");
+    this.ensureColumn("rename_state", "preferred_style", "TEXT");
+    this.ensureColumn("rename_history", "style", "TEXT");
+    this.db.exec(`
+      UPDATE rename_state
+      SET current_candidate_style = COALESCE(current_candidate_style, 'brief')
+      WHERE current_candidate_name IS NOT NULL;
+
+      UPDATE rename_state
+      SET last_applied_style = COALESCE(last_applied_style, 'brief')
+      WHERE last_applied_name IS NOT NULL;
+
+      UPDATE rename_history
+      SET style = COALESCE(style, 'brief')
+      WHERE new_name IS NOT NULL;
+    `);
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const exists = (this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<Record<string, unknown>>).some(
+      (row) => row.name === column
+    );
+    if (!exists) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   getSessionByRolloutPath(rolloutPath: string): MaterializedSession | undefined {
@@ -402,12 +436,15 @@ export class StateDatabase {
       currentCandidateName: (row.current_candidate_name as string | null) ?? undefined,
       currentCandidateSource: (row.current_candidate_source as RenameSource | null) ?? undefined,
       currentCandidateGeneratedAt: (row.current_candidate_generated_at as string | null) ?? undefined,
+      currentCandidateStyle: normalizeNamingStyle(row.current_candidate_style),
       lastAutoName: (row.last_auto_name as string | null) ?? undefined,
       lastManualName: (row.last_manual_name as string | null) ?? undefined,
       lastAppliedName: (row.last_applied_name as string | null) ?? undefined,
       lastAppliedSource: (row.last_applied_source as RenameSource | null) ?? undefined,
       lastAppliedAt: (row.last_applied_at as string | null) ?? undefined,
       lastAppliedRevision: (row.last_applied_revision as string | null) ?? undefined,
+      lastAppliedStyle: normalizeNamingStyle(row.last_applied_style),
+      preferredStyle: normalizeNamingStyle(row.preferred_style),
       dirtySinceRename: toBoolean(row.dirty_since_rename as number | null),
       manualOverride: toBoolean(row.manual_override as number | null),
       frozen: toBoolean(row.frozen as number | null),
@@ -418,23 +455,49 @@ export class StateDatabase {
     };
   }
 
-  saveCandidate(threadId: string, suggestion: { name: string; source: RenameSource; generatedAt: string }): void {
+  saveCandidate(threadId: string, suggestion: { name: string; source: RenameSource; style: NamingStyle; generatedAt: string }): void {
     this.db
       .prepare(
-        `INSERT INTO rename_state (thread_id, current_candidate_name, current_candidate_source, current_candidate_generated_at, dirty_since_rename)
-         VALUES (?, ?, ?, ?, 1)
+        `INSERT INTO rename_state (
+           thread_id, current_candidate_name, current_candidate_source, current_candidate_generated_at, current_candidate_style, dirty_since_rename
+         )
+         VALUES (?, ?, ?, ?, ?, 1)
          ON CONFLICT(thread_id) DO UPDATE SET
            current_candidate_name = excluded.current_candidate_name,
            current_candidate_source = excluded.current_candidate_source,
-           current_candidate_generated_at = excluded.current_candidate_generated_at`
+           current_candidate_generated_at = excluded.current_candidate_generated_at,
+           current_candidate_style = excluded.current_candidate_style`
       )
-      .run(threadId, suggestion.name, suggestion.source, suggestion.generatedAt);
+      .run(threadId, suggestion.name, suggestion.source, suggestion.generatedAt, suggestion.style);
+  }
+
+  clearCandidate(threadId: string): void {
+    this.db
+      .prepare(
+        `UPDATE rename_state
+         SET current_candidate_name = NULL,
+             current_candidate_source = NULL,
+             current_candidate_generated_at = NULL,
+             current_candidate_style = NULL
+         WHERE thread_id = ?`
+      )
+      .run(threadId);
+  }
+
+  setPreferredStyle(threadId: string, preferredStyle?: NamingStyle): void {
+    this.db
+      .prepare(
+        `INSERT INTO rename_state (thread_id, preferred_style)
+         VALUES (?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET preferred_style = excluded.preferred_style`
+      )
+      .run(threadId, preferredStyle ?? null);
   }
 
   private getLatestRenameHistoryRow(threadId: string): Record<string, unknown> | undefined {
     return this.db
       .prepare(
-        `SELECT kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
+        `SELECT kind, old_name, new_name, source, style, status, reason, applied_at, applied_revision, operator
          FROM rename_history
          WHERE thread_id = ?
          ORDER BY id DESC
@@ -450,11 +513,13 @@ export class StateDatabase {
     kind: RenameHistoryKind;
     status: "applied" | "skipped" | "failed" | "preview_only";
     reason?: string;
+    style: NamingStyle;
     operator: string;
     appliedAt: string;
     appliedRevision?: string;
     manualOverride?: boolean;
     autoApply?: boolean;
+    persistAppliedState?: boolean;
   }): void {
     const previous = this.getRenameState(params.threadId);
     const transaction = this.db.transaction(() => {
@@ -468,6 +533,7 @@ export class StateDatabase {
         (latest.old_name ?? null) === oldName &&
         latest.new_name === params.newName &&
         latest.source === params.source &&
+        (latest.style ?? null) === params.style &&
         latest.status === params.status &&
         (latest.reason ?? null) === reason &&
         latest.applied_at === params.appliedAt &&
@@ -478,8 +544,8 @@ export class StateDatabase {
         this.db
           .prepare(
             `INSERT INTO rename_history (
-              thread_id, kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              thread_id, kind, old_name, new_name, source, style, status, reason, applied_at, applied_revision, operator
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             params.threadId,
@@ -487,6 +553,7 @@ export class StateDatabase {
             oldName,
             params.newName,
             params.source,
+            params.style,
             params.status,
             reason,
             params.appliedAt,
@@ -495,18 +562,19 @@ export class StateDatabase {
           );
       }
 
-      if (params.status === "applied") {
+      if (params.status === "applied" || params.persistAppliedState) {
         this.db
           .prepare(
             `INSERT INTO rename_state (
               thread_id, last_applied_name, last_applied_source, last_applied_at,
-              last_applied_revision, dirty_since_rename, manual_override, auto_apply_count,
+              last_applied_style, last_applied_revision, dirty_since_rename, manual_override, auto_apply_count,
               last_auto_name, last_manual_name, last_auto_apply_success_at
-            ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
             ON CONFLICT(thread_id) DO UPDATE SET
               last_applied_name = excluded.last_applied_name,
               last_applied_source = excluded.last_applied_source,
               last_applied_at = excluded.last_applied_at,
+              last_applied_style = excluded.last_applied_style,
               last_applied_revision = excluded.last_applied_revision,
               dirty_since_rename = 0,
               manual_override = excluded.manual_override,
@@ -520,6 +588,7 @@ export class StateDatabase {
             params.newName,
             params.source,
             params.appliedAt,
+            params.style,
             params.appliedRevision ?? null,
             params.manualOverride ? 1 : 0,
             params.autoApply ? (previous?.autoApplyCount ?? 0) + 1 : previous?.autoApplyCount ?? 0,
@@ -552,7 +621,8 @@ export class StateDatabase {
       .prepare(
         `SELECT s.thread_id, s.cwd, s.project_name, s.first_user_message, s.updated_at, s.latest_official_name,
                 s.model_provider, s.model, s.task_complete_count, s.status_estimate,
-                rs.current_candidate_name, rs.last_applied_revision, rs.manual_override, rs.frozen,
+                rs.current_candidate_name, rs.current_candidate_style, rs.last_applied_style, rs.preferred_style,
+                rs.last_applied_revision, rs.manual_override, rs.frozen,
                 rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -580,7 +650,11 @@ export class StateDatabase {
         taskCompleteCount: Number(row.task_complete_count ?? 0),
         provider: (row.model_provider as string | null) ?? undefined,
         model: (row.model as string | null) ?? undefined,
-        statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined
+        statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined,
+        preferredNamingStyle: normalizeNamingStyle(row.preferred_style),
+        effectiveNamingStyle: normalizeNamingStyle(row.preferred_style),
+        officialNamingStyle: normalizeNamingStyle(row.last_applied_style),
+        candidateNamingStyle: normalizeNamingStyle(row.current_candidate_style)
       }))
       .filter((row) => (filters?.dirty === undefined ? true : row.dirty === filters.dirty));
   }
@@ -628,7 +702,8 @@ export class StateDatabase {
         `SELECT s.thread_id, s.rollout_path, s.cwd, s.project_name, s.created_at, s.updated_at,
                 s.model_provider, s.model, s.first_user_message, s.last_user_message,
                 s.last_agent_message, s.task_complete_count, s.token_total, s.latest_official_name,
-                s.status_estimate, sr.current_revision, rs.current_candidate_name, rs.last_applied_at,
+                s.status_estimate, sr.current_revision, rs.current_candidate_name, rs.current_candidate_style,
+                rs.last_applied_at, rs.last_applied_style, rs.preferred_style,
                 rs.last_applied_revision, rs.manual_override, rs.frozen, rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN session_revisions sr ON sr.thread_id = s.thread_id
@@ -665,7 +740,11 @@ export class StateDatabase {
       tokenTotal: row.token_total,
       revision: row.current_revision ?? undefined,
       lastAppliedAt: row.last_applied_at ?? undefined,
-      lastAppliedRevision: row.last_applied_revision ?? undefined
+      lastAppliedRevision: row.last_applied_revision ?? undefined,
+      preferredNamingStyle: normalizeNamingStyle(row.preferred_style),
+      effectiveNamingStyle: normalizeNamingStyle(row.preferred_style),
+      officialNamingStyle: normalizeNamingStyle(row.last_applied_style),
+      candidateNamingStyle: normalizeNamingStyle(row.current_candidate_style)
     };
   }
 
@@ -693,7 +772,7 @@ export class StateDatabase {
   getRenameHistory(threadId: string): RenameHistoryRecord[] {
     return this.db
       .prepare(
-        `SELECT kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
+        `SELECT kind, old_name, new_name, source, style, status, reason, applied_at, applied_revision, operator
          FROM rename_history WHERE thread_id = ? ORDER BY applied_at DESC`
       )
       .all(threadId)
@@ -704,6 +783,7 @@ export class StateDatabase {
           oldName: (item.old_name as string | null) ?? undefined,
           newName: item.new_name as string,
           source: item.source as RenameSource,
+          style: normalizeNamingStyle(item.style) ?? "brief",
           status: item.status as RenameHistoryRecord["status"],
           reason: (item.reason as string | null) ?? undefined,
           appliedAt: item.applied_at as string,

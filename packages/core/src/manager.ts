@@ -11,6 +11,7 @@ import {
   type DoctorReport,
   type EffectiveConfig,
   type MaterializedSession,
+  type NamingStyle,
   type OverviewReport,
   type PromptPreview,
   type RenameHistoryRecord,
@@ -35,6 +36,7 @@ import {
 } from "./session-index.js";
 import { buildRenameContext } from "./rename-context.js";
 import { estimateSessionStatus, evaluateAutoRename } from "./auto-rename.js";
+import { toUtcIso } from "./util.js";
 
 function redactSecret(value?: string): string | undefined {
   return value ? "[redacted]" : undefined;
@@ -171,6 +173,14 @@ export class CodexSessionManager {
       throw new Error(`Unknown session: ${threadId}`);
     }
     return detail;
+  }
+
+  private resolveEffectiveNamingStyle(
+    detail?: Pick<SessionDetail, "preferredNamingStyle">,
+    renameState?: { preferredStyle?: NamingStyle },
+    explicitStyle?: NamingStyle
+  ): NamingStyle {
+    return explicitStyle ?? detail?.preferredNamingStyle ?? renameState?.preferredStyle ?? this.config.naming.defaultStyle;
   }
 
   private buildSyntheticPromptSession(): MaterializedSession {
@@ -323,7 +333,10 @@ export class CodexSessionManager {
     });
   }
 
-  private async materializeSessionForSuggestion(detail: SessionDetail): Promise<MaterializedSession> {
+  private async materializeSessionForSuggestion(
+    detail: SessionDetail,
+    style?: NamingStyle
+  ): Promise<MaterializedSession> {
     const transcript =
       this.config.naming.contextStrategy === "user-assistant-transcript"
         ? detail.transcript ?? (await readSessionTranscript(detail.rolloutPath))
@@ -331,6 +344,7 @@ export class CodexSessionManager {
 
     return {
       ...detail,
+      namingStyle: this.resolveEffectiveNamingStyle(detail, undefined, style),
       renameContext: buildRenameContext(detail, this.config, {
         transcript
       })
@@ -343,15 +357,18 @@ export class CodexSessionManager {
       saveCandidate?: boolean;
       reservedNameKeys?: Set<string>;
       blockedOfficialThreadIds?: Set<string>;
+      style?: NamingStyle;
     }
   ): Promise<RenameSuggestion> {
     const renameState = this.db.getRenameState(detail.threadId);
+    const targetStyle = this.resolveEffectiveNamingStyle(detail, renameState, options?.style);
     const candidateGeneratedAt = renameState?.currentCandidateGeneratedAt
       ? Date.parse(renameState.currentCandidateGeneratedAt)
       : Number.NaN;
     const sessionUpdatedAt = detail.updatedAt ? Date.parse(detail.updatedAt) : Number.NaN;
     const canReuseCandidate =
       Boolean(renameState?.currentCandidateName && renameState.currentCandidateGeneratedAt) &&
+      renameState?.currentCandidateStyle === targetStyle &&
       (this.isAcceptedOfficialRenameSource(renameState?.currentCandidateSource) ||
         !this.requiresAcceptedRewrite(renameState)) &&
       (!Number.isFinite(sessionUpdatedAt) ||
@@ -365,6 +382,7 @@ export class CodexSessionManager {
           threadId: detail.threadId,
           name: renameState?.currentCandidateName ?? "",
           source: renameState?.currentCandidateSource ?? "heuristic",
+          style: targetStyle,
           kind: "chore",
           summary: renameState?.currentCandidateName ?? "",
           generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
@@ -382,7 +400,7 @@ export class CodexSessionManager {
 
     const suggestion = this.ensureUniqueRenameSuggestion(
       detail.threadId,
-      await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail)),
+      await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail, targetStyle)),
       {
         reservedNameKeys: options?.reservedNameKeys,
         blockedOfficialThreadIds: options?.blockedOfficialThreadIds
@@ -394,10 +412,12 @@ export class CodexSessionManager {
     return suggestion;
   }
 
-  async suggest(threadId: string): Promise<RenameSuggestion> {
+  async suggest(threadId: string, options?: { style?: NamingStyle }): Promise<RenameSuggestion> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
-    return this.resolveSuggestionForDetail(detail);
+    return this.resolveSuggestionForDetail(detail, {
+      style: options?.style
+    });
   }
 
   async apply(
@@ -406,13 +426,17 @@ export class CodexSessionManager {
       autoApply?: boolean;
       skipScan?: boolean;
       detail?: SessionDetail;
+      style?: NamingStyle;
     }
   ): Promise<{ written: boolean; name: string }> {
     if (!options?.skipScan) {
       await this.scan();
     }
     const detail = options?.detail ?? this.requireSessionDetail(threadId);
-    const suggestion = await this.resolveSuggestionForDetail(detail);
+    const renameState = this.db.getRenameState(threadId);
+    const suggestion = await this.resolveSuggestionForDetail(detail, {
+      style: options?.style
+    });
 
     const result = await appendSessionIndexRename({
       filePath: this.sessionIndexPath,
@@ -420,7 +444,13 @@ export class CodexSessionManager {
       threadName: suggestion.name
     });
     this.sessionIndexCache = undefined;
-    const appliedAt = result.entry.updatedAt;
+    const persistAppliedState =
+      !result.written &&
+      (renameState?.lastAppliedName !== suggestion.name ||
+        renameState?.lastAppliedSource !== suggestion.source ||
+        renameState?.lastAppliedStyle !== suggestion.style ||
+        renameState?.lastAppliedRevision !== detail.revision);
+    const appliedAt = persistAppliedState ? toUtcIso() : result.entry.updatedAt;
     this.db.recordRename({
       threadId,
       newName: suggestion.name,
@@ -428,11 +458,13 @@ export class CodexSessionManager {
       kind: suggestion.source === "manual" ? "manual" : "auto",
       status: result.written ? "applied" : "skipped",
       reason: result.written ? undefined : "unchanged",
+      style: suggestion.style,
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,
       manualOverride: false,
-      autoApply: options?.autoApply ?? false
+      autoApply: options?.autoApply ?? false,
+      persistAppliedState
     });
 
     return {
@@ -444,6 +476,8 @@ export class CodexSessionManager {
   async rename(threadId: string, name: string): Promise<{ written: boolean; name: string }> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
+    const renameState = this.db.getRenameState(threadId);
+    const style = this.resolveEffectiveNamingStyle(detail, renameState);
     const uniqueName = this.ensureUniqueName(name, threadId);
 
     const result = await appendSessionIndexRename({
@@ -452,6 +486,13 @@ export class CodexSessionManager {
       threadName: uniqueName
     });
     this.sessionIndexCache = undefined;
+    const persistAppliedState =
+      !result.written &&
+      (renameState?.lastAppliedName !== result.entry.threadName ||
+        renameState?.lastAppliedSource !== "manual" ||
+        renameState?.lastAppliedStyle !== style ||
+        renameState?.lastAppliedRevision !== detail.revision);
+    const appliedAt = persistAppliedState ? toUtcIso() : result.entry.updatedAt;
 
     this.db.recordRename({
       threadId,
@@ -460,16 +501,44 @@ export class CodexSessionManager {
       kind: "manual",
       status: result.written ? "applied" : "skipped",
       reason: result.written ? undefined : "unchanged",
+      style,
       operator: this.operator,
-      appliedAt: result.entry.updatedAt,
+      appliedAt,
       appliedRevision: detail.revision,
       manualOverride: true,
-      autoApply: false
+      autoApply: false,
+      persistAppliedState
     });
 
     return {
       written: result.written,
       name: result.entry.threadName
+    };
+  }
+
+  async setNamingStyle(
+    threadId: string,
+    preferredStyle?: NamingStyle
+  ): Promise<{ threadId: string; preferredStyle?: NamingStyle; effectiveStyle: NamingStyle }> {
+    await this.scan();
+    const detail = this.requireSessionDetail(threadId);
+    const previousState = this.db.getRenameState(threadId);
+    this.db.setPreferredStyle(threadId, preferredStyle);
+    const effectiveStyle = this.resolveEffectiveNamingStyle(
+      {
+        ...detail,
+        preferredNamingStyle: preferredStyle
+      },
+      undefined,
+      undefined
+    );
+    if (previousState?.currentCandidateName && previousState.currentCandidateStyle !== effectiveStyle) {
+      this.db.clearCandidate(threadId);
+    }
+    return {
+      threadId,
+      preferredStyle,
+      effectiveStyle
     };
   }
 
@@ -1037,9 +1106,17 @@ export class CodexSessionManager {
     nonAcceptedNamedThreadIds: Set<string>
   ): T {
     const pendingAcceptedRewrite = nonAcceptedNamedThreadIds.has(session.threadId);
+    const effectiveStyle = this.resolveEffectiveNamingStyle(session);
+    const candidateStyleMatches =
+      !session.candidateName ||
+      !session.candidateNamingStyle ||
+      session.candidateNamingStyle === effectiveStyle;
     return {
       ...session,
+      defaultNamingStyle: this.config.naming.defaultStyle,
+      effectiveNamingStyle: effectiveStyle,
       officialName: pendingAcceptedRewrite ? undefined : session.officialName,
+      candidateName: candidateStyleMatches ? session.candidateName : undefined,
       dirty: session.dirty || pendingAcceptedRewrite
     };
   }

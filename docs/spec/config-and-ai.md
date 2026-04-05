@@ -48,6 +48,7 @@ preset = "conventional"
 template = "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"
 max_length = 72
 language = "zh-CN"
+default_style = "detailed"
 
 [ai]
 backend = "codex"
@@ -75,6 +76,28 @@ backup_before_compact = true
 - `rename.mode` 目前仍作为兼容字段被解析，但设置页已经不再暴露它。
 - 当前真正决定是否走 AI 的主开关是 `[ai].backend`。
 - heuristic 仍然作为内部 fallback 存在，但不再作为推荐给用户切换的正式模式。
+
+## 命名风格版本
+
+从当前版本开始，`[naming]` 还新增一个正式配置项：
+
+- `default_style = "detailed" | "brief"`
+
+语义：
+
+- `detailed`
+  - 默认风格
+  - 倾向输出更具体的标题
+  - 会尽量补一个短的 secondary focus
+- `brief`
+  - 保持更短、更扫读友好的标题
+
+注意：
+
+- 这不是旧的 `rename.mode`
+- 它不决定“是否启用 AI”
+- 它决定的是“在当前命名链路里，标题更偏详细版还是简略版”
+- 单会话还可以单独覆盖这个默认值
 
 ## AI 后端
 

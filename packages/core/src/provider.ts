@@ -16,7 +16,7 @@ import type {
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
-import { suggestNameHeuristically } from "./naming.js";
+import { resolveNamingStyle, suggestNameHeuristically } from "./naming.js";
 import { buildRenameContext } from "./rename-context.js";
 import { stripControl, toUtcIso } from "./util.js";
 
@@ -171,6 +171,11 @@ function normalizePromptField(value: string | undefined, maxLength: number): str
 
 export function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
+  const style = resolveNamingStyle(session, config);
+  const styleGuidance =
+    style === "detailed"
+      ? "Preferred naming style: detailed. Use more of the available length budget, and include one concrete secondary focus when it materially distinguishes the session."
+      : "Preferred naming style: brief. Keep the name short and list-safe while still preserving the main subsystem and action.";
   const parts = [
     "You generate a concise session rename suggestion for Codex Session Manager.",
     "Return only a JSON object with keys: name, kind, summary, scope.",
@@ -178,6 +183,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     "Use only the session context provided below.",
     `Target language: ${config.naming.language}.`,
     `Max final name length: ${config.naming.maxLength}.`,
+    styleGuidance,
     "Prefer a short but specific summary suitable for a session list.",
     "Make the rename concrete: capture the main subsystem plus the actual action, issue, or review focus.",
     "If the session has two tightly related goals, use one short secondary fragment rather than a generic umbrella noun.",
@@ -194,6 +200,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     `contextTruncated: ${String(renameContext.truncated)}`,
     `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
     `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
+    `namingStyle: ${style}`,
     `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
     `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
     `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
@@ -259,6 +266,7 @@ function sanitizeSuggestion(
     threadId: fallback.threadId,
     name: name.slice(0, Math.max(1, maxLength)).trim(),
     source: "ai",
+    style: fallback.style,
     kind,
     summary,
     scope,

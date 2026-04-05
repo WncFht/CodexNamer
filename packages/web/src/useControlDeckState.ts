@@ -14,6 +14,7 @@ import {
   fetchSessions,
   freezeSession,
   suggestSession,
+  setSessionNamingStyle,
   toggleManualOverride,
   updateConfig
 } from "./api.js";
@@ -29,6 +30,7 @@ import type {
   ProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
+  RenameNamingStyleResponse,
   RenameManualOverrideResponse,
   RenameSuggestResponse,
   SessionDetail,
@@ -660,6 +662,28 @@ export function useControlDeckState() {
                 message: result.manualOverride ? "Manual override enabled" : "Manual override cleared",
                 patch: {
                   manualOverride: result.manualOverride
+                }
+              })
+            })
+          : Promise.resolve(),
+      setNamingStyle: (style: "brief" | "detailed" | "default") =>
+        detail
+          ? runAction<RenameNamingStyleResponse>({
+              threadId: detail.threadId,
+              actionName: "Updating naming style",
+              action: () => setSessionNamingStyle(detail.threadId, style),
+              onSuccess: (result) => ({
+                message:
+                  style === "default"
+                    ? "Session now follows the default naming style"
+                    : `Session naming style set to ${result.effectiveStyle}`,
+                patch: {
+                  preferredNamingStyle: result.preferredStyle,
+                  effectiveNamingStyle: result.effectiveStyle,
+                  candidateName:
+                    detail.candidateNamingStyle && detail.candidateNamingStyle !== result.effectiveStyle
+                      ? undefined
+                      : detail.candidateName
                 }
               })
             })

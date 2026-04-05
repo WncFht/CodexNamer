@@ -92,12 +92,15 @@
 - `current_candidate_name TEXT`
 - `current_candidate_source TEXT`
 - `current_candidate_generated_at TEXT`
+- `current_candidate_style TEXT`
 - `last_auto_name TEXT`
 - `last_manual_name TEXT`
 - `last_applied_name TEXT`
 - `last_applied_source TEXT`
 - `last_applied_at TEXT`
+- `last_applied_style TEXT`
 - `last_applied_revision TEXT`
+- `preferred_style TEXT`
 - `dirty_since_rename INTEGER NOT NULL DEFAULT 0`
 - `manual_override INTEGER NOT NULL DEFAULT 0`
 - `frozen INTEGER NOT NULL DEFAULT 0`
@@ -118,6 +121,7 @@
 - `old_name TEXT`
 - `new_name TEXT NOT NULL`
 - `source TEXT NOT NULL`
+- `style TEXT`
 - `status TEXT NOT NULL`
 - `reason TEXT`
 - `applied_at TEXT NOT NULL`
@@ -252,3 +256,4 @@ WebUI/TUI/CLI 应统一读取如下聚合结构：
 - 同一个 name 可以对应多个不同 thread
 - 一个 thread 可以有多次 rename 历史
 - `rename_state.last_applied_name` 必须与 `rename_history` 中最近一次成功记录一致
+- `rename_state.last_applied_style` 必须与该次成功记录的 `style` 一致
