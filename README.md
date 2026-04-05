@@ -30,18 +30,35 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 优先直接走 Responses / Chat Completions
 - 只有直连不可用时才回退 `codex exec`
 
-当前自动重命名的运行态还需要明确区分“评估结果”和“实际落盘”：
+当前自动重命名的运行态需要明确区分“评估结果”和“实际落盘”：
 
 - `evaluateAutoRename()` 统一给出 `skip / suggest / apply`
 - `candidate_ready` 会在 UI 里显示为 `suggest`
 - `finalize_ready` 会在 UI 里显示为 `apply`
-- 但当前 daemon 仍然是 `scan + preview`，不会自动把名字写回 `session_index.jsonl`
-- 因此前端里看到的 `apply` 表示“允许应用”，不是“已经自动应用”
+- daemon 现在会根据 `rename.auto_apply` 决定是否真正写回：
+  - `idle-finalize`：对 `finalize_ready` 自动落盘
+  - `disabled`：仍然只做 preview
+- 因此前端里看到的 `apply` 表示“允许应用”；是否已自动应用，要看运行态里的：
+  - `actualExecution`
+  - `daemonStatus`
+  - `lastSweepAt / lastSweepSummary`
+
+当前“正式命名”还有一条新的约定：
+
+- 只把 `AI` 和 `手动命名` 视为正式名字
+- 旧的 heuristic 命名会被当作“待 AI 重写”的过渡态
+- 因此它们不会计入 `named`，后续也会重新进入 rename 队列
+
+当前还有一条重名约定：
+
+- 新的候选名或手动名在落盘前会先做重名检查
+- 如果和别的 session 正式名重复，会自动追加 ` (2) / (3) ...` 后缀
+- 已经历史上形成的重复正式名，也会把后出现的那几个重新打回待处理队列
 
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 - Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
-- WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、运行态面板
+- WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、context 策略与字符预算配置、运行态面板；旧的 `rename.mode` 已不再在设置页暴露
 - TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
 ## 文档导航
@@ -218,8 +235,15 @@ npm run web
 WebUI 当前包含 3 个主视图：
 
 - `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
-- `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
+- `Settings`：命名模板、context 策略与 `context_max_chars`、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
 - `Rename Ops / 运行态`：自动重命名运行态、近期应用活动、命名来源分布、工作区 token 压力、预览队列与原始 doctor 信息
+
+运行态页现在会明确展示：
+
+- 当前是否检测到 daemon 心跳
+- 最近一轮 daemon sweep 时间
+- 最近一轮 sweep 的 `suggest / apply / skip / autoApplied`
+- 当前自动应用是否真的在生效，而不只是配置里打开了 `idle-finalize`
 
 `Rename Ops / 运行态` 页当前默认只拉取状态级 preview：
 

@@ -17,24 +17,51 @@ import type {
   SessionsResponse
 } from "./types.js";
 
+const inflightJsonRequests = new Map<string, Promise<unknown>>();
+
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  if (init?.body !== undefined && !headers.has("content-type")) {
-    headers.set("content-type", "application/json");
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  const url = typeof input === "string" ? input : input.url;
+  const dedupeKey = method === "GET" ? `${method}:${url}` : null;
+
+  if (dedupeKey) {
+    const existing = inflightJsonRequests.get(dedupeKey) as Promise<T> | undefined;
+    if (existing) {
+      return existing;
+    }
   }
 
-  const response = await fetch(input, {
-    ...init,
-    headers,
-    cache: init?.cache ?? "no-store"
+  const requestPromise = (async () => {
+    const headers = new Headers(init?.headers);
+    if (init?.body !== undefined && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+
+    const response = await fetch(input, {
+      ...init,
+      headers,
+      cache: init?.cache ?? "no-store"
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `HTTP ${response.status}`);
+    }
+
+    return response.json() as Promise<T>;
+  })();
+
+  if (!dedupeKey) {
+    return requestPromise;
+  }
+
+  const trackedPromise = requestPromise.finally(() => {
+    if (inflightJsonRequests.get(dedupeKey) === trackedPromise) {
+      inflightJsonRequests.delete(dedupeKey);
+    }
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
+  inflightJsonRequests.set(dedupeKey, trackedPromise);
+  return trackedPromise as Promise<T>;
 }
 
 export async function fetchSessions(params: {

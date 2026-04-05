@@ -30,7 +30,6 @@ codex_home = "~/.codex"
 state_dir = "~/.local/state/codex-session-manager"
 
 [rename]
-mode = "hybrid"
 auto_apply = "idle-finalize"
 manual_override_wins = true
 freeze_manual_name = true
@@ -70,6 +69,12 @@ suggest_compact_index_above_mb = 5
 suggest_compact_index_above_lines = 20000
 backup_before_compact = true
 ```
+
+说明：
+
+- `rename.mode` 目前仍作为兼容字段被解析，但设置页已经不再暴露它。
+- 当前真正决定是否走 AI 的主开关是 `[ai].backend`。
+- heuristic 仍然作为内部 fallback 存在，但不再作为推荐给用户切换的正式模式。
 
 ## AI 后端
 

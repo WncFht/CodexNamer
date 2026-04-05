@@ -18,6 +18,11 @@ type ChartTheme = {
 };
 
 type ChartOption = Record<string, unknown>;
+type LoadedChart = {
+  container: HTMLDivElement;
+  instance: any;
+  echartsLib: any;
+};
 
 function readChartTheme(): ChartTheme {
   const rootStyle = getComputedStyle(document.documentElement);
@@ -50,14 +55,15 @@ function useChart(
   ref: React.RefObject<HTMLDivElement | null>,
   buildOption: ((theme: ChartTheme, echartsLib: any) => ChartOption) | undefined
 ): void {
+  const chartRef = React.useRef<LoadedChart | null>(null);
+
   React.useEffect(() => {
     const container = ref.current;
-    if (!container || !buildOption) {
+    if (!container) {
       return;
     }
 
     let observer: ResizeObserver | undefined;
-    let instance: any;
     let disposed = false;
 
     void import("echarts").then((echartsLib) => {
@@ -65,15 +71,19 @@ function useChart(
         return;
       }
 
-      instance =
+      const instance =
         echartsLib.getInstanceByDom(container) ??
         echartsLib.init(container, undefined, {
           renderer: "canvas"
         });
-      instance.setOption(buildOption(readChartTheme(), echartsLib), true);
+      chartRef.current = {
+        container,
+        instance,
+        echartsLib
+      };
 
       observer = new ResizeObserver(() => {
-        instance?.resize();
+        chartRef.current?.instance.resize();
       });
       observer.observe(container);
     });
@@ -81,9 +91,52 @@ function useChart(
     return () => {
       disposed = true;
       observer?.disconnect();
-      instance?.dispose();
+      if (chartRef.current?.container === container) {
+        chartRef.current.instance.dispose();
+        chartRef.current = null;
+      }
     };
-  }, [ref, buildOption]);
+  }, [ref]);
+
+  React.useEffect(() => {
+    const container = ref.current;
+    if (!container) {
+      return;
+    }
+
+    if (!buildOption) {
+      chartRef.current?.instance.clear();
+      return;
+    }
+
+    let disposed = false;
+
+    void import("echarts").then((echartsLib) => {
+      if (disposed) {
+        return;
+      }
+
+      const chart =
+        chartRef.current?.container === container
+          ? chartRef.current
+          : {
+              container,
+              instance:
+                echartsLib.getInstanceByDom(container) ??
+                echartsLib.init(container, undefined, {
+                  renderer: "canvas"
+                }),
+              echartsLib
+            };
+
+      chartRef.current = chart;
+      chart.instance.setOption(buildOption(readChartTheme(), chart.echartsLib), true);
+    });
+
+    return () => {
+      disposed = true;
+    };
+  }, [buildOption, ref]);
 }
 
 function ChartCard(props: {
@@ -117,6 +170,36 @@ function runtimeBadgeTone(label: string): "success" | "warning" | "manual" {
   return "success";
 }
 
+function daemonStatusTone(status: string | undefined): "success" | "warning" | "manual" {
+  if (status === "running") {
+    return "success";
+  }
+  if (status === "stale") {
+    return "warning";
+  }
+  return "manual";
+}
+
+function daemonStatusLabel(status: string | undefined, language: UiLanguage): string {
+  if (language === "zh-CN") {
+    if (status === "running") {
+      return "运行中";
+    }
+    if (status === "stale") {
+      return "心跳过期";
+    }
+    return "未检测到";
+  }
+
+  if (status === "running") {
+    return "running";
+  }
+  if (status === "stale") {
+    return "stale";
+  }
+  return "not seen";
+}
+
 export function RenameOpsPanel(props: {
   overview: OverviewResponse | null;
   preview: AutoRenamePreviewResponse | null;
@@ -126,20 +209,21 @@ export function RenameOpsPanel(props: {
   onRefreshPreview: (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => void | Promise<void>;
 }) {
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
+  const isChinese = props.uiLanguage === "zh-CN";
   const inline = (zh: string, en: string) => (props.uiLanguage === "zh-CN" ? zh : en);
+  const appliedLabel = isChinese ? "已应用" : "Applied";
+  const previewLabel = isChinese ? "仅预览" : "Preview";
+  const skippedLabel = isChinese ? "已跳过" : "Skipped";
+  const manualSourceLabel = isChinese ? "手动" : "Manual";
+  const noDataLabel = isChinese ? "暂无数据" : "No data";
+  const sessionsLabel = isChinese ? "个会话" : "sessions";
   const overview = props.overview;
   const previewItems = props.preview?.items ?? [];
   const previewApplyCount = previewItems.filter((item) => item.status === "apply").length;
   const previewSuggestCount = previewItems.filter((item) => item.status === "suggest").length;
   const previewSkipCount = previewItems.filter((item) => item.status === "skip").length;
   const previewHasCandidateNames = previewItems.some((item) => typeof item.candidateName === "string");
-  const sourceSeries = [
-    { name: "AI", value: overview?.renameHistory.aiApplied ?? 0, colorKey: "accent" as const },
-    { name: inline("启发式", "Heuristic"), value: overview?.renameHistory.heuristicApplied ?? 0, colorKey: "success" as const },
-    { name: inline("混合", "Hybrid"), value: overview?.renameHistory.hybridApplied ?? 0, colorKey: "warning" as const },
-    { name: inline("手动", "Manual"), value: overview?.renameHistory.manualApplied ?? 0, colorKey: "manual" as const },
-    { name: inline("批量", "Batch"), value: overview?.renameHistory.batchApplied ?? 0, colorKey: "danger" as const }
-  ].filter((item) => item.value > 0);
+  const lastSweepSummary = overview?.runtime.lastSweepSummary;
 
   const activityOption = React.useMemo(() => {
     if (!overview) {
@@ -168,7 +252,7 @@ export function RenameOpsPanel(props: {
         top: 8,
         left: 16,
         right: 16,
-        data: [inline("已应用", "Applied"), inline("仅预览", "Preview"), inline("已跳过", "Skipped")],
+        data: [appliedLabel, previewLabel, skippedLabel],
         textStyle: {
           color: theme.text,
           fontSize: 11
@@ -260,7 +344,7 @@ export function RenameOpsPanel(props: {
       },
       series: [
         {
-          name: inline("已应用", "Applied"),
+          name: appliedLabel,
           type: "line",
           smooth: true,
           symbolSize: 7,
@@ -280,7 +364,7 @@ export function RenameOpsPanel(props: {
           }
         },
         {
-          name: inline("仅预览", "Preview"),
+          name: previewLabel,
           type: "line",
           smooth: true,
           symbolSize: 6,
@@ -294,7 +378,7 @@ export function RenameOpsPanel(props: {
           }
         },
         {
-          name: inline("已跳过", "Skipped"),
+          name: skippedLabel,
           type: "line",
           smooth: true,
           symbolSize: 6,
@@ -309,12 +393,17 @@ export function RenameOpsPanel(props: {
         }
       ]
     });
-  }, [inline, overview]);
+  }, [appliedLabel, overview, previewLabel, skippedLabel]);
 
   const sourceOption = React.useMemo(() => {
     if (!overview) {
       return undefined;
     }
+
+    const sourceSeries = [
+      { name: "AI", value: overview.renameHistory.aiApplied, colorKey: "accent" as const },
+      { name: manualSourceLabel, value: overview.renameHistory.manualApplied, colorKey: "manual" as const }
+    ].filter((item) => item.value > 0);
 
     return (theme: ChartTheme): ChartOption => ({
       backgroundColor: "transparent",
@@ -378,7 +467,7 @@ export function RenameOpsPanel(props: {
                 }))
               : [
                   {
-                    name: inline("暂无数据", "No data"),
+                    name: noDataLabel,
                     value: 1,
                     itemStyle: {
                       color: theme.border
@@ -388,7 +477,7 @@ export function RenameOpsPanel(props: {
         }
       ]
     });
-  }, [inline, overview, props.uiLanguage, sourceSeries]);
+  }, [manualSourceLabel, noDataLabel, overview, props.uiLanguage]);
 
   const workloadOption = React.useMemo(() => {
     if (!overview) {
@@ -419,7 +508,7 @@ export function RenameOpsPanel(props: {
           if (!entry) {
             return "";
           }
-          return `${entry.label}<br/>${formatCompactNumber(entry.value, props.uiLanguage)} tokens<br/>${entry.sessions} ${inline("个会话", "sessions")}`;
+          return `${entry.label}<br/>${formatCompactNumber(entry.value, props.uiLanguage)} tokens<br/>${entry.sessions} ${sessionsLabel}`;
         }
       },
       grid: {
@@ -483,7 +572,7 @@ export function RenameOpsPanel(props: {
         }
       ]
     });
-  }, [inline, overview, props.uiLanguage]);
+  }, [overview, props.uiLanguage, sessionsLabel]);
 
   return (
     <section className="panel-grid ops-layout">
@@ -493,10 +582,11 @@ export function RenameOpsPanel(props: {
             <p className="panel-kicker">{inline("执行状态", "Execution")}</p>
             <h3>{inline("自动重命名运行态", "Auto rename runtime")}</h3>
             <p className="settings-copy">
-              {inline(
-                "当前 daemon 只做 scan + preview。`finalize_ready` 表示允许应用，不表示已经自动落盘。",
-                "The current daemon only scans and previews. `finalize_ready` means eligible to apply, not already auto-applied."
-              )}
+              {overview?.runtime.explain ??
+                inline(
+                  "当前 daemon 只做 scan + preview。`finalize_ready` 表示允许应用，不表示已经自动落盘。",
+                  "The current daemon only scans and previews. `finalize_ready` means eligible to apply, not already auto-applied."
+                )}
             </p>
           </div>
           <div className="header-actions">
@@ -528,8 +618,14 @@ export function RenameOpsPanel(props: {
           <span className="chip manual">
             {inline("配置策略", "Configured policy")}: {overview?.runtime.configuredAutoApply ?? tt("nA")}
           </span>
+          <span className={`chip ${daemonStatusTone(overview?.runtime.daemonStatus)}`}>
+            {inline("Daemon 状态", "Daemon status")}: {daemonStatusLabel(overview?.runtime.daemonStatus, props.uiLanguage)}
+          </span>
           <span className={`chip ${overview?.runtime.daemonAutoApply ? "success" : "warning"}`}>
-            {inline("Daemon 自动应用", "Daemon auto apply")}: {overview?.runtime.daemonAutoApply ? inline("开启", "on") : inline("关闭", "off")}
+            {inline("Daemon 自动应用", "Daemon auto apply")}: {overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
+          </span>
+          <span className="chip manual">
+            {inline("最近一轮 Sweep", "Last sweep")}: {formatWhen(overview?.runtime.lastSweepAt, props.uiLanguage)}
           </span>
           <span className="chip success">
             {inline("最近应用", "Last apply")}: {formatWhen(overview?.renameHistory.lastAppliedAt, props.uiLanguage)}
@@ -537,6 +633,20 @@ export function RenameOpsPanel(props: {
         </div>
 
         <div className="settings-metrics-grid ops-kpis">
+          <article className="metric-card">
+            <span className="metric-label">{inline("后台 Sweep", "Daemon sweep")}</span>
+            <strong>{formatUiNumber(lastSweepSummary?.total, props.uiLanguage)}</strong>
+            <p>
+              {formatUiNumber(lastSweepSummary?.suggest, props.uiLanguage)} {inline("建议", "suggest")} / {formatUiNumber(lastSweepSummary?.apply, props.uiLanguage)} {inline("待应用", "apply")} / {formatUiNumber(lastSweepSummary?.skip, props.uiLanguage)} {inline("跳过", "skip")}
+            </p>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">{inline("Sweep 落盘结果", "Sweep apply result")}</span>
+            <strong>{formatUiNumber(lastSweepSummary?.autoApplied, props.uiLanguage)}</strong>
+            <p>
+              {formatUiNumber(lastSweepSummary?.unchanged, props.uiLanguage)} {inline("未变化", "unchanged")} / {lastSweepSummary?.execution ?? "preview-only"}
+            </p>
+          </article>
           <article className="metric-card">
             <span className="metric-label">{inline("总 Token", "Total tokens")}</span>
             <strong>{formatCompactNumber(overview?.workload.totalTokens ?? 0, props.uiLanguage)}</strong>
@@ -577,7 +687,7 @@ export function RenameOpsPanel(props: {
       />
       <ChartCard
         buildOption={sourceOption}
-        copy={inline("真正应用成功的命名来源分布，帮助判断 AI、启发式和手动操作占比。", "Distribution of successfully applied rename sources across AI, heuristic, and manual flows.")}
+        copy={inline("真正算作正式命名的来源分布，现在只统计 AI 和手动命名。", "Distribution of accepted rename sources. Only AI and manual names count as official now.")}
         title={inline("应用来源分布", "Applied source mix")}
       />
       <ChartCard

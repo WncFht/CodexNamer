@@ -63,13 +63,16 @@
 - JSON 输出约束
 - 超时与失败回退
 
-## 9. auto-rename 何时从 preview-only 进入正式 apply
+## 9. auto-rename 在正式 apply 之后还缺什么保护
 
-当前建议：
+当前现状：
 
-- 先保持 daemon 只输出 preview
-- 下一阶段在 cooldown / max-auto / manual / freeze / finalize-ready 守卫都稳定后
-- 再开启真正 auto-apply
+- daemon 已经可以在 `idle-finalize` 下正式 auto-apply
+
+当前更合理的问题是：
+
+- 是否要增加“候选稳定一轮 scan 后再 apply”
+- 是否要把 `growthBytes / taskCompleteDelta` 引入正式 apply 判定
 
 ## 10. “实质更新”阈值何时进入调度核心
 

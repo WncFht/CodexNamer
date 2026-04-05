@@ -42,6 +42,7 @@ type SessionRow = {
   current_candidate_name: string | null;
   dirty_since_rename: number | null;
   last_applied_name: string | null;
+  last_applied_source: string | null;
   last_applied_revision: string | null;
   last_applied_at: string | null;
   manual_override: number | null;
@@ -403,6 +404,18 @@ export class StateDatabase {
       .run(threadId, suggestion.name, suggestion.source, suggestion.generatedAt);
   }
 
+  private getLatestRenameHistoryRow(threadId: string): Record<string, unknown> | undefined {
+    return this.db
+      .prepare(
+        `SELECT kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
+         FROM rename_history
+         WHERE thread_id = ?
+         ORDER BY id DESC
+         LIMIT 1`
+      )
+      .get(threadId) as Record<string, unknown> | undefined;
+  }
+
   recordRename(params: {
     threadId: string;
     newName: string;
@@ -418,24 +431,42 @@ export class StateDatabase {
   }): void {
     const previous = this.getRenameState(params.threadId);
     const transaction = this.db.transaction(() => {
-      this.db
-        .prepare(
-          `INSERT INTO rename_history (
-            thread_id, kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          params.threadId,
-          params.kind,
-          previous?.lastAppliedName ?? null,
-          params.newName,
-          params.source,
-          params.status,
-          params.reason ?? null,
-          params.appliedAt,
-          params.appliedRevision ?? null,
-          params.operator
-        );
+      const oldName = previous?.lastAppliedName ?? null;
+      const reason = params.reason ?? null;
+      const appliedRevision = params.appliedRevision ?? null;
+      const latest = this.getLatestRenameHistoryRow(params.threadId);
+      const isDuplicateLatestHistory =
+        latest &&
+        latest.kind === params.kind &&
+        (latest.old_name ?? null) === oldName &&
+        latest.new_name === params.newName &&
+        latest.source === params.source &&
+        latest.status === params.status &&
+        (latest.reason ?? null) === reason &&
+        latest.applied_at === params.appliedAt &&
+        (latest.applied_revision ?? null) === appliedRevision &&
+        (latest.operator ?? null) === params.operator;
+
+      if (!isDuplicateLatestHistory) {
+        this.db
+          .prepare(
+            `INSERT INTO rename_history (
+              thread_id, kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            params.threadId,
+            params.kind,
+            oldName,
+            params.newName,
+            params.source,
+            params.status,
+            reason,
+            params.appliedAt,
+            appliedRevision,
+            params.operator
+          );
+      }
 
       if (params.status === "applied") {
         this.db
@@ -615,6 +646,23 @@ export class StateDatabase {
     return this.listSessions({ dirty: true });
   }
 
+  listNonAcceptedNamedThreadIds(acceptedSources: RenameSource[]): Set<string> {
+    const rows = this.db
+      .prepare(
+        `SELECT thread_id
+         FROM rename_state
+         WHERE last_applied_name IS NOT NULL
+           AND COALESCE(last_applied_source, '') NOT IN (${acceptedSources.map(() => "?").join(", ")})`
+      )
+      .all(...acceptedSources) as Array<Record<string, unknown>>;
+
+    return new Set(
+      rows
+        .map((row) => (typeof row.thread_id === "string" ? row.thread_id : undefined))
+        .filter((value): value is string => Boolean(value))
+    );
+  }
+
   getRenameHistory(threadId: string): RenameHistoryRecord[] {
     return this.db
       .prepare(
@@ -638,12 +686,17 @@ export class StateDatabase {
       });
   }
 
-  getOverviewReport(): OverviewReport {
+  getOverviewReport(options?: {
+    nonAcceptedNamedThreadIds?: Set<string>;
+    acceptedAppliedSources?: RenameSource[];
+  }): OverviewReport {
     const sessions = this.listSessions();
     const workspaces = this.listWorkspaceSummaries();
+    const nonAcceptedNamedThreadIds = options?.nonAcceptedNamedThreadIds ?? new Set<string>();
+    const acceptedAppliedSources = options?.acceptedAppliedSources ?? ["ai", "manual"];
     const workloadRows = this.db
       .prepare(
-        `SELECT s.cwd, s.project_name, s.token_total, s.task_complete_count, s.status_estimate,
+        `SELECT s.thread_id, s.cwd, s.project_name, s.token_total, s.task_complete_count, s.status_estimate,
                 COALESCE(rs.dirty_since_rename, 0) AS dirty_since_rename
          FROM sessions s
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id`
@@ -709,7 +762,10 @@ export class StateDatabase {
       const cwd = (row.cwd as string | null) ?? undefined;
       const projectName = (row.project_name as string | null) ?? undefined;
       const statusEstimate = (row.status_estimate as SessionStatusEstimate | null) ?? undefined;
-      const isDirty = toBoolean((row.dirty_since_rename as number | null) ?? 0);
+      const threadId = (row.thread_id as string | null) ?? undefined;
+      const isDirty =
+        toBoolean((row.dirty_since_rename as number | null) ?? 0) ||
+        (threadId ? nonAcceptedNamedThreadIds.has(threadId) : false);
       const workspaceId = workspaceIdForCwd(cwd);
       const workspaceLabel = workspaceLabelForCwd(cwd, projectName);
 
@@ -755,20 +811,17 @@ export class StateDatabase {
       .prepare(
         `SELECT
             COUNT(*) AS total,
-            SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END) AS applied,
+            SUM(CASE WHEN status = 'applied' AND source IN (${acceptedAppliedSources.map(() => "?").join(", ")}) THEN 1 ELSE 0 END) AS applied,
             SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
             SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
             SUM(CASE WHEN status = 'preview_only' THEN 1 ELSE 0 END) AS preview_only,
             SUM(CASE WHEN status = 'applied' AND source = 'ai' THEN 1 ELSE 0 END) AS ai_applied,
-            SUM(CASE WHEN status = 'applied' AND source = 'heuristic' THEN 1 ELSE 0 END) AS heuristic_applied,
-            SUM(CASE WHEN status = 'applied' AND source = 'hybrid' THEN 1 ELSE 0 END) AS hybrid_applied,
             SUM(CASE WHEN status = 'applied' AND source = 'manual' THEN 1 ELSE 0 END) AS manual_applied,
-            SUM(CASE WHEN status = 'applied' AND source = 'batch' THEN 1 ELSE 0 END) AS batch_applied,
-            SUM(CASE WHEN status = 'applied' AND kind = 'auto' THEN 1 ELSE 0 END) AS auto_applied,
-            MAX(CASE WHEN status = 'applied' THEN applied_at END) AS last_applied_at
+            SUM(CASE WHEN status = 'applied' AND kind = 'auto' AND source = 'ai' THEN 1 ELSE 0 END) AS auto_applied,
+            MAX(CASE WHEN status = 'applied' AND source IN (${acceptedAppliedSources.map(() => "?").join(", ")}) THEN applied_at END) AS last_applied_at
          FROM rename_history`
       )
-      .get() as Record<string, unknown>;
+      .get(...acceptedAppliedSources, ...acceptedAppliedSources) as Record<string, unknown>;
 
     const activityWindowDays = 14;
     const bucketStart = new Date();
@@ -778,11 +831,11 @@ export class StateDatabase {
       .prepare(
         `SELECT
             substr(applied_at, 1, 10) AS day,
-            SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END) AS applied,
+            SUM(CASE WHEN status = 'applied' AND source IN (${acceptedAppliedSources.map(() => "?").join(", ")}) THEN 1 ELSE 0 END) AS applied,
             SUM(CASE WHEN status = 'preview_only' THEN 1 ELSE 0 END) AS preview_only,
             SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
             SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
-            SUM(CASE WHEN status = 'applied' AND kind = 'auto' THEN 1 ELSE 0 END) AS auto_applied,
+            SUM(CASE WHEN status = 'applied' AND kind = 'auto' AND source = 'ai' THEN 1 ELSE 0 END) AS auto_applied,
             SUM(CASE WHEN status = 'applied' AND kind = 'manual' THEN 1 ELSE 0 END) AS manual_applied,
             SUM(CASE WHEN status = 'applied' AND source = 'ai' THEN 1 ELSE 0 END) AS ai_applied
          FROM rename_history
@@ -790,7 +843,7 @@ export class StateDatabase {
          GROUP BY day
          ORDER BY day`
       )
-      .all(bucketStart.toISOString()) as Array<Record<string, unknown>>;
+      .all(...acceptedAppliedSources, bucketStart.toISOString()) as Array<Record<string, unknown>>;
     const activityByDate = new Map<string, Record<string, unknown>>();
     for (const row of activityRows) {
       if (typeof row.day === "string") {
@@ -819,23 +872,29 @@ export class StateDatabase {
       });
     }
 
-    const dirtySessionCount = sessions.filter((item) => item.dirty).length;
+    const dirtySessionCount = sessions.filter(
+      (item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId)
+    ).length;
 
     return {
       sessions: {
         total: sessions.length,
         workspaces: workspaces.length,
-        dirty: sessions.filter((item) => item.dirty).length,
-        clean: sessions.filter((item) => !item.dirty).length,
+        dirty: sessions.filter((item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId)).length,
+        clean: sessions.filter((item) => !item.dirty && !nonAcceptedNamedThreadIds.has(item.threadId)).length,
         frozen: sessions.filter((item) => item.frozen).length,
         manualOverride: sessions.filter((item) => item.manualOverride).length,
-        named: sessions.filter((item) => Boolean(item.officialName)).length,
+        named: sessions.filter((item) => Boolean(item.officialName) && !nonAcceptedNamedThreadIds.has(item.threadId)).length,
         withCandidate: sessions.filter((item) => Boolean(item.candidateName)).length
       },
       runtime: {
         configuredAutoApply: "unknown",
         actualExecution: "preview-only",
         daemonAutoApply: false,
+        daemonStatus: "not_seen",
+        lastSweepAt: undefined,
+        lastSweepIntervalSeconds: undefined,
+        lastSweepSummary: undefined,
         explain: "The current daemon scans sessions and prints preview evaluations, but it does not call apply()."
       },
       workload: {
@@ -866,10 +925,7 @@ export class StateDatabase {
         failed: Number(renameStatsRow.failed ?? 0),
         previewOnly: Number(renameStatsRow.preview_only ?? 0),
         aiApplied: Number(renameStatsRow.ai_applied ?? 0),
-        heuristicApplied: Number(renameStatsRow.heuristic_applied ?? 0),
-        hybridApplied: Number(renameStatsRow.hybrid_applied ?? 0),
         manualApplied: Number(renameStatsRow.manual_applied ?? 0),
-        batchApplied: Number(renameStatsRow.batch_applied ?? 0),
         autoApplied: Number(renameStatsRow.auto_applied ?? 0),
         lastAppliedAt: (renameStatsRow.last_applied_at as string | null) ?? undefined
       },
@@ -902,5 +958,31 @@ export class StateDatabase {
 
   vacuum(): void {
     this.db.exec("VACUUM");
+  }
+
+  setMaintenanceState(key: string, value: unknown): void {
+    this.db
+      .prepare(
+        `INSERT INTO maintenance_state (key, value_json)
+         VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`
+      )
+      .run(key, JSON.stringify(value));
+  }
+
+  getMaintenanceState<T>(key: string): T | undefined {
+    const row = this.db
+      .prepare(`SELECT value_json FROM maintenance_state WHERE key = ?`)
+      .get(key) as Record<string, unknown> | undefined;
+
+    if (!row || typeof row.value_json !== "string") {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(row.value_json) as T;
+    } catch {
+      return undefined;
+    }
   }
 }

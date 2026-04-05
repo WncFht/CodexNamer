@@ -76,19 +76,20 @@
 
 ## 3. 当前 Pipeline 仍然存在的问题
 
-### 3.1 auto-rename 还是 preview-only
+### 3.1 auto-rename 已经闭环到 daemon auto-apply
 
-当前 daemon 只会输出 preview，不会真的自动 apply。
+当前 daemon 已经会在 `rename.auto_apply = "idle-finalize"` 时，对 `finalize_ready` 会话真正调用 `apply()`。
 
-影响：
+当前闭环范围：
 
-- 自动流程还没有真正闭环
-- 用户仍然需要手动执行 CLI apply / batch apply
-
-建议：
-
-- 下一阶段先实现受保护的 auto-apply
+- 统一仍然先走 `evaluateAutoRename()`
 - 只对 `finalize_ready + 非 frozen + 非 manual_override + 非 cooldown` 的 session 生效
+- `rename.auto_apply = "disabled"` 时，仍然保持 preview-only
+
+当前剩余问题：
+
+- 还没有“候选稳定一轮 scan 后再 apply”的额外保护
+- 还没有把 ingest 增量信号真正纳入调度核心
 
 ### 3.2 “实质更新”阈值还没真正进入调度判断
 

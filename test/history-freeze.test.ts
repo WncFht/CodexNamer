@@ -48,4 +48,38 @@ describe("history and state commands", () => {
     expect(updated?.frozen).toBe(false);
     expect(updated?.manualOverride).toBe(false);
   });
+
+  it("deduplicates repeated unchanged rename history entries", async () => {
+    const workspace = await createTempWorkspace();
+    const threadId = "thread-history-dedup";
+    await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId,
+      userMessage: "重复触发同一个 rename",
+      lastAgentMessage: "同名不应该在 history 里反复堆积"
+    });
+    await fs.writeFile(path.join(workspace.codexHome, "session_index.jsonl"), "", "utf8");
+
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir
+    });
+    managers.push(manager);
+
+    await manager.rename(threadId, "manual title");
+    manager.db.saveCandidate(threadId, {
+      name: "manual title",
+      source: "ai",
+      generatedAt: "2026-04-04T12:00:00.000Z"
+    });
+
+    await manager.apply(threadId);
+    await manager.apply(threadId);
+    await manager.apply(threadId);
+
+    const history = await manager.getRenameHistory(threadId);
+    const skipped = history.filter((entry) => entry.status === "skipped");
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]?.reason).toBe("unchanged");
+  });
 });

@@ -12,6 +12,7 @@ import {
   type MaterializedSession,
   type OverviewReport,
   type PromptPreview,
+  type RenameHistoryRecord,
   type RenameSuggestion,
   type ScanReport,
   type SessionDetail,
@@ -36,6 +37,52 @@ import { estimateSessionStatus, evaluateAutoRename } from "./auto-rename.js";
 
 function redactSecret(value?: string): string | undefined {
   return value ? "[redacted]" : undefined;
+}
+
+type DaemonSweepSnapshot = {
+  lastSweepAt: string;
+  intervalSeconds: number;
+  processId?: number;
+  summary: {
+    total: number;
+    suggest: number;
+    apply: number;
+    skip: number;
+    autoApplied: number;
+    unchanged: number;
+    execution: "preview-only" | "auto-apply";
+  };
+};
+
+const ACCEPTED_OFFICIAL_RENAME_SOURCES = ["ai", "manual"] as const;
+
+function normalizeComparableName(name: string): string {
+  return name.trim().replace(/\s+/g, " ");
+}
+
+function splitDisambiguationBase(name: string): { root: string; nextIndex: number } {
+  const trimmed = name.trim();
+  const match = trimmed.match(/^(.*)\s+\((\d+)\)$/);
+  if (!match || !match[1]?.trim()) {
+    return {
+      root: trimmed,
+      nextIndex: 2
+    };
+  }
+
+  return {
+    root: match[1].trimEnd(),
+    nextIndex: Number(match[2]) + 1
+  };
+}
+
+function appendDisambiguationSuffix(name: string, index: number, maxLength: number): string {
+  const suffix = ` (${index})`;
+  const budget = Math.max(1, maxLength - suffix.length);
+  const trimmedRoot = name.trim();
+  const root =
+    trimmedRoot.length > budget ? trimmedRoot.slice(0, budget).trimEnd() : trimmedRoot;
+  return `${root}${suffix}`;
 }
 
 export class CodexSessionManager {
@@ -191,12 +238,14 @@ export class CodexSessionManager {
     this.db.updateOfficialNames(sessionIndexSnapshot.latestByThreadId);
 
     const now = new Date();
+    const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
     for (const session of this.db.listSessions()) {
-      const detail = this.db.getSessionDetail(session.threadId);
-      if (!detail) {
+      const rawDetail = this.db.getSessionDetail(session.threadId);
+      if (!rawDetail) {
         continue;
       }
-        this.db.updateStatusEstimate(detail.threadId, estimateSessionStatus(detail, this.config, now));
+      const detail = this.applyOfficialNamingPolicy(rawDetail, blockedOfficialThreadIds);
+      this.db.updateStatusEstimate(detail.threadId, estimateSessionStatus(detail, this.config, now));
     }
 
     return {
@@ -207,12 +256,16 @@ export class CodexSessionManager {
 
   async listSessions(options?: { dirty?: boolean }): Promise<SessionSummary[]> {
     await this.scan();
-    return this.db.listSessions(options);
+    const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
+    return this.db
+      .listSessions()
+      .map((session) => this.applyOfficialNamingPolicy(session, blockedOfficialThreadIds))
+      .filter((session) => (options?.dirty === undefined ? true : session.dirty === options.dirty));
   }
 
   async listWorkspaces(options?: { dirty?: boolean }): Promise<WorkspaceSummary[]> {
     await this.scan();
-    return this.db.listWorkspaceSummaries(options);
+    return this.buildWorkspaceSummaries(await this.listSessions(options));
   }
 
   async getSessionDetail(
@@ -224,9 +277,11 @@ export class CodexSessionManager {
     if (!detail) {
       return undefined;
     }
+    const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
+    const normalizedDetail = this.applyOfficialNamingPolicy(detail, blockedOfficialThreadIds);
     return {
-      ...detail,
-      renameHistory: this.db.getRenameHistory(threadId),
+      ...normalizedDetail,
+      renameHistory: this.filterVisibleRenameHistory(this.db.getRenameHistory(threadId)),
       transcript: options?.includeTranscript ? await readSessionTranscript(detail.rolloutPath) : undefined
     };
   }
@@ -271,31 +326,82 @@ export class CodexSessionManager {
     };
   }
 
-  async suggest(threadId: string): Promise<RenameSuggestion> {
-    await this.scan();
-    const detail = this.requireSessionDetail(threadId);
+  private async resolveSuggestionForDetail(
+    detail: SessionDetail,
+    options?: {
+      saveCandidate?: boolean;
+      reservedNameKeys?: Set<string>;
+      blockedOfficialThreadIds?: Set<string>;
+    }
+  ): Promise<RenameSuggestion> {
+    const renameState = this.db.getRenameState(detail.threadId);
+    const candidateGeneratedAt = renameState?.currentCandidateGeneratedAt
+      ? Date.parse(renameState.currentCandidateGeneratedAt)
+      : Number.NaN;
+    const sessionUpdatedAt = detail.updatedAt ? Date.parse(detail.updatedAt) : Number.NaN;
+    const canReuseCandidate =
+      Boolean(renameState?.currentCandidateName && renameState.currentCandidateGeneratedAt) &&
+      (this.isAcceptedOfficialRenameSource(renameState?.currentCandidateSource) ||
+        !this.requiresAcceptedRewrite(renameState)) &&
+      (!Number.isFinite(sessionUpdatedAt) ||
+        !Number.isFinite(candidateGeneratedAt) ||
+        candidateGeneratedAt >= sessionUpdatedAt);
 
-    const suggestion = await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail));
-    this.db.saveCandidate(threadId, suggestion);
+    if (canReuseCandidate) {
+      const reusedSuggestion = this.ensureUniqueRenameSuggestion(
+        detail.threadId,
+        {
+          threadId: detail.threadId,
+          name: renameState?.currentCandidateName ?? "",
+          source: renameState?.currentCandidateSource ?? "heuristic",
+          kind: "chore",
+          summary: renameState?.currentCandidateName ?? "",
+          generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
+        },
+        {
+          reservedNameKeys: options?.reservedNameKeys,
+          blockedOfficialThreadIds: options?.blockedOfficialThreadIds
+        }
+      );
+      if (options?.saveCandidate !== false && reusedSuggestion.name !== renameState?.currentCandidateName) {
+        this.db.saveCandidate(detail.threadId, reusedSuggestion);
+      }
+      return reusedSuggestion;
+    }
+
+    const suggestion = this.ensureUniqueRenameSuggestion(
+      detail.threadId,
+      await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail)),
+      {
+        reservedNameKeys: options?.reservedNameKeys,
+        blockedOfficialThreadIds: options?.blockedOfficialThreadIds
+      }
+    );
+    if (options?.saveCandidate !== false) {
+      this.db.saveCandidate(detail.threadId, suggestion);
+    }
     return suggestion;
   }
 
-  async apply(threadId: string): Promise<{ written: boolean; name: string }> {
+  async suggest(threadId: string): Promise<RenameSuggestion> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
+    return this.resolveSuggestionForDetail(detail);
+  }
 
-    const state = this.db.getRenameState(threadId);
-    const suggestion =
-      state?.currentCandidateName && state.currentCandidateGeneratedAt
-        ? {
-            threadId,
-            name: state.currentCandidateName,
-            source: state.currentCandidateSource ?? "heuristic",
-            kind: "chore",
-            summary: state.currentCandidateName,
-            generatedAt: state.currentCandidateGeneratedAt
-          }
-        : await this.suggest(threadId);
+  async apply(
+    threadId: string,
+    options?: {
+      autoApply?: boolean;
+      skipScan?: boolean;
+      detail?: SessionDetail;
+    }
+  ): Promise<{ written: boolean; name: string }> {
+    if (!options?.skipScan) {
+      await this.scan();
+    }
+    const detail = options?.detail ?? this.requireSessionDetail(threadId);
+    const suggestion = await this.resolveSuggestionForDetail(detail);
 
     const result = await appendSessionIndexRename({
       filePath: this.sessionIndexPath,
@@ -315,7 +421,7 @@ export class CodexSessionManager {
       appliedAt,
       appliedRevision: detail.revision,
       manualOverride: false,
-      autoApply: false
+      autoApply: options?.autoApply ?? false
     });
 
     return {
@@ -327,17 +433,18 @@ export class CodexSessionManager {
   async rename(threadId: string, name: string): Promise<{ written: boolean; name: string }> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
+    const uniqueName = this.ensureUniqueName(name, threadId);
 
     const result = await appendSessionIndexRename({
       filePath: this.sessionIndexPath,
       threadId,
-      threadName: name
+      threadName: uniqueName
     });
     this.sessionIndexCache = undefined;
 
     this.db.recordRename({
       threadId,
-      newName: name.trim(),
+      newName: result.entry.threadName,
       source: "manual",
       kind: "manual",
       status: result.written ? "applied" : "skipped",
@@ -359,7 +466,11 @@ export class CodexSessionManager {
     Array<{ threadId: string; action: "applied" | "skipped" | "preview"; name?: string; reason?: string }>
   > {
     await this.scan();
-    const dirtySessions = this.db.getDirtySessions();
+    const dirtySessions = await this.listSessions({ dirty: true });
+    const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
+    const reservedNameKeys = this.collectReservedOfficialNameKeys({
+      blockedOfficialThreadIds
+    });
     const results: Array<{ threadId: string; action: "applied" | "skipped" | "preview"; name?: string; reason?: string }> = [];
 
     for (const session of dirtySessions) {
@@ -367,24 +478,32 @@ export class CodexSessionManager {
       if (!detail) {
         continue;
       }
-      if (detail.frozen) {
-        results.push({ threadId: detail.threadId, action: "skipped", reason: "frozen" });
+      const normalizedDetail = this.applyOfficialNamingPolicy(detail, blockedOfficialThreadIds);
+      if (normalizedDetail.frozen) {
+        results.push({ threadId: normalizedDetail.threadId, action: "skipped", reason: "frozen" });
         continue;
       }
-      if (detail.manualOverride) {
-        results.push({ threadId: detail.threadId, action: "skipped", reason: "manual_override" });
+      if (normalizedDetail.manualOverride) {
+        results.push({ threadId: normalizedDetail.threadId, action: "skipped", reason: "manual_override" });
         continue;
       }
 
-      const suggestion = await this.suggest(detail.threadId);
+      const suggestion = await this.resolveSuggestionForDetail(normalizedDetail, {
+        reservedNameKeys,
+        blockedOfficialThreadIds
+      });
+      reservedNameKeys.add(normalizeComparableName(suggestion.name));
       if (options?.previewOnly) {
-        results.push({ threadId: detail.threadId, action: "preview", name: suggestion.name });
+        results.push({ threadId: normalizedDetail.threadId, action: "preview", name: suggestion.name });
         continue;
       }
 
-      const applied = await this.apply(detail.threadId);
+      const applied = await this.apply(normalizedDetail.threadId, {
+        skipScan: true,
+        detail: normalizedDetail
+      });
       results.push({
-        threadId: detail.threadId,
+        threadId: normalizedDetail.threadId,
         action: applied.written ? "applied" : "skipped",
         name: applied.name,
         reason: applied.written ? undefined : "unchanged"
@@ -598,31 +717,63 @@ export class CodexSessionManager {
 
   async overview(): Promise<OverviewReport> {
     await this.scan();
-    const report = this.db.getOverviewReport();
+    const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
+    const report = this.db.getOverviewReport({
+      nonAcceptedNamedThreadIds: blockedOfficialThreadIds,
+      acceptedAppliedSources: [...ACCEPTED_OFFICIAL_RENAME_SOURCES]
+    });
+    const daemonState = this.db.getMaintenanceState<DaemonSweepSnapshot>("daemon_runtime");
+    const daemonStatus = this.resolveDaemonStatus(daemonState);
+    const actualExecution =
+      daemonStatus === "running" && daemonState?.summary.execution === "auto-apply"
+        ? "auto-apply"
+        : "preview-only";
+    const daemonAutoApply = actualExecution === "auto-apply";
     return {
       ...report,
       runtime: {
         configuredAutoApply: this.config.rename.autoApply,
-        actualExecution: "preview-only",
-        daemonAutoApply: false,
-        explain:
-          "Current daemon behavior is scan + preview only. `finalize_ready` means eligible to apply, not already auto-applied."
+        actualExecution,
+        daemonAutoApply,
+        daemonStatus,
+        lastSweepAt: daemonState?.lastSweepAt,
+        lastSweepIntervalSeconds: daemonState?.intervalSeconds,
+        lastSweepSummary: daemonState?.summary,
+        explain: this.describeRuntimeState({
+          configuredAutoApply: this.config.rename.autoApply,
+          daemonStatus,
+          actualExecution
+        })
       }
     };
   }
 
-  async previewAutoRename(options?: {
+  async runAutoRenameSweep(options?: {
     includeCandidateNames?: boolean;
     limit?: number;
-  }): Promise<AutoRenamePreview[]> {
+    autoApply?: boolean;
+    intervalSeconds?: number;
+    processId?: number;
+    recordRuntime?: boolean;
+  }): Promise<{
+    previews: AutoRenamePreview[];
+    applied: Array<{ threadId: string; written: boolean; name: string; reason?: string }>;
+  }> {
     await this.scan();
     const now = new Date();
+    const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
+    const reservedNameKeys = this.collectReservedOfficialNameKeys({
+      blockedOfficialThreadIds
+    });
     const previews: AutoRenamePreview[] = [];
-    const dirtySessions = this.db.getDirtySessions();
+    const applied: Array<{ threadId: string; written: boolean; name: string; reason?: string }> = [];
+    const dirtySessions = await this.listSessions({ dirty: true });
     const limit =
       typeof options?.limit === "number" && Number.isFinite(options.limit) && options.limit > 0
         ? Math.trunc(options.limit)
         : dirtySessions.length;
+    const autoApplyEnabled =
+      (options?.autoApply ?? true) && this.config.rename.autoApply === "idle-finalize";
 
     for (const session of dirtySessions) {
       if (previews.length >= limit) {
@@ -632,25 +783,291 @@ export class CodexSessionManager {
       if (!detail) {
         continue;
       }
+      const normalizedDetail = this.applyOfficialNamingPolicy(detail, blockedOfficialThreadIds);
 
-      const renameState = this.db.getRenameState(detail.threadId);
-      const evaluation = evaluateAutoRename(detail, this.config, {
+      const renameState = this.db.getRenameState(normalizedDetail.threadId);
+      const evaluation = evaluateAutoRename(normalizedDetail, this.config, {
         now,
         renameState
       });
+      const shouldResolveSuggestion =
+        options?.includeCandidateNames === true || (autoApplyEnabled && evaluation.action === "apply");
+      const suggestion =
+        shouldResolveSuggestion && evaluation.action !== "skip"
+          ? await this.resolveSuggestionForDetail(normalizedDetail, {
+              saveCandidate: autoApplyEnabled || options?.includeCandidateNames === true,
+              reservedNameKeys,
+              blockedOfficialThreadIds
+            })
+          : undefined;
+      if (suggestion) {
+        reservedNameKeys.add(normalizeComparableName(suggestion.name));
+      }
 
       previews.push({
-        threadId: detail.threadId,
-        candidateName:
-          options?.includeCandidateNames && evaluation.action !== "skip"
-            ? (await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail))).name
-            : undefined,
+        threadId: normalizedDetail.threadId,
+        candidateName: options?.includeCandidateNames ? suggestion?.name : undefined,
         status: evaluation.action,
         reason: evaluation.reason
       });
+
+      if (autoApplyEnabled && evaluation.action === "apply") {
+        const result = await this.apply(normalizedDetail.threadId, {
+          autoApply: true,
+          skipScan: true,
+          detail: normalizedDetail
+        });
+        applied.push({
+          threadId: normalizedDetail.threadId,
+          written: result.written,
+          name: result.name,
+          reason: result.written ? undefined : "unchanged"
+        });
+      }
     }
 
-    return previews;
+    const summary = {
+      total: previews.length,
+      suggest: previews.filter((item) => item.status === "suggest").length,
+      apply: previews.filter((item) => item.status === "apply").length,
+      skip: previews.filter((item) => item.status === "skip").length,
+      autoApplied: applied.filter((item) => item.written).length,
+      unchanged: applied.filter((item) => !item.written).length,
+      execution: autoApplyEnabled ? "auto-apply" : "preview-only"
+    } satisfies DaemonSweepSnapshot["summary"];
+
+    if (options?.recordRuntime !== false) {
+      this.db.setMaintenanceState("daemon_runtime", {
+        lastSweepAt: now.toISOString(),
+        intervalSeconds: Math.max(1, Math.trunc(options?.intervalSeconds ?? this.config.watch.scanIntervalSeconds)),
+        processId:
+          typeof options?.processId === "number" && Number.isFinite(options.processId)
+            ? Math.trunc(options.processId)
+            : undefined,
+        summary
+      } satisfies DaemonSweepSnapshot);
+    }
+
+    return {
+      previews,
+      applied
+    };
+  }
+
+  async previewAutoRename(options?: {
+    includeCandidateNames?: boolean;
+    limit?: number;
+  }): Promise<AutoRenamePreview[]> {
+    const result = await this.runAutoRenameSweep({
+      includeCandidateNames: options?.includeCandidateNames,
+      limit: options?.limit,
+      autoApply: false,
+      recordRuntime: false
+    });
+    return result.previews;
+  }
+
+  private getNonAcceptedNamedThreadIds(): Set<string> {
+    if (!this.shouldTreatNonAcceptedNamesAsUnnamed()) {
+      return new Set<string>();
+    }
+    return this.db.listNonAcceptedNamedThreadIds([...ACCEPTED_OFFICIAL_RENAME_SOURCES]);
+  }
+
+  private getDuplicateAcceptedNamedThreadIds(): Set<string> {
+    const groups = new Map<string, Array<{ threadId: string; appliedAt?: string }>>();
+
+    for (const session of this.db.listSessions()) {
+      if (!session.officialName) {
+        continue;
+      }
+      const renameState = this.db.getRenameState(session.threadId);
+      if (!this.isAcceptedOfficialRenameSource(renameState?.lastAppliedSource)) {
+        continue;
+      }
+      const key = normalizeComparableName(session.officialName);
+      if (!key) {
+        continue;
+      }
+      const group = groups.get(key) ?? [];
+      group.push({
+        threadId: session.threadId,
+        appliedAt: renameState?.lastAppliedAt
+      });
+      groups.set(key, group);
+    }
+
+    const duplicateThreadIds = new Set<string>();
+    for (const group of groups.values()) {
+      if (group.length < 2) {
+        continue;
+      }
+      group
+        .sort(
+          (left, right) =>
+            (left.appliedAt ?? "").localeCompare(right.appliedAt ?? "") ||
+            left.threadId.localeCompare(right.threadId)
+        )
+        .slice(1)
+        .forEach((item) => duplicateThreadIds.add(item.threadId));
+    }
+    return duplicateThreadIds;
+  }
+
+  private getBlockedOfficialNameThreadIds(): Set<string> {
+    return new Set<string>([
+      ...this.getNonAcceptedNamedThreadIds(),
+      ...this.getDuplicateAcceptedNamedThreadIds()
+    ]);
+  }
+
+  private collectReservedOfficialNameKeys(options?: {
+    excludeThreadId?: string;
+    blockedOfficialThreadIds?: Set<string>;
+  }): Set<string> {
+    const blockedOfficialThreadIds = options?.blockedOfficialThreadIds ?? this.getBlockedOfficialNameThreadIds();
+    const reserved = new Set<string>();
+
+    for (const session of this.db.listSessions()) {
+      if (!session.officialName || session.threadId === options?.excludeThreadId) {
+        continue;
+      }
+      if (blockedOfficialThreadIds.has(session.threadId)) {
+        continue;
+      }
+      reserved.add(normalizeComparableName(session.officialName));
+    }
+
+    return reserved;
+  }
+
+  private ensureUniqueName(
+    rawName: string,
+    threadId: string,
+    options?: {
+      reservedNameKeys?: Set<string>;
+      blockedOfficialThreadIds?: Set<string>;
+    }
+  ): string {
+    const trimmed = rawName.trim();
+    if (!trimmed) {
+      return trimmed;
+    }
+
+    const reservedNameKeys = new Set<string>(options?.reservedNameKeys ?? []);
+    for (const key of this.collectReservedOfficialNameKeys({
+      excludeThreadId: threadId,
+      blockedOfficialThreadIds: options?.blockedOfficialThreadIds
+    })) {
+      reservedNameKeys.add(key);
+    }
+
+    if (!reservedNameKeys.has(normalizeComparableName(trimmed))) {
+      return trimmed;
+    }
+
+    const { root, nextIndex } = splitDisambiguationBase(trimmed);
+    const maxLength = Math.max(8, this.config.naming.maxLength);
+    let index = nextIndex;
+    while (true) {
+      const candidate = appendDisambiguationSuffix(root, index, maxLength);
+      if (!reservedNameKeys.has(normalizeComparableName(candidate))) {
+        return candidate;
+      }
+      index += 1;
+    }
+  }
+
+  private ensureUniqueRenameSuggestion(
+    threadId: string,
+    suggestion: RenameSuggestion,
+    options?: {
+      reservedNameKeys?: Set<string>;
+      blockedOfficialThreadIds?: Set<string>;
+    }
+  ): RenameSuggestion {
+    const uniqueName = this.ensureUniqueName(suggestion.name, threadId, options);
+    if (uniqueName === suggestion.name) {
+      return suggestion;
+    }
+
+    return {
+      ...suggestion,
+      name: uniqueName,
+      metadata: {
+        ...(suggestion.metadata ?? {}),
+        deduplicated: "true"
+      }
+    };
+  }
+
+  private shouldTreatNonAcceptedNamesAsUnnamed(): boolean {
+    return this.config.ai.backend !== "none";
+  }
+
+  private isAcceptedOfficialRenameSource(source?: string): boolean {
+    return source === "ai" || source === "manual";
+  }
+
+  private requiresAcceptedRewrite(renameState?: { lastAppliedSource?: string }): boolean {
+    return (
+      this.shouldTreatNonAcceptedNamesAsUnnamed() &&
+      Boolean(renameState?.lastAppliedSource) &&
+      !this.isAcceptedOfficialRenameSource(renameState?.lastAppliedSource)
+    );
+  }
+
+  private applyOfficialNamingPolicy<T extends SessionSummary | SessionDetail>(
+    session: T,
+    nonAcceptedNamedThreadIds: Set<string>
+  ): T {
+    const pendingAcceptedRewrite = nonAcceptedNamedThreadIds.has(session.threadId);
+    return {
+      ...session,
+      officialName: pendingAcceptedRewrite ? undefined : session.officialName,
+      dirty: session.dirty || pendingAcceptedRewrite
+    };
+  }
+
+  private filterVisibleRenameHistory(history: RenameHistoryRecord[]): RenameHistoryRecord[] {
+    return history.filter((entry) => this.isAcceptedOfficialRenameSource(entry.source));
+  }
+
+  private buildWorkspaceSummaries(sessions: SessionSummary[]): WorkspaceSummary[] {
+    const groups = new Map<string, WorkspaceSummary>();
+
+    for (const session of sessions) {
+      const existing = groups.get(session.workspaceId);
+      if (existing) {
+        existing.sessionCount += 1;
+        existing.dirtyCount += session.dirty ? 1 : 0;
+        existing.frozenCount += session.frozen ? 1 : 0;
+        existing.manualOverrideCount += session.manualOverride ? 1 : 0;
+        if (session.projectName && !existing.projects.includes(session.projectName)) {
+          existing.projects.push(session.projectName);
+        }
+        if ((session.updatedAt ?? "") > (existing.latestUpdatedAt ?? "")) {
+          existing.latestUpdatedAt = session.updatedAt;
+        }
+        continue;
+      }
+
+      groups.set(session.workspaceId, {
+        workspaceId: session.workspaceId,
+        workspaceLabel: session.workspaceLabel,
+        workspacePath: session.cwd,
+        sessionCount: 1,
+        dirtyCount: session.dirty ? 1 : 0,
+        frozenCount: session.frozen ? 1 : 0,
+        manualOverrideCount: session.manualOverride ? 1 : 0,
+        latestUpdatedAt: session.updatedAt,
+        projects: session.projectName ? [session.projectName] : []
+      });
+    }
+
+    return Array.from(groups.values()).sort((left, right) =>
+      (right.latestUpdatedAt ?? "").localeCompare(left.latestUpdatedAt ?? "")
+    );
   }
 
   private async readSessionIndexSnapshot(): Promise<SessionIndexSnapshot> {
@@ -683,6 +1100,70 @@ export class CodexSessionManager {
         return snapshot;
       }
       throw error;
+    }
+  }
+
+  private resolveDaemonStatus(
+    daemonState: DaemonSweepSnapshot | undefined
+  ): OverviewReport["runtime"]["daemonStatus"] {
+    if (!daemonState?.lastSweepAt) {
+      return "not_seen";
+    }
+
+    const lastSweepAt = Date.parse(daemonState.lastSweepAt);
+    if (!Number.isFinite(lastSweepAt)) {
+      return "stale";
+    }
+
+    if (typeof daemonState.processId === "number" && Number.isFinite(daemonState.processId)) {
+      if (!this.isProcessAlive(Math.trunc(daemonState.processId))) {
+        return "stale";
+      }
+    }
+
+    const intervalSeconds = Math.max(1, Math.trunc(daemonState.intervalSeconds || this.config.watch.scanIntervalSeconds));
+    const staleAfterMs = Math.max(intervalSeconds * 2_500, 30_000);
+    return Date.now() - lastSweepAt <= staleAfterMs ? "running" : "stale";
+  }
+
+  private describeRuntimeState(params: {
+    configuredAutoApply: EffectiveConfig["rename"]["autoApply"];
+    daemonStatus: OverviewReport["runtime"]["daemonStatus"];
+    actualExecution: OverviewReport["runtime"]["actualExecution"];
+  }): string {
+    if (params.actualExecution === "auto-apply") {
+      return "A recent daemon heartbeat is active, and `finalize_ready` sessions are being auto-applied back into session_index.jsonl.";
+    }
+
+    if (params.configuredAutoApply === "idle-finalize") {
+      if (params.daemonStatus === "running") {
+        return "A recent daemon heartbeat exists, but the latest sweep is still preview-only. Restart or reload the daemon if you expect auto-apply to be active.";
+      }
+      if (params.daemonStatus === "stale") {
+        return "Auto-apply is configured, but the daemon heartbeat is stale. Start `npm run daemon` to resume finalize-ready applies.";
+      }
+      if (params.daemonStatus === "not_seen") {
+        return "Auto-apply is configured, but no daemon heartbeat has been recorded yet. The API/Web process alone will not apply renames until the daemon starts.";
+      }
+    }
+
+    if (params.daemonStatus === "running") {
+      return "The daemon is running, but `rename.autoApply` is disabled, so sessions remain preview-only until you apply manually.";
+    }
+
+    return "No active daemon heartbeat is visible. The runtime stays preview-only until a daemon sweep starts.";
+  }
+
+  private isProcessAlive(processId: number): boolean {
+    try {
+      process.kill(processId, 0);
+      return true;
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === "EPERM") {
+        return true;
+      }
+      return false;
     }
   }
 }

@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import type { UiNotice } from "./useControlDeckState.js";
 import {
   formatWhen,
   groupSessionsByTime,
@@ -12,6 +11,10 @@ import {
 import { autoRenameReasonLabel, autoRenameStatusLabel, sessionStatusLabel, t, type UiLanguage } from "./i18n.js";
 import { TranscriptPanel } from "./TranscriptPanel.js";
 import type { SessionDetail, SessionSummary } from "./types.js";
+
+const SESSION_PANE_MIN_WIDTH = 320;
+const SESSION_PANE_MAX_WIDTH = 560;
+const PANE_KEYBOARD_STEP = 24;
 
 export function SessionBrowser(props: {
   sessions: SessionSummary[];
@@ -28,7 +31,6 @@ export function SessionBrowser(props: {
   dirtyOnly: boolean;
   showHiddenTranscript: boolean;
   error: string | null;
-  notice: UiNotice | null;
   uiLanguage: UiLanguage;
   onSearchChange: (value: string) => void;
   onDirtyOnlyChange: (value: boolean) => void;
@@ -46,10 +48,36 @@ export function SessionBrowser(props: {
   const groupedSessions = groupSessionsByTime(props.sessions, props.uiLanguage);
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
+  const sessionSearchId = React.useId();
+
+  const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (event.key) {
+      case "ArrowLeft":
+      case "ArrowUp":
+        event.preventDefault();
+        props.onSessionPaneWidthChange(-PANE_KEYBOARD_STEP);
+        break;
+      case "ArrowRight":
+      case "ArrowDown":
+        event.preventDefault();
+        props.onSessionPaneWidthChange(PANE_KEYBOARD_STEP);
+        break;
+      case "Home":
+        event.preventDefault();
+        props.onSessionPaneWidthChange(SESSION_PANE_MIN_WIDTH - props.sessionPaneWidth);
+        break;
+      case "End":
+        event.preventDefault();
+        props.onSessionPaneWidthChange(SESSION_PANE_MAX_WIDTH - props.sessionPaneWidth);
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <section className={props.sessionPaneCollapsed ? "history-layout session-pane-collapsed" : "history-layout"}>
-      <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"}>
+      <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"} id="session-list-pane">
         <header className="view-header session-list-header">
           <div>
             <p className="panel-kicker">{tt("conversationArchive")}</p>
@@ -71,10 +99,16 @@ export function SessionBrowser(props: {
               />
               {tt("dirtyOnly")}
             </label>
+            <label className="sr-only" htmlFor={sessionSearchId}>
+              {tt("searchSessionsLabel")}
+            </label>
             <input
+              id={sessionSearchId}
               className="filter-input"
+              name="session-search"
               onChange={(event) => props.onSearchChange(event.target.value)}
               placeholder={tt("filterSessions")}
+              type="search"
               value={props.search}
             />
           </div>
@@ -122,10 +156,16 @@ export function SessionBrowser(props: {
       {!props.sessionPaneCollapsed ? (
         <div
           className="history-splitter"
+          onKeyDown={handleSessionSplitterKeyDown}
           onPointerDown={props.onStartSessionResize}
           role="separator"
-          aria-label="Resize session list"
+          tabIndex={0}
+          aria-controls="session-list-pane"
+          aria-label={tt("resizeSessionList")}
           aria-orientation="vertical"
+          aria-valuemax={SESSION_PANE_MAX_WIDTH}
+          aria-valuemin={SESSION_PANE_MIN_WIDTH}
+          aria-valuenow={props.sessionPaneWidth}
         />
       ) : null}
 

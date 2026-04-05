@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
 
 import { fetchSessionTranscript } from "./api.js";
 import { formatWhen, transcriptTone } from "./browser-utils.js";
@@ -53,6 +53,7 @@ export function TranscriptPanel(props: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query.trim());
+  const searchInputId = useId();
 
   useEffect(() => {
     setQuery("");
@@ -132,8 +133,12 @@ export function TranscriptPanel(props: {
       <div className="chat-toolbar">
         <div className="chat-toolbar-copy">
           <p className="panel-kicker">{tt("transcript")}</p>
-          <label className="chat-search">
+          <label className="chat-search" htmlFor={searchInputId}>
+            <span className="sr-only">{tt("searchConversationLabel")}</span>
             <input
+              id={searchInputId}
+              name="conversation-search"
+              type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={tt("searchConversation")}

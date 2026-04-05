@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import type { ConfigDocument, ConfigView, OverviewResponse, ProviderProfile, ProviderResponse } from "./types.js";
@@ -10,7 +10,8 @@ type SettingsDraft = {
   namingTemplate: string;
   namingLanguage: string;
   namingMaxLength: string;
-  renameMode: string;
+  namingContextStrategy: string;
+  namingContextMaxChars: string;
   renameAutoApply: string;
   manualOverrideWins: boolean;
   freezeManualName: boolean;
@@ -33,7 +34,6 @@ type SettingsDraft = {
   selectedProfileId: string;
 };
 
-type RenameMode = "heuristic" | "ai" | "hybrid";
 type RenameAutoApply = "disabled" | "idle-finalize";
 type AiBackend = "none" | "codex" | "openai-compatible";
 type ProviderSource = "inherit-codex" | "explicit";
@@ -94,7 +94,14 @@ function buildDraft(configView: ConfigView): SettingsDraft {
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
     namingLanguage: asString(naming.language, "zh-CN"),
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
-    renameMode: asString(rename.mode, "hybrid"),
+    namingContextStrategy: asString(
+      naming.contextStrategy || naming.context_strategy,
+      "summary-signals"
+    ),
+    namingContextMaxChars: asNumberString(
+      naming.contextMaxChars || naming.context_max_chars,
+      "8000"
+    ),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
     manualOverrideWins: asBoolean(rename.manualOverrideWins || rename.manual_override_wins, true),
     freezeManualName: asBoolean(rename.freezeManualName || rename.freeze_manual_name, true),
@@ -151,7 +158,6 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
       uiLanguage: draft.uiLanguage
     },
     rename: {
-      mode: draft.renameMode as RenameMode,
       autoApply: draft.renameAutoApply as RenameAutoApply,
       manualOverrideWins: draft.manualOverrideWins,
       freezeManualName: draft.freezeManualName
@@ -169,7 +175,12 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
       preset: stripEmptyString(draft.namingPreset),
       template: stripEmptyString(draft.namingTemplate),
       language: stripEmptyString(draft.namingLanguage),
-      maxLength: parseNumber(draft.namingMaxLength)
+      maxLength: parseNumber(draft.namingMaxLength),
+      contextStrategy: stripEmptyString(draft.namingContextStrategy) as
+        | "summary-signals"
+        | "user-assistant-transcript"
+        | undefined,
+      contextMaxChars: parseNumber(draft.namingContextMaxChars)
     },
     ai: {
       backend: draft.aiBackend as AiBackend,
@@ -215,22 +226,27 @@ function ChoiceGroup<T extends string>(props: {
   options: ChoiceOption<T>[];
   onChange: (value: T) => void;
 }) {
+  const groupName = useId();
+
   return (
     <fieldset className="settings-field settings-choice-field">
       <legend>{props.label}</legend>
-      <div aria-label={props.label} className="settings-choice-group" role="radiogroup">
+      <div className="settings-choice-group">
         {props.options.map((option) => (
-          <button
-            aria-checked={option.value === props.value}
+          <label
             className={option.value === props.value ? "settings-choice active" : "settings-choice"}
             key={option.value}
-            onClick={() => props.onChange(option.value)}
-            role="radio"
-            tabIndex={option.value === props.value ? 0 : -1}
-            type="button"
           >
+            <input
+              checked={option.value === props.value}
+              className="settings-choice-input"
+              name={groupName}
+              onChange={() => props.onChange(option.value)}
+              type="radio"
+              value={option.value}
+            />
             <span>{option.label}</span>
-          </button>
+          </label>
         ))}
       </div>
     </fieldset>
@@ -288,6 +304,21 @@ export function SettingsPanel(props: {
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirty) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [dirty]);
 
   useEffect(() => {
     if (!props.configView) {
@@ -437,9 +468,9 @@ export function SettingsPanel(props: {
             <article className="settings-mini-panel">
               <p className="panel-kicker">{tt("renameSources")}</p>
               <dl className="settings-inline-stats">
-                <div><dt>{inline("启发式", "Heuristic")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.heuristicApplied, uiLanguage)}</dd></div>
-                <div><dt>{inline("混合", "Hybrid")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.hybridApplied, uiLanguage)}</dd></div>
-                <div><dt>{inline("批量", "Batch")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.batchApplied, uiLanguage)}</dd></div>
+                <div><dt>AI</dt><dd>{formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}</dd></div>
+                <div><dt>{inline("手动", "Manual")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.manualApplied, uiLanguage)}</dd></div>
+                <div><dt>{inline("自动应用", "Auto apply")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)}</dd></div>
                 <div><dt>{inline("仅预览", "Preview only")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.previewOnly, uiLanguage)}</dd></div>
               </dl>
             </article>
@@ -450,7 +481,10 @@ export function SettingsPanel(props: {
           <p className="panel-kicker">{tt("style")}</p>
           <h3>{tt("naming")}</h3>
           <p className="settings-copy">
-            {inline("控制会话标题格式、上下文提取策略，以及 rename 引擎是保持 heuristic 还是调用 AI。", "Control the visible session title format, context extraction strategy, and whether the rename engine stays heuristic or asks AI for structure.")}
+            {inline(
+              "控制会话标题格式与上下文提取策略。启发式结果现在只算临时候选名，正式命名只统计 AI 和手动命名，因此设置页不再暴露旧的 rename.mode。",
+              "Control the visible session title format and context extraction strategy. Heuristic results are treated as temporary candidates now, and only AI/manual names count as official, so the legacy rename.mode switch is no longer exposed here."
+            )}
           </p>
           <label className="settings-field">
             <span>{tt("preset")}</span>
@@ -507,20 +541,30 @@ export function SettingsPanel(props: {
           </div>
           <div className="settings-two-up">
             <ChoiceGroup
-              label={tt("renameMode")}
+              label={tt("contextStrategy")}
               onChange={(value) => {
                 updateDraftState((current) => ({
                   ...current,
-                  renameMode: value
+                  namingContextStrategy: value
                 }));
               }}
               options={[
-                { value: "heuristic", label: "heuristic" },
-                { value: "hybrid", label: "hybrid" },
-                { value: "ai", label: "ai" }
+                { value: "summary-signals", label: "summary-signals" },
+                { value: "user-assistant-transcript", label: "user-assistant-transcript" }
               ]}
-              value={draft.renameMode as RenameMode}
+              value={draft.namingContextStrategy as "summary-signals" | "user-assistant-transcript"}
             />
+            <label className="settings-field">
+              <span>{tt("contextMaxChars")}</span>
+              <input
+                value={draft.namingContextMaxChars}
+                onChange={(event) => {
+                  updateDraftField("namingContextMaxChars", event.target.value);
+                }}
+              />
+            </label>
+          </div>
+          <div className="settings-two-up">
             <ChoiceGroup
               label={tt("autoApply")}
               onChange={(value) => {

@@ -122,6 +122,7 @@ describe("local api", () => {
     });
     expect(overview.statusCode).toBe(200);
     expect(overview.json().sessions.total).toBeGreaterThanOrEqual(1);
+    expect(overview.json().runtime.daemonStatus).toBe("not_seen");
   });
 
   it("supports session filters and auto-rename preview endpoint", async () => {
@@ -281,7 +282,9 @@ describe("local api", () => {
         },
         naming: {
           maxLength: 48,
-          template: "{{summary}}"
+          template: "{{summary}}",
+          contextStrategy: "user-assistant-transcript",
+          contextMaxChars: 4096
         },
         watch: {
           candidateIdleSeconds: 33
@@ -291,6 +294,8 @@ describe("local api", () => {
     expect(update.statusCode).toBe(200);
     expect(update.json().config.effectiveConfig.general.uiLanguage).toBe("zh-CN");
     expect(update.json().config.effectiveConfig.naming.maxLength).toBe(48);
+    expect(update.json().config.effectiveConfig.naming.contextStrategy).toBe("user-assistant-transcript");
+    expect(update.json().config.effectiveConfig.naming.contextMaxChars).toBe(4096);
     expect(update.json().config.effectiveConfig.watch.candidateIdleSeconds).toBe(33);
 
     const events = await app.inject({
@@ -303,6 +308,8 @@ describe("local api", () => {
     const written = await fs.readFile(configPath, "utf8");
     expect(written).toContain('ui_language = "zh-CN"');
     expect(written).toContain('max_length = 48');
+    expect(written).toContain('context_strategy = "user-assistant-transcript"');
+    expect(written).toContain("context_max_chars = 4_096");
     expect(written).toContain('candidate_idle_seconds = 33');
   });
 });

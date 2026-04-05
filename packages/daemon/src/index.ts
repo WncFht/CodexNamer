@@ -30,15 +30,22 @@ export class SessionSweepDaemon {
   ) {}
 
   async runOnce(): Promise<void> {
-    await this.manager.scan();
-    const previews = await this.manager.previewAutoRename();
+    const sweep = await this.manager.runAutoRenameSweep({
+      intervalSeconds: this.intervalSeconds,
+      processId: process.pid
+    });
+    const previews = sweep.previews;
     const summary = {
       timestamp: new Date().toISOString(),
       total: previews.length,
+      suggest: previews.filter((item) => item.status === "suggest").length,
       apply: previews.filter((item) => item.status === "apply").length,
-      skip: previews.filter((item) => item.status === "skip").length
+      skip: previews.filter((item) => item.status === "skip").length,
+      autoApplied: sweep.applied.filter((item) => item.written).length,
+      unchanged: sweep.applied.filter((item) => !item.written).length,
+      execution: this.manager.config.rename.autoApply === "idle-finalize" ? "auto-apply" : "preview-only"
     };
-    console.log(JSON.stringify({ type: "daemon_preview", summary, previews }, null, 2));
+    console.log(JSON.stringify({ type: "daemon_sweep", summary, previews, applied: sweep.applied }, null, 2));
   }
 
   private scheduleSoon(): void {
@@ -101,4 +108,3 @@ async function main(): Promise<void> {
 }
 
 void main();
-

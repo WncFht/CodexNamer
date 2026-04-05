@@ -10,12 +10,12 @@
   --border-hover: #d1cfc5;
   --text: #141413;
   --text-secondary: #5e5d59;
-  --text-muted: #87867f;
+  --text-muted: #6b6a63;
   --text-on-dark: #faf9f5;
-  --accent: #c96442;
-  --accent-hover: #d97757;
-  --accent-glow: rgba(201, 100, 66, 0.16);
-  --focus: #3898ec;
+  --accent: #a6482a;
+  --accent-hover: #8d3d25;
+  --accent-glow: rgba(166, 72, 42, 0.16);
+  --focus: #1e6fb5;
   --success: #6b7a45;
   --warning: #a57533;
   --danger: #b53333;
@@ -69,6 +69,18 @@ pre {
   color: inherit;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 #app {
   display: flex;
   height: 100vh;
@@ -90,6 +102,7 @@ pre {
   flex-shrink: 0;
   background: transparent;
   cursor: col-resize;
+  touch-action: none;
   transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
@@ -105,6 +118,32 @@ pre {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.app-tab-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-tab-panel[hidden] {
+  display: none;
+}
+
+.app-tab-panel > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-panel-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.app-notice {
+  margin: 16px 18px 0;
 }
 
 .sidebar-header {
@@ -334,6 +373,7 @@ pre {
 .history-splitter {
   background: transparent;
   cursor: col-resize;
+  touch-action: none;
   transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
@@ -460,6 +500,25 @@ pre {
   color: var(--accent);
   border-color: var(--accent);
   box-shadow: var(--ring-accent);
+}
+
+.pane-btn:focus-visible,
+.sidebar-btn:focus-visible,
+.project-item:focus-visible,
+.btn-refresh:focus-visible,
+.btn-sm:focus-visible,
+.btn-chip:focus-visible,
+.filter-input:focus-visible,
+.chat-search input:focus-visible,
+.settings-field input:focus-visible,
+.settings-field textarea:focus-visible,
+.settings-field select:focus-visible,
+.settings-disclosure summary:focus-visible,
+.settings-choice:focus-within,
+.splitter:focus-visible,
+.history-splitter:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .checkbox-inline,
@@ -691,7 +750,6 @@ pre {
 }
 
 .settings-choice {
-  appearance: none;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -705,6 +763,18 @@ pre {
   font-size: 13px;
   cursor: pointer;
   min-height: 34px;
+}
+
+.settings-choice span {
+  pointer-events: none;
+}
+
+.settings-choice-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .settings-choice:hover {
@@ -829,6 +899,8 @@ pre {
   background: var(--bg-secondary);
   color: inherit;
   box-shadow: var(--shadow-sm), 0 8px 24px rgba(20, 20, 19, 0.04);
+  content-visibility: auto;
+  contain-intrinsic-size: 138px;
 }
 
 .session-item:hover {
@@ -1032,6 +1104,8 @@ pre {
   padding: 14px 16px;
   background: var(--assistant-bg);
   box-shadow: var(--shadow-sm);
+  content-visibility: auto;
+  contain-intrinsic-size: 172px;
 }
 
 .message-turn[data-role="user"] {
@@ -1298,8 +1372,7 @@ pre {
   }
 
   .splitter {
-    width: 100%;
-    height: 4px;
+    display: none;
   }
 
   .history-layout {

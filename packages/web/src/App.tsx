@@ -1,16 +1,31 @@
 import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
-import { autoRenameReasonLabel, autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
-import { RenameOpsPanel } from "./RenameOpsPanel.js";
+import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
-import { SettingsPanel } from "./SettingsPanel.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
 
+const WORKSPACE_PANE_MIN_WIDTH = 220;
+const WORKSPACE_PANE_MAX_WIDTH = 420;
 const SESSION_PANE_MIN_WIDTH = 320;
 const SESSION_PANE_MAX_WIDTH = 560;
 const SESSION_PANE_AUTO_COLLAPSE_WIDTH = 272;
 const SESSION_PANE_RESTORE_WIDTH = 390;
+const PANE_KEYBOARD_STEP = 24;
+const SettingsPanel = React.lazy(() =>
+  import("./SettingsPanel.js").then((module) => ({ default: module.SettingsPanel }))
+);
+const RenameOpsPanel = React.lazy(() =>
+  import("./RenameOpsPanel.js").then((module) => ({ default: module.RenameOpsPanel }))
+);
+
+function clampWorkspacePaneWidth(value: number): number {
+  return Math.max(WORKSPACE_PANE_MIN_WIDTH, Math.min(WORKSPACE_PANE_MAX_WIDTH, value));
+}
+
+function clampSessionPaneWidth(value: number): number {
+  return Math.max(SESSION_PANE_MIN_WIDTH, Math.min(SESSION_PANE_MAX_WIDTH, value));
+}
 
 function readStoredNumber(key: string, fallback: number): number {
   const raw = window.localStorage.getItem(key);
@@ -39,6 +54,8 @@ export function App() {
   const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() =>
     readStoredNumber("csm:sessionPaneWidth", 390)
   );
+  const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(() => state.tab === "settings");
+  const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(() => state.tab === "maintenance");
   const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
   const uiLanguage = normalizeUiLanguage(state.configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
@@ -49,6 +66,10 @@ export function App() {
       ? undefined
       : state.workspaces.find((item) => item.workspaceId === state.selectedWorkspaceId);
   const selectedWorkspaceLabel = selectedWorkspace?.workspaceLabel ?? tt("allWorkspaces");
+
+  React.useEffect(() => {
+    document.documentElement.lang = uiLanguage;
+  }, [uiLanguage]);
 
   React.useEffect(() => {
     window.localStorage.setItem("csm:workspacePaneCollapsed", String(workspacePaneCollapsed));
@@ -73,10 +94,19 @@ export function App() {
   }, [sessionPaneCollapsed, sessionPaneWidth]);
 
   React.useEffect(() => {
+    if (state.tab === "settings") {
+      setSettingsPanelLoaded(true);
+    }
+    if (state.tab === "maintenance") {
+      setMaintenancePanelLoaded(true);
+    }
+  }, [state.tab]);
+
+  React.useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       if (workspaceDragRef.current) {
         const delta = event.clientX - workspaceDragRef.current.startX;
-        setWorkspacePaneWidth(Math.max(220, Math.min(420, workspaceDragRef.current.startWidth + delta)));
+        setWorkspacePaneWidth(clampWorkspacePaneWidth(workspaceDragRef.current.startWidth + delta));
       }
       if (sessionDragRef.current) {
         const delta = event.clientX - sessionDragRef.current.startX;
@@ -108,6 +138,46 @@ export function App() {
       document.body.style.userSelect = "";
     };
   }, []);
+
+  const adjustWorkspacePaneWidth = (delta: number) => {
+    setWorkspacePaneCollapsed(false);
+    setWorkspacePaneWidth((value) => clampWorkspacePaneWidth(value + delta));
+  };
+
+  const setWorkspacePaneWidthTo = (value: number) => {
+    setWorkspacePaneCollapsed(false);
+    setWorkspacePaneWidth(clampWorkspacePaneWidth(value));
+  };
+
+  const adjustSessionPaneWidth = (delta: number) => {
+    setSessionPaneCollapsed(false);
+    setSessionPaneWidth((value) => clampSessionPaneWidth(value + delta));
+  };
+
+  const handleWorkspaceSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (event.key) {
+      case "ArrowLeft":
+      case "ArrowUp":
+        event.preventDefault();
+        adjustWorkspacePaneWidth(-PANE_KEYBOARD_STEP);
+        break;
+      case "ArrowRight":
+      case "ArrowDown":
+        event.preventDefault();
+        adjustWorkspacePaneWidth(PANE_KEYBOARD_STEP);
+        break;
+      case "Home":
+        event.preventDefault();
+        setWorkspacePaneWidthTo(WORKSPACE_PANE_MIN_WIDTH);
+        break;
+      case "End":
+        event.preventDefault();
+        setWorkspacePaneWidthTo(WORKSPACE_PANE_MAX_WIDTH);
+        break;
+      default:
+        break;
+    }
+  };
 
   const startWorkspaceResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -141,6 +211,9 @@ export function App() {
     });
   };
 
+  const showSettingsPanel = settingsPanelLoaded || state.tab === "settings";
+  const showMaintenancePanel = maintenancePanelLoaded || state.tab === "maintenance";
+
   return (
     <div
       id="app"
@@ -159,7 +232,14 @@ export function App() {
             <p className="sidebar-copy">{tt("warmEditorial")}</p>
           </div>
           <div className="pane-controls">
-            <button className="pane-btn" onClick={() => setWorkspacePaneCollapsed((value) => !value)} title={workspacePaneCollapsed ? tt("expandWorkspacePane") : tt("collapseWorkspacePane")} type="button">
+            <button
+              aria-controls="sidebar"
+              aria-expanded={!workspacePaneCollapsed}
+              className="pane-btn"
+              onClick={() => setWorkspacePaneCollapsed((value) => !value)}
+              title={workspacePaneCollapsed ? tt("expandWorkspacePane") : tt("collapseWorkspacePane")}
+              type="button"
+            >
               {workspacePaneCollapsed ? tt("open") : tt("fold")}
             </button>
           </div>
@@ -172,6 +252,7 @@ export function App() {
             ["maintenance", tt("renameOps")]
           ].map(([id, label]) => (
             <button
+              aria-current={state.tab === id ? "page" : undefined}
               className={state.tab === id ? "sidebar-btn active" : "sidebar-btn"}
               key={id}
               onClick={() => state.setTab(id as typeof state.tab)}
@@ -239,74 +320,97 @@ export function App() {
 
       <div
         className="splitter"
+        onKeyDown={handleWorkspaceSplitterKeyDown}
         onPointerDown={startWorkspaceResize}
         role="separator"
-        aria-label="Resize workspace pane"
+        tabIndex={0}
+        aria-controls="sidebar"
+        aria-label={tt("resizeWorkspacePane")}
         aria-orientation="vertical"
+        aria-valuemax={WORKSPACE_PANE_MAX_WIDTH}
+        aria-valuemin={WORKSPACE_PANE_MIN_WIDTH}
+        aria-valuenow={workspacePaneWidth}
       />
 
       <main id="content">
-        {state.tab === "sessions" ? (
-          <SessionBrowser
-            sessions={state.sessions}
-            selectedWorkspaceLabel={selectedWorkspaceLabel}
-            selectedId={state.selectedId}
-            detail={state.detail}
-            sessionPaneCollapsed={sessionPaneCollapsed}
-            sessionPaneWidth={sessionPaneWidth}
-            loadingSessions={state.loadingSessions}
-            loadingDetail={state.loadingDetail}
-            actioning={state.actioning}
-            actionLabel={state.actionLabel}
-            search={state.search}
-            dirtyOnly={state.dirtyOnly}
-            showHiddenTranscript={state.showHiddenTranscript}
-            error={state.error}
-            notice={state.notice}
-            uiLanguage={uiLanguage}
-            onSearchChange={state.setSearch}
-            onDirtyOnlyChange={state.setDirtyOnly}
-            onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
-            onRefresh={() => void state.refreshSessions()}
-            onSelectSession={(threadId) => state.setSelectedId(threadId)}
-            onToggleSessionPane={toggleSessionPane}
-            onSessionPaneWidthChange={(delta) =>
-              setSessionPaneWidth((value) => Math.max(SESSION_PANE_MIN_WIDTH, Math.min(SESSION_PANE_MAX_WIDTH, value + delta)))
-            }
-            onStartSessionResize={startSessionResize}
-            onSuggest={() => state.actions.suggest()}
-            onApply={() => state.actions.apply()}
-            onToggleFreeze={() => state.actions.toggleFreeze()}
-            onToggleManualOverride={() => state.actions.toggleManualOverride()}
-          />
+        {state.notice ? (
+          <div
+            aria-live={state.notice.tone === "error" ? "assertive" : "polite"}
+            className={`notice-banner app-notice ${state.notice.tone}`}
+            role={state.notice.tone === "error" ? "alert" : "status"}
+          >
+            {state.notice.text}
+          </div>
         ) : null}
 
-        {state.tab === "settings" ? (
-          <SettingsPanel
-            configView={state.configView}
-            overview={state.overview}
-            onReload={() => void state.refreshSidePanels()}
-            onSave={(patch) => state.saveConfig(patch)}
-            previewApplyCount={previewApplyCount}
-            previewSuggestCount={previewSuggestCount}
-            providers={state.providers}
-            saving={state.savingConfig}
-            promptPreview={state.promptPreview}
-            promptPreviewRefreshing={state.promptPreviewRefreshing}
-            onRefreshPromptPreview={() => void state.refreshPromptPreview()}
-          />
-        ) : null}
+        <div className="app-tab-panel" hidden={state.tab !== "sessions"}>
+          {state.tab === "sessions" ? (
+            <SessionBrowser
+              sessions={state.sessions}
+              selectedWorkspaceLabel={selectedWorkspaceLabel}
+              selectedId={state.selectedId}
+              detail={state.detail}
+              sessionPaneCollapsed={sessionPaneCollapsed}
+              sessionPaneWidth={sessionPaneWidth}
+              loadingSessions={state.loadingSessions}
+              loadingDetail={state.loadingDetail}
+              actioning={state.actioning}
+              actionLabel={state.actionLabel}
+              search={state.search}
+              dirtyOnly={state.dirtyOnly}
+              showHiddenTranscript={state.showHiddenTranscript}
+              error={state.error}
+              uiLanguage={uiLanguage}
+              onSearchChange={state.setSearch}
+              onDirtyOnlyChange={state.setDirtyOnly}
+              onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
+              onRefresh={() => void state.refreshSessions()}
+              onSelectSession={(threadId) => state.setSelectedId(threadId)}
+              onToggleSessionPane={toggleSessionPane}
+              onSessionPaneWidthChange={adjustSessionPaneWidth}
+              onStartSessionResize={startSessionResize}
+              onSuggest={() => state.actions.suggest()}
+              onApply={() => state.actions.apply()}
+              onToggleFreeze={() => state.actions.toggleFreeze()}
+              onToggleManualOverride={() => state.actions.toggleManualOverride()}
+            />
+          ) : null}
+        </div>
 
-        {state.tab === "maintenance" ? (
-          <RenameOpsPanel
-            doctor={state.doctor}
-            onRefreshPreview={(options) => state.refreshPreview(options)}
-            overview={state.overview}
-            preview={state.preview}
-            previewRefreshing={state.previewRefreshing}
-            uiLanguage={uiLanguage}
-          />
-        ) : null}
+        <div className="app-tab-panel" hidden={state.tab !== "settings"}>
+          {showSettingsPanel ? (
+            <React.Suspense fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}>
+              <SettingsPanel
+                configView={state.configView}
+                overview={state.overview}
+                onReload={() => void state.refreshSidePanels()}
+                onSave={(patch) => state.saveConfig(patch)}
+                previewApplyCount={previewApplyCount}
+                previewSuggestCount={previewSuggestCount}
+                providers={state.providers}
+                saving={state.savingConfig}
+                promptPreview={state.promptPreview}
+                promptPreviewRefreshing={state.promptPreviewRefreshing}
+                onRefreshPromptPreview={() => void state.refreshPromptPreview()}
+              />
+            </React.Suspense>
+          ) : null}
+        </div>
+
+        <div className="app-tab-panel" hidden={state.tab !== "maintenance"}>
+          {showMaintenancePanel ? (
+            <React.Suspense fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}>
+              <RenameOpsPanel
+                doctor={state.doctor}
+                onRefreshPreview={(options) => state.refreshPreview(options)}
+                overview={state.overview}
+                preview={state.preview}
+                previewRefreshing={state.previewRefreshing}
+                uiLanguage={uiLanguage}
+              />
+            </React.Suspense>
+          ) : null}
+        </div>
       </main>
     </div>
   );

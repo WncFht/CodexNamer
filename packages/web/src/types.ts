@@ -128,8 +128,20 @@ export type OverviewResponse = {
   };
   runtime: {
     configuredAutoApply: string;
-    actualExecution: "preview-only";
+    actualExecution: "preview-only" | "auto-apply";
     daemonAutoApply: boolean;
+    daemonStatus: "running" | "stale" | "not_seen";
+    lastSweepAt?: string;
+    lastSweepIntervalSeconds?: number;
+    lastSweepSummary?: {
+      total: number;
+      suggest: number;
+      apply: number;
+      skip: number;
+      autoApplied: number;
+      unchanged: number;
+      execution: "preview-only" | "auto-apply";
+    };
     explain: string;
   };
   workload: {
@@ -166,10 +178,7 @@ export type OverviewResponse = {
     failed: number;
     previewOnly: number;
     aiApplied: number;
-    heuristicApplied: number;
-    hybridApplied: number;
     manualApplied: number;
-    batchApplied: number;
     autoApplied: number;
     lastAppliedAt?: string;
   };
