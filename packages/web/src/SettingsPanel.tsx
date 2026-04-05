@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import type { ConfigDocument, ConfigView, OverviewResponse, ProviderProfile, ProviderResponse } from "./types.js";
@@ -214,32 +214,23 @@ function ChoiceGroup<T extends string>(props: {
   value: T;
   options: ChoiceOption<T>[];
   onChange: (value: T) => void;
-  name?: string;
 }) {
-  const groupId = useId();
-  const groupName = props.name ?? groupId;
   return (
     <fieldset className="settings-field settings-choice-field">
       <legend>{props.label}</legend>
-      <div className="settings-choice-group">
+      <div aria-label={props.label} className="settings-choice-group" role="radiogroup">
         {props.options.map((option) => (
-          <label
+          <button
+            aria-checked={option.value === props.value}
             className={option.value === props.value ? "settings-choice active" : "settings-choice"}
-            htmlFor={`${groupName}-${option.value}`}
             key={option.value}
             onClick={() => props.onChange(option.value)}
+            role="radio"
+            tabIndex={option.value === props.value ? 0 : -1}
+            type="button"
           >
-            <input
-              checked={option.value === props.value}
-              className="settings-choice-input"
-              id={`${groupName}-${option.value}`}
-              name={groupName}
-              onChange={() => props.onChange(option.value)}
-              type="radio"
-              value={option.value}
-            />
             <span>{option.label}</span>
-          </label>
+          </button>
         ))}
       </div>
     </fieldset>
@@ -304,16 +295,17 @@ export function SettingsPanel(props: {
     }
 
     const nextDraft = buildDraft(props.configView);
-    if (!dirty) {
+    const currentDraft = draftRef.current;
+    if (!dirty || !currentDraft) {
       setDraft(nextDraft);
       return;
     }
 
-    if (draft && JSON.stringify(encodeDraft(draft)) === JSON.stringify(encodeDraft(nextDraft))) {
+    if (JSON.stringify(encodeDraft(currentDraft)) === JSON.stringify(encodeDraft(nextDraft))) {
       setDraft(nextDraft);
       setDirty(false);
     }
-  }, [dirty, draft, props.configView]);
+  }, [dirty, props.configView]);
 
   const selectedProfile = useMemo(
     () => draft?.providerProfiles.find((profile) => profile.profileId === draft.selectedProfileId),
