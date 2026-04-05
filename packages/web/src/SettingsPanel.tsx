@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import type { ConfigDocument, ConfigView, OverviewResponse, ProviderProfile, ProviderResponse } from "./types.js";
+import type { PromptPreviewResponse } from "./types.js";
 
 type SettingsDraft = {
+  uiLanguage: "en-US" | "zh-CN";
   namingPreset: string;
   namingTemplate: string;
   namingLanguage: string;
@@ -82,6 +85,7 @@ function buildDraft(configView: ConfigView): SettingsDraft {
   const selectedProfileId = asString(ai.profile, providerProfiles.find((item) => item.isDefault)?.profileId ?? providerProfiles[0]?.profileId ?? "default");
 
   return {
+    uiLanguage: asString(asRecord(effective.general).uiLanguage, "en-US") as "en-US" | "zh-CN",
     namingPreset: asString(naming.preset, "conventional"),
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
     namingLanguage: asString(naming.language, "zh-CN"),
@@ -124,8 +128,24 @@ function stripEmptyString(value: string): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function firstNonEmptyString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return undefined;
+}
+
 function encodeDraft(draft: SettingsDraft): ConfigDocument {
   return {
+    general: {
+      uiLanguage: draft.uiLanguage
+    },
     rename: {
       mode: draft.renameMode as RenameMode,
       autoApply: draft.renameAutoApply as RenameAutoApply,
@@ -185,48 +205,87 @@ function updateSelectedProfile(
   return profiles.map((profile) => (profile.profileId === profileId ? { ...profile, ...patch } : profile));
 }
 
-function formatMetric(value: number | undefined): string {
-  return new Intl.NumberFormat("en-US").format(value ?? 0);
-}
-
 export function SettingsPanel(props: {
   configView: ConfigView | null;
   overview: OverviewResponse | null;
   previewApplyCount: number;
+  previewSuggestCount: number;
   providers: ProviderResponse | null;
+  promptPreview: PromptPreviewResponse | null;
+  promptPreviewRefreshing: boolean;
   saving: boolean;
   onReload: () => void | Promise<void>;
+  onRefreshPromptPreview: () => void | Promise<void>;
   onSave: (patch: ConfigDocument) => void | Promise<void>;
 }) {
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
   const [dirty, setDirty] = useState(false);
+  const effective = asRecord(props.configView?.effectiveConfig);
+  const inheritedCodex = asRecord(effective.inheritedCodex);
+  const uiLanguage = draft?.uiLanguage ?? normalizeUiLanguage(props.configView);
+  const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
+  const inline = (zh: string, en: string) => (uiLanguage === "zh-CN" ? zh : en);
 
   useEffect(() => {
     if (!props.configView) {
       return;
     }
-    if (!dirty) {
-      setDraft(buildDraft(props.configView));
-    }
-  }, [dirty, props.configView]);
 
-  const effective = asRecord(props.configView?.effectiveConfig);
-  const inheritedCodex = asRecord(effective.inheritedCodex);
+    const nextDraft = buildDraft(props.configView);
+    if (!dirty) {
+      setDraft(nextDraft);
+      return;
+    }
+
+    if (draft && JSON.stringify(encodeDraft(draft)) === JSON.stringify(encodeDraft(nextDraft))) {
+      setDraft(nextDraft);
+      setDirty(false);
+    }
+  }, [dirty, draft, props.configView]);
+
   const selectedProfile = useMemo(
     () => draft?.providerProfiles.find((profile) => profile.profileId === draft.selectedProfileId),
     [draft]
   );
+  const usingExplicitProfile = draft?.aiProviderSource === "explicit";
+  const selectedProfileLabel = usingExplicitProfile
+    ? firstNonEmptyString(selectedProfile?.profileId, draft?.aiProfile) ?? tt("nA")
+    : inline("继承 Codex", "Inherited Codex");
+  const selectedBaseUrl =
+    firstNonEmptyString(
+      ...(usingExplicitProfile
+        ? [selectedProfile?.baseUrl, props.providers?.resolvedProvider?.baseUrl, inheritedCodex.baseUrl]
+        : [props.providers?.resolvedProvider?.baseUrl, inheritedCodex.baseUrl, selectedProfile?.baseUrl])
+    ) ?? tt("nA");
+  const selectedModel =
+    firstNonEmptyString(
+      ...(usingExplicitProfile
+        ? [selectedProfile?.model, props.providers?.resolvedProvider?.model, inheritedCodex.model]
+        : [props.providers?.resolvedProvider?.model, inheritedCodex.model, selectedProfile?.model])
+    ) ?? tt("nA");
+  const selectedWireApi =
+    firstNonEmptyString(
+      ...(usingExplicitProfile
+        ? [selectedProfile?.wireApi, props.providers?.resolvedProvider?.transport, inheritedCodex.wireApi]
+        : [props.providers?.resolvedProvider?.transport, inheritedCodex.wireApi, selectedProfile?.wireApi])
+    ) ?? tt("nA");
+  const promptPreviewStatus =
+    props.previewApplyCount > 0 ? "apply" : props.previewSuggestCount > 0 ? "suggest" : "skip";
 
   if (!props.configView || !draft) {
-    return <section className="settings-layout"><div className="history-empty">Loading settings...</div></section>;
+    return (
+      <section className="settings-layout">
+        <div className="history-empty">{inline("正在加载设置...", "Loading settings...")}</div>
+      </section>
+    );
   }
 
   return (
     <section className="settings-layout">
       <header className="settings-header">
         <div>
-          <h2>Settings</h2>
-          <p>Configure naming rules, auto-rename cadence, and the AI/provider profile used for suggestions.</p>
+          <h2>{tt("settings")}</h2>
+          <p>{inline("在这里配置命名规则、自动重命名节奏，以及建议命名所使用的 AI 与提供方配置。", "Configure naming rules, auto-rename cadence, and the AI/provider profile used for suggestions.")}</p>
         </div>
         <div className="header-actions">
           <button
@@ -237,7 +296,7 @@ export function SettingsPanel(props: {
             }}
             type="button"
           >
-            Reload
+            {tt("reload")}
           </button>
           <button
             className="btn-sm primary"
@@ -245,12 +304,11 @@ export function SettingsPanel(props: {
             onClick={() => {
               void (async () => {
                 await props.onSave(encodeDraft(draft));
-                setDirty(false);
               })();
             }}
             type="button"
           >
-            {props.saving ? "Saving..." : "Save settings"}
+            {props.saving ? tt("savingSettings") : tt("saveSettings")}
           </button>
         </div>
       </header>
@@ -259,76 +317,75 @@ export function SettingsPanel(props: {
         <section className="detail-panel settings-panel settings-overview-panel settings-span-wide">
           <div className="settings-overview-header">
             <div>
-              <p className="panel-kicker">Control State</p>
-              <h3>Rename activity and queue health</h3>
+              <p className="panel-kicker">{tt("controlState")}</p>
+              <h3>{tt("renameActivity")}</h3>
               <p className="settings-copy">
-                This panel tracks how many sessions are currently dirty, how many names have already been applied,
-                and how often AI is actually being used to land final names.
+                {inline("这里追踪当前 dirty 会话数量、已经应用的名字数量，以及 AI 真正参与落盘命名的频率。", "This panel tracks how many sessions are currently dirty, how many names have already been applied, and how often AI is actually being used to land final names.")}
               </p>
             </div>
           </div>
 
           <div className="settings-metrics-grid">
             <article className="metric-card">
-              <span className="metric-label">Indexed sessions</span>
-              <strong>{formatMetric(props.overview?.sessions.total)}</strong>
+              <span className="metric-label">{tt("indexedSessions")}</span>
+              <strong>{formatUiNumber(props.overview?.sessions.total, uiLanguage)}</strong>
               <p>
-                {formatMetric(props.overview?.sessions.workspaces)} workspaces, {formatMetric(props.overview?.sessions.named)} named
+                {formatUiNumber(props.overview?.sessions.workspaces, uiLanguage)} {tt("workspaces")}, {formatUiNumber(props.overview?.sessions.named, uiLanguage)} {inline("已命名", "named")}
               </p>
             </article>
             <article className="metric-card">
-              <span className="metric-label">Dirty queue</span>
-              <strong>{formatMetric(props.overview?.sessions.dirty)}</strong>
+              <span className="metric-label">{tt("dirtyQueue")}</span>
+              <strong>{formatUiNumber(props.overview?.sessions.dirty, uiLanguage)}</strong>
               <p>
-                {formatMetric(props.previewApplyCount)} ready to apply, {formatMetric(props.overview?.sessions.withCandidate)} with candidates
+                {formatUiNumber(props.previewSuggestCount, uiLanguage)} {tt("candidateReady")}, {formatUiNumber(props.previewApplyCount, uiLanguage)} {tt("finalizeReady")}
               </p>
             </article>
             <article className="metric-card">
-              <span className="metric-label">AI applied</span>
-              <strong>{formatMetric(props.overview?.renameHistory.aiApplied)}</strong>
+              <span className="metric-label">{tt("aiApplied")}</span>
+              <strong>{formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}</strong>
               <p>
-                {formatMetric(props.overview?.renameHistory.autoApplied)} auto-applied, {formatMetric(props.overview?.renameHistory.applied)} total applied
+                {formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} {inline("自动应用", "auto-applied")}, {formatUiNumber(props.overview?.renameHistory.applied, uiLanguage)} {inline("总应用", "total applied")}
               </p>
             </article>
             <article className="metric-card">
-              <span className="metric-label">Manual controls</span>
-              <strong>{formatMetric(props.overview?.sessions.manualOverride)}</strong>
+              <span className="metric-label">{tt("manualControls")}</span>
+              <strong>{formatUiNumber(props.overview?.sessions.manualOverride, uiLanguage)}</strong>
               <p>
-                {formatMetric(props.overview?.sessions.frozen)} frozen, {formatMetric(props.overview?.renameHistory.manualApplied)} manual applies
+                {formatUiNumber(props.overview?.sessions.frozen, uiLanguage)} {tt("frozen")}, {formatUiNumber(props.overview?.renameHistory.manualApplied, uiLanguage)} {inline("手动应用", "manual applies")}
               </p>
             </article>
           </div>
 
           <div className="settings-overview-detail">
             <article className="settings-mini-panel">
-              <p className="panel-kicker">Pipeline</p>
+              <p className="panel-kicker">{tt("pipeline")}</p>
               <dl className="settings-inline-stats">
-                <div><dt>Active</dt><dd>{formatMetric(props.overview?.pipeline.active)}</dd></div>
-                <div><dt>Candidate</dt><dd>{formatMetric(props.overview?.pipeline.candidateReady)}</dd></div>
-                <div><dt>Finalize</dt><dd>{formatMetric(props.overview?.pipeline.finalizeReady)}</dd></div>
-                <div><dt>Applied</dt><dd>{formatMetric(props.overview?.pipeline.applied)}</dd></div>
+                <div><dt>{inline("活跃", "Active")}</dt><dd>{formatUiNumber(props.overview?.pipeline.active, uiLanguage)}</dd></div>
+                <div><dt>{tt("candidateReady")}</dt><dd>{formatUiNumber(props.overview?.pipeline.candidateReady, uiLanguage)}</dd></div>
+                <div><dt>{tt("finalizeReady")}</dt><dd>{formatUiNumber(props.overview?.pipeline.finalizeReady, uiLanguage)}</dd></div>
+                <div><dt>{inline("已应用", "Applied")}</dt><dd>{formatUiNumber(props.overview?.pipeline.applied, uiLanguage)}</dd></div>
               </dl>
             </article>
             <article className="settings-mini-panel">
-              <p className="panel-kicker">Rename Sources</p>
+              <p className="panel-kicker">{tt("renameSources")}</p>
               <dl className="settings-inline-stats">
-                <div><dt>Heuristic</dt><dd>{formatMetric(props.overview?.renameHistory.heuristicApplied)}</dd></div>
-                <div><dt>Hybrid</dt><dd>{formatMetric(props.overview?.renameHistory.hybridApplied)}</dd></div>
-                <div><dt>Batch</dt><dd>{formatMetric(props.overview?.renameHistory.batchApplied)}</dd></div>
-                <div><dt>Preview only</dt><dd>{formatMetric(props.overview?.renameHistory.previewOnly)}</dd></div>
+                <div><dt>{inline("启发式", "Heuristic")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.heuristicApplied, uiLanguage)}</dd></div>
+                <div><dt>{inline("混合", "Hybrid")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.hybridApplied, uiLanguage)}</dd></div>
+                <div><dt>{inline("批量", "Batch")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.batchApplied, uiLanguage)}</dd></div>
+                <div><dt>{inline("仅预览", "Preview only")}</dt><dd>{formatUiNumber(props.overview?.renameHistory.previewOnly, uiLanguage)}</dd></div>
               </dl>
             </article>
           </div>
         </section>
 
         <section className="detail-panel settings-panel">
-          <p className="panel-kicker">Style</p>
-          <h3>Naming</h3>
+          <p className="panel-kicker">{tt("style")}</p>
+          <h3>{tt("naming")}</h3>
           <p className="settings-copy">
-            Control the visible session title format, context extraction strategy, and whether the rename engine stays heuristic or asks AI for structure.
+            {inline("控制会话标题格式、上下文提取策略，以及 rename 引擎是保持 heuristic 还是调用 AI。", "Control the visible session title format, context extraction strategy, and whether the rename engine stays heuristic or asks AI for structure.")}
           </p>
           <label className="settings-field">
-            <span>Preset</span>
+            <span>{tt("preset")}</span>
             <input
               value={draft.namingPreset}
               onChange={(event) => {
@@ -338,7 +395,7 @@ export function SettingsPanel(props: {
             />
           </label>
           <label className="settings-field settings-field-wide">
-            <span>Template</span>
+            <span>{tt("template")}</span>
             <textarea
               rows={3}
               value={draft.namingTemplate}
@@ -350,7 +407,20 @@ export function SettingsPanel(props: {
           </label>
           <div className="settings-two-up">
             <label className="settings-field">
-              <span>Language</span>
+              <span>{tt("uiLanguage")}</span>
+              <select
+                value={draft.uiLanguage}
+                onChange={(event) => {
+                  setDirty(true);
+                  setDraft({ ...draft, uiLanguage: event.target.value as "en-US" | "zh-CN" });
+                }}
+              >
+                <option value="en-US">English</option>
+                <option value="zh-CN">中文</option>
+              </select>
+            </label>
+            <label className="settings-field">
+              <span>{tt("language")}</span>
               <input
                 value={draft.namingLanguage}
                 onChange={(event) => {
@@ -360,7 +430,7 @@ export function SettingsPanel(props: {
               />
             </label>
             <label className="settings-field">
-              <span>Max length</span>
+              <span>{tt("maxLength")}</span>
               <input
                 value={draft.namingMaxLength}
                 onChange={(event) => {
@@ -372,7 +442,7 @@ export function SettingsPanel(props: {
           </div>
           <div className="settings-two-up">
             <label className="settings-field">
-              <span>Rename mode</span>
+              <span>{tt("renameMode")}</span>
               <select
                 value={draft.renameMode}
                 onChange={(event) => {
@@ -386,7 +456,7 @@ export function SettingsPanel(props: {
               </select>
             </label>
             <label className="settings-field">
-              <span>Auto apply</span>
+              <span>{tt("autoApply")}</span>
               <select
                 value={draft.renameAutoApply}
                 onChange={(event) => {
@@ -410,7 +480,7 @@ export function SettingsPanel(props: {
                 }}
                 type="checkbox"
               />
-              Manual override wins
+              {tt("manualOverrideWins")}
             </label>
             <label className="toggle">
               <input
@@ -421,62 +491,62 @@ export function SettingsPanel(props: {
                 }}
                 type="checkbox"
               />
-              Freeze manual name
+              {tt("freezeManualName")}
             </label>
           </div>
         </section>
 
         <section className="detail-panel settings-panel">
-          <p className="panel-kicker">Scheduler</p>
-          <h3>Auto Rename Watch</h3>
+          <p className="panel-kicker">{tt("scheduler")}</p>
+          <h3>{tt("autoRenameWatch")}</h3>
           <p className="settings-copy">
-            These thresholds decide when a changed session becomes a candidate and when it is stable enough to finalize back into Codex.
+            {inline("这些阈值决定一个变更中的 session 什么时候进入候选阶段，以及什么时候稳定到可以回写到 Codex。", "These thresholds decide when a changed session becomes a candidate and when it is stable enough to finalize back into Codex.")}
           </p>
           <div className="settings-two-up">
             <label className="settings-field">
-              <span>Scan interval</span>
+              <span>{tt("scanInterval")}</span>
               <input value={draft.scanIntervalSeconds} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, scanIntervalSeconds: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Candidate idle</span>
+              <span>{tt("candidateIdle")}</span>
               <input value={draft.candidateIdleSeconds} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, candidateIdleSeconds: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Finalize idle</span>
+              <span>{tt("finalizeIdle")}</span>
               <input value={draft.finalizeIdleSeconds} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, finalizeIdleSeconds: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Rename cooldown</span>
+              <span>{tt("renameCooldown")}</span>
               <input value={draft.renameCooldownSeconds} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, renameCooldownSeconds: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Min rollout growth</span>
+              <span>{tt("minRolloutGrowth")}</span>
               <input value={draft.minRolloutGrowthBytes} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, minRolloutGrowthBytes: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Min task delta</span>
+              <span>{tt("minTaskDelta")}</span>
               <input value={draft.minTaskCompleteDelta} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, minTaskCompleteDelta: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Max auto renames / session</span>
+              <span>{tt("maxAutoRenames")}</span>
               <input value={draft.maxAutoRenamesPerSession} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, maxAutoRenamesPerSession: event.target.value });
@@ -486,14 +556,14 @@ export function SettingsPanel(props: {
         </section>
 
         <section className="detail-panel settings-panel">
-          <p className="panel-kicker">Provider</p>
-          <h3>AI</h3>
+          <p className="panel-kicker">{tt("provider")}</p>
+          <h3>{tt("ai")}</h3>
           <p className="settings-copy">
-            Pick whether naming runs through inherited Codex credentials or an explicit OpenAI-compatible profile, and tune the active profile below.
+            {inline("选择命名是走继承的 Codex 凭据，还是显式的 OpenAI-compatible 提供方配置，并在下面调整当前配置。", "Pick whether naming runs through inherited Codex credentials or an explicit OpenAI-compatible profile, and tune the active profile below.")}
           </p>
           <div className="settings-two-up">
             <label className="settings-field">
-              <span>Backend</span>
+              <span>{tt("backend")}</span>
               <select value={draft.aiBackend} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, aiBackend: event.target.value });
@@ -504,7 +574,7 @@ export function SettingsPanel(props: {
               </select>
             </label>
             <label className="settings-field">
-              <span>Provider source</span>
+              <span>{tt("providerSource")}</span>
               <select value={draft.aiProviderSource} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, aiProviderSource: event.target.value });
@@ -514,12 +584,15 @@ export function SettingsPanel(props: {
               </select>
             </label>
             <label className="settings-field">
-              <span>Active profile</span>
+              <span>{tt("activeProfile")}</span>
               <select value={draft.aiProfile} onChange={(event) => {
                 const nextProfileId = event.target.value;
                 setDirty(true);
                 setDraft({ ...draft, aiProfile: nextProfileId, selectedProfileId: nextProfileId });
               }}>
+                {draft.providerProfiles.length === 0 ? (
+                  <option value="">{selectedProfileLabel}</option>
+                ) : null}
                 {draft.providerProfiles.map((profile) => (
                   <option key={profile.profileId} value={profile.profileId}>
                     {profile.profileId}
@@ -528,10 +601,13 @@ export function SettingsPanel(props: {
               </select>
             </label>
             <label className="settings-field">
-              <span>Edit profile</span>
+              <span>{tt("editProfile")}</span>
               <select value={draft.selectedProfileId} onChange={(event) => {
                 setDraft({ ...draft, selectedProfileId: event.target.value });
               }}>
+                {draft.providerProfiles.length === 0 ? (
+                  <option value="">{selectedProfileLabel}</option>
+                ) : null}
                 {draft.providerProfiles.map((profile) => (
                   <option key={profile.profileId} value={profile.profileId}>
                     {profile.profileId}
@@ -540,14 +616,14 @@ export function SettingsPanel(props: {
               </select>
             </label>
             <label className="settings-field">
-              <span>Timeout seconds</span>
+              <span>{tt("timeoutSeconds")}</span>
               <input value={draft.aiTimeoutSeconds} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, aiTimeoutSeconds: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Temperature</span>
+              <span>{tt("temperature")}</span>
               <input value={draft.aiTemperature} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, aiTemperature: event.target.value });
@@ -559,7 +635,7 @@ export function SettingsPanel(props: {
             <div className="settings-profile-block">
               <div className="settings-two-up">
                 <label className="settings-field">
-                  <span>Display name</span>
+                  <span>{tt("displayName")}</span>
                   <input value={selectedProfile.displayName ?? ""} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -571,7 +647,7 @@ export function SettingsPanel(props: {
                   }} />
                 </label>
                 <label className="settings-field">
-                  <span>Backend kind</span>
+                  <span>{tt("backendKind")}</span>
                   <select value={selectedProfile.backendKind ?? "openai-compatible"} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -587,7 +663,7 @@ export function SettingsPanel(props: {
                   </select>
                 </label>
                 <label className="settings-field">
-                  <span>Profile source</span>
+                  <span>{tt("profileSource")}</span>
                   <select value={selectedProfile.providerSource ?? "explicit"} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -602,7 +678,7 @@ export function SettingsPanel(props: {
                   </select>
                 </label>
                 <label className="settings-field">
-                  <span>Provider ref</span>
+                  <span>{tt("providerRef")}</span>
                   <input value={selectedProfile.providerRef ?? ""} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -614,7 +690,7 @@ export function SettingsPanel(props: {
                   }} />
                 </label>
                 <label className="settings-field">
-                  <span>Base URL</span>
+                  <span>{tt("baseUrl")}</span>
                   <input value={selectedProfile.baseUrl ?? ""} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -626,7 +702,7 @@ export function SettingsPanel(props: {
                   }} />
                 </label>
                 <label className="settings-field">
-                  <span>Model</span>
+                  <span>{tt("model")}</span>
                   <input value={selectedProfile.model ?? ""} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -638,7 +714,7 @@ export function SettingsPanel(props: {
                   }} />
                 </label>
                 <label className="settings-field">
-                  <span>Wire API</span>
+                  <span>{tt("wireApi")}</span>
                   <select value={selectedProfile.wireApi ?? "auto"} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -654,7 +730,7 @@ export function SettingsPanel(props: {
                   </select>
                 </label>
                 <label className="settings-field">
-                  <span>API key</span>
+                  <span>{tt("apiKey")}</span>
                   <input value={selectedProfile.apiKey ?? ""} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -666,7 +742,7 @@ export function SettingsPanel(props: {
                   }} />
                 </label>
                 <label className="settings-field">
-                  <span>API key ref</span>
+                  <span>{tt("apiKeyRef")}</span>
                   <input value={selectedProfile.apiKeyRef ?? ""} onChange={(event) => {
                     setDirty(true);
                     setDraft({
@@ -689,7 +765,7 @@ export function SettingsPanel(props: {
                       })
                     });
                   }} type="checkbox" />
-                  Enabled
+                  {tt("enabled")}
                 </label>
                 <label className="toggle">
                   <input checked={selectedProfile.isDefault ?? false} onChange={(event) => {
@@ -702,29 +778,33 @@ export function SettingsPanel(props: {
                       }))
                     });
                   }} type="checkbox" />
-                  Default profile
+                  {tt("defaultProfile")}
                 </label>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="history-empty">
+              {inline("当前没有显式 provider profile，命名会使用继承的 Codex provider。", "No explicit provider profile is configured. Naming will use the inherited Codex provider.")}
+            </div>
+          )}
         </section>
 
         <section className="detail-panel settings-panel">
-          <p className="panel-kicker">Housekeeping</p>
-          <h3>Maintenance</h3>
+          <p className="panel-kicker">{tt("housekeeping")}</p>
+          <h3>{tt("maintenance")}</h3>
           <p className="settings-copy">
-            Compact thresholds only affect suggestions and maintenance workflows. They do not rewrite the index automatically.
+            {inline("压缩阈值只影响建议和维护工作流，不会自动改写 index。", "Compact thresholds only affect suggestions and maintenance workflows. They do not rewrite the index automatically.")}
           </p>
           <div className="settings-two-up">
             <label className="settings-field">
-              <span>Suggest compact above MB</span>
+              <span>{tt("suggestCompactMb")}</span>
               <input value={draft.maintenanceCompactMb} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, maintenanceCompactMb: event.target.value });
               }} />
             </label>
             <label className="settings-field">
-              <span>Suggest compact above lines</span>
+              <span>{tt("suggestCompactLines")}</span>
               <input value={draft.maintenanceCompactLines} onChange={(event) => {
                 setDirty(true);
                 setDraft({ ...draft, maintenanceCompactLines: event.target.value });
@@ -737,44 +817,100 @@ export function SettingsPanel(props: {
                 setDirty(true);
                 setDraft({ ...draft, maintenanceBackupBeforeCompact: event.target.checked });
               }} type="checkbox" />
-              Backup before compact
+              {tt("backupBeforeCompact")}
             </label>
           </div>
         </section>
 
         <section className="detail-panel settings-panel">
-          <p className="panel-kicker">Runtime</p>
-          <h3>Resolved Environment</h3>
+          <p className="panel-kicker">{tt("runtime")}</p>
+          <h3>{tt("resolvedEnvironment")}</h3>
           <dl className="settings-readonly">
             <div>
-              <dt>User config</dt>
-              <dd>{props.configView.paths.userConfigPath}</dd>
+              <dt>{tt("userConfig")}</dt>
+              <dd>{props.configView.paths.userConfigPath || tt("nA")}</dd>
             </div>
             <div>
-              <dt>Project override</dt>
-              <dd>{props.configView.paths.projectConfigPath}</dd>
+              <dt>{tt("projectOverride")}</dt>
+              <dd>{props.configView.paths.projectConfigPath || tt("nA")}</dd>
             </div>
             <div>
-              <dt>Resolved backend</dt>
-              <dd>{String(props.providers?.resolvedProvider?.resolvedBackend ?? "n/a")}</dd>
+              <dt>{tt("resolvedBackend")}</dt>
+              <dd>{String(props.providers?.resolvedProvider?.resolvedBackend ?? tt("nA"))}</dd>
             </div>
             <div>
-              <dt>Resolved transport</dt>
-              <dd>{String(props.providers?.resolvedProvider?.transport ?? "n/a")}</dd>
+              <dt>{tt("resolvedTransport")}</dt>
+              <dd>{String(props.providers?.resolvedProvider?.transport ?? tt("nA"))}</dd>
             </div>
             <div>
-              <dt>Inherited model provider</dt>
-              <dd>{String(inheritedCodex.modelProvider ?? "n/a")}</dd>
+              <dt>{tt("inheritedModelProvider")}</dt>
+              <dd>{String(inheritedCodex.modelProvider ?? tt("nA"))}</dd>
             </div>
             <div>
-              <dt>Inherited model</dt>
-              <dd>{String(inheritedCodex.model ?? "n/a")}</dd>
+              <dt>{tt("inheritedModel")}</dt>
+              <dd>{String(inheritedCodex.model ?? tt("nA"))}</dd>
+            </div>
+            <div>
+              <dt>{tt("selectedProfile")}</dt>
+              <dd>{selectedProfileLabel}</dd>
+            </div>
+            <div>
+              <dt>{tt("baseUrl")}</dt>
+              <dd>{selectedBaseUrl}</dd>
+            </div>
+            <div>
+              <dt>{tt("model")}</dt>
+              <dd>{selectedModel}</dd>
+            </div>
+            <div>
+              <dt>{tt("wireApi")}</dt>
+              <dd>{selectedWireApi}</dd>
             </div>
           </dl>
           <details className="settings-disclosure">
-            <summary>Inspect resolved provider payload</summary>
+            <summary>{tt("inspectResolvedProvider")}</summary>
             <pre className="settings-json">{JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}</pre>
           </details>
+        </section>
+
+        <section className="detail-panel settings-panel settings-span-wide">
+          <div className="panel-topline">
+            <div>
+              <p className="panel-kicker">{tt("ai")}</p>
+              <h3>{tt("promptPreview")}</h3>
+              <p className="settings-copy">{tt("promptPreviewCopy")}</p>
+            </div>
+            <button className="btn-sm" onClick={() => void props.onRefreshPromptPreview()} type="button">
+              {props.promptPreviewRefreshing ? tt("refreshing") : tt("refresh")}
+            </button>
+          </div>
+          <dl className="settings-readonly">
+            <div>
+              <dt>{inline("来源", "Source")}</dt>
+              <dd>
+                {props.promptPreview
+                  ? props.promptPreview.synthetic
+                    ? tt("promptSynthetic")
+                    : tt("promptForSelected")
+                  : tt("nA")}
+              </dd>
+            </div>
+            <div>
+              <dt>{inline("线程", "Thread")}</dt>
+              <dd>{props.promptPreview?.threadId ?? tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{inline("上下文策略", "Context Strategy")}</dt>
+              <dd>{props.promptPreview?.renameContext.strategy ?? tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{inline("预览状态", "Preview Status")}</dt>
+              <dd>{autoRenameStatusLabel(promptPreviewStatus, uiLanguage)}</dd>
+            </div>
+          </dl>
+          <pre className="settings-json">
+            {props.promptPreview?.prompt ?? (props.promptPreviewRefreshing ? tt("loadingPrompt") : tt("noPreviewLoaded"))}
+          </pre>
         </section>
       </div>
     </section>

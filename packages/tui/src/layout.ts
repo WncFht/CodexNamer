@@ -86,6 +86,43 @@ export function truncateDisplayText(value: string | undefined, maxWidth: number,
   return output;
 }
 
+export function wrapDisplayText(value: string | undefined, maxWidth: number, fallback = "n/a"): string[] {
+  const safe = value?.trim() || fallback;
+  if (safe.length === 0) {
+    return [fallback];
+  }
+  if (maxWidth <= 1) {
+    return ["…"];
+  }
+
+  const lines: string[] = [];
+  for (const rawLine of safe.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0) {
+      lines.push("");
+      continue;
+    }
+
+    let current = "";
+    let currentWidth = 0;
+    for (const char of line) {
+      const charWidth = getCharWidth(char);
+      if (currentWidth + charWidth > maxWidth && current.length > 0) {
+        lines.push(current);
+        current = char;
+        currentWidth = charWidth;
+        continue;
+      }
+      current += char;
+      currentWidth += charWidth;
+    }
+
+    lines.push(current);
+  }
+
+  return lines.length > 0 ? lines : [fallback];
+}
+
 export function computeTerminalLayout(
   metrics: TerminalMetrics,
   options?: TerminalLayoutOptions
@@ -98,7 +135,7 @@ export function computeTerminalLayout(
   const showPreview = options?.showPreview ?? false;
 
   const compact = columns < 108 || rows < 26 || area < 2_900;
-  const stacked = screenMode === "settings" ? true : compact || columns < 146 || rows < 33 || area < 4_400;
+  const stacked = screenMode === "settings" ? true : compact || columns < 144 || rows < 33 || area < 4_400;
   const contentWidth = Math.max(columns - 4, 48);
   const previewHeight =
     screenMode !== "browser" || !showPreview ? 0 : compact ? 7 : stacked ? 8 : 9;

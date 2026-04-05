@@ -6,6 +6,7 @@ import type {
   ConfigView,
   DoctorResponse,
   OverviewResponse,
+  PromptPreviewResponse,
   ProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
@@ -24,7 +25,8 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 
   const response = await fetch(input, {
     ...init,
-    headers
+    headers,
+    cache: init?.cache ?? "no-store"
   });
 
   if (!response.ok) {
@@ -151,6 +153,14 @@ export async function fetchAutoRenamePreview(params?: {
     url.searchParams.set("limit", String(params.limit));
   }
   return requestJson<AutoRenamePreviewResponse>(url.toString());
+}
+
+export async function fetchPromptPreview(threadId?: string): Promise<PromptPreviewResponse> {
+  const url = new URL("/api/v1/ai/prompt-preview", window.location.origin);
+  if (threadId) {
+    url.searchParams.set("threadId", threadId);
+  }
+  return requestJson<PromptPreviewResponse>(url.toString());
 }
 
 export async function fetchEvents(cursor: number): Promise<ApiEventsResponse> {

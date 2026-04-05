@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { fetchSessionTranscript } from "./api.js";
 import { formatWhen, transcriptTone } from "./browser-utils.js";
+import { t, transcriptRoleLabel, type UiLanguage } from "./i18n.js";
 import type { SessionDetail, SessionTranscriptPage } from "./types.js";
 
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
@@ -43,6 +44,7 @@ export function TranscriptPanel(props: {
   detail: SessionDetail;
   showHiddenTranscript: boolean;
   onToggleShowHiddenTranscript: (value: boolean) => void;
+  uiLanguage: UiLanguage;
 }) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<TranscriptRoleFilter>("all");
@@ -123,17 +125,18 @@ export function TranscriptPanel(props: {
   const hiddenOlderCount = Math.max(0, (pageState?.totalItems ?? 0) - totalShown);
 
   const renderedItems = useMemo(() => items, [items]);
+  const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
 
   return (
     <section className="chat-view-shell">
       <div className="chat-toolbar">
         <div className="chat-toolbar-copy">
-          <p className="panel-kicker">Transcript</p>
+          <p className="panel-kicker">{tt("transcript")}</p>
           <label className="chat-search">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search in conversation..."
+              placeholder={tt("searchConversation")}
             />
           </label>
         </div>
@@ -145,7 +148,7 @@ export function TranscriptPanel(props: {
               onClick={() => setRole(item)}
               type="button"
             >
-              {item}
+              {transcriptRoleLabel(item, props.uiLanguage)}
             </button>
           ))}
           <label className="toggle compact">
@@ -154,30 +157,30 @@ export function TranscriptPanel(props: {
               onChange={(event) => props.onToggleShowHiddenTranscript(event.target.checked)}
               type="checkbox"
             />
-            Show hidden
+            {tt("showHidden")}
           </label>
         </div>
       </div>
 
       <div className="chat-meta-strip">
-        <span>{pageState?.counts.visible ?? 0} visible</span>
-        <span>{pageState?.counts.hidden ?? 0} hidden</span>
-        <span>{pageState?.counts.tools ?? 0} tool events</span>
-        <span>{pageState?.totalItems ?? 0} matched</span>
+        <span>{pageState?.counts.visible ?? 0} {tt("visibleCount")}</span>
+        <span>{pageState?.counts.hidden ?? 0} {tt("hiddenCount")}</span>
+        <span>{pageState?.counts.tools ?? 0} {tt("toolEvents")}</span>
+        <span>{pageState?.totalItems ?? 0} {tt("matched")}</span>
       </div>
 
       <div className="chat-messages">
         {pageState?.hasMore ? (
           <div className="load-more">
             <button className="btn-sm" onClick={() => void loadEarlier()} type="button">
-              {loading ? "Loading..." : `Load earlier messages (${Math.min(hiddenOlderCount, pageState.pageSize)})`}
+              {loading ? tt("loading") : `${tt("loadEarlierMessages")} (${Math.min(hiddenOlderCount, pageState.pageSize)})`}
             </button>
           </div>
         ) : null}
 
         {error ? <div className="error-banner transcript-error">{error}</div> : null}
         {!loading && renderedItems.length === 0 ? (
-          <div className="empty-note">No transcript events matched the current filters.</div>
+          <div className="empty-note">{tt("noTranscript")}</div>
         ) : null}
 
         <div className="messages-container">
@@ -185,12 +188,12 @@ export function TranscriptPanel(props: {
             <article className="message-turn" data-role={item.role} key={item.id}>
               <div className="turn-header">
                 <div className="turn-header-left">
-                  <span className={`message-role ${transcriptTone(item.role)}`}>{item.role}</span>
+                  <span className={`message-role ${transcriptTone(item.role)}`}>{transcriptRoleLabel(item.role, props.uiLanguage)}</span>
                   <span className="kind-pill">{item.kind}</span>
                   {item.name ? <span className="kind-pill">{item.name}</span> : null}
                   {item.hiddenReason ? <span className="kind-pill subtle">{item.hiddenReason}</span> : null}
                 </div>
-                <span className="message-time">{formatWhen(item.timestamp)}</span>
+                <span className="message-time">{formatWhen(item.timestamp, props.uiLanguage)}</span>
               </div>
               <pre className="turn-body">{highlightContent(item.content, deferredQuery)}</pre>
             </article>

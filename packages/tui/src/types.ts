@@ -2,6 +2,7 @@ export type SessionSummary = {
   threadId: string;
   cwd?: string;
   projectName?: string;
+  firstUserMessage?: string;
   updatedAt?: string;
   officialName?: string;
   candidateName?: string;
@@ -79,10 +80,45 @@ export type SessionsResponse = {
 export type BatchApplyResponse = {
   items: Array<{
     threadId: string;
+    action: "applied" | "skipped" | "preview";
+    name?: string;
+    reason?: string;
+  }>;
+};
+
+export type AutoRenamePreviewResponse = {
+  items: Array<{
+    threadId: string;
     candidateName?: string;
-    status: "skip" | "apply";
+    status: "skip" | "suggest" | "apply";
     reason: string;
   }>;
+};
+
+export type PromptPreviewResponse = {
+  threadId: string;
+  synthetic: boolean;
+  prompt: string;
+  renameContext: {
+    requestedStrategy: string;
+    strategy: string;
+    maxChars: number;
+    text: string;
+    truncated: boolean;
+    fallbackReason?: string;
+    selectedChars: number;
+    segments: Array<{
+      role: "user" | "assistant";
+      content: string;
+      source: string;
+      timestamp?: string;
+    }>;
+    summarySignals: {
+      firstUserMessage?: string;
+      lastUserMessage?: string;
+      lastAgentMessage?: string;
+    };
+  };
 };
 
 export type ProviderProfile = {
@@ -102,6 +138,9 @@ export type ProviderProfile = {
 };
 
 export type ConfigDocument = {
+  general?: {
+    uiLanguage?: "en-US" | "zh-CN";
+  };
   rename?: {
     mode?: "heuristic" | "ai" | "hybrid";
     autoApply?: "off" | "idle-finalize" | "suggest-only";

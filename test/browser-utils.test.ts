@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { groupSessionsByTime, sessionDisplayTitle } from "../packages/web/src/browser-utils.js";
+import {
+  groupSessionsByTime,
+  sessionDisplayTitle,
+  sessionListSubtitle,
+  sessionListTitle
+} from "../packages/web/src/browser-utils.js";
 
 describe("browser-utils", () => {
   test("groups sessions by recency buckets", () => {
@@ -73,5 +78,23 @@ describe("browser-utils", () => {
         taskCompleteCount: 0
       })
     ).toBe("Official");
+  });
+
+  test("prefers the first user message in the session list while keeping the rename in subtitle", () => {
+    const session = {
+      threadId: "abc",
+      firstUserMessage: "修复 settings 保存后被重置的问题",
+      officialName: "fix(settings): persist ui language",
+      candidateName: "Candidate",
+      workspaceId: "w",
+      workspaceLabel: "w",
+      dirty: false,
+      frozen: false,
+      manualOverride: false,
+      taskCompleteCount: 0
+    };
+
+    expect(sessionListTitle(session)).toBe("修复 settings 保存后被重置的问题");
+    expect(sessionListSubtitle(session)).toBe("fix(settings): persist ui language");
   });
 });

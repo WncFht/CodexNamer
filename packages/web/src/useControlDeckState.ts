@@ -8,6 +8,7 @@ import {
   fetchEvents,
   fetchOverview,
   fetchProviders,
+  fetchPromptPreview,
   fetchSessionDetail,
   fetchSessions,
   freezeSession,
@@ -22,6 +23,7 @@ import type {
   ConfigView,
   DoctorResponse,
   OverviewResponse,
+  PromptPreviewResponse,
   ProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
@@ -63,6 +65,8 @@ export function useControlDeckState() {
   const [notice, setNotice] = useState<UiNotice | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
+  const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
+  const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const deferredSearch = useDeferredValue(search);
   const eventCursorRef = useRef(0);
@@ -115,6 +119,20 @@ export function useControlDeckState() {
     } finally {
       if (options?.urgent) {
         setPreviewRefreshing(false);
+      }
+    }
+  };
+
+  const reloadPromptPreview = async (options?: { threadId?: string; urgent?: boolean }) => {
+    if (options?.urgent) {
+      setPromptPreviewRefreshing(true);
+    }
+    try {
+      const payload = await fetchPromptPreview(options?.threadId);
+      setPromptPreview(payload);
+    } finally {
+      if (options?.urgent) {
+        setPromptPreviewRefreshing(false);
       }
     }
   };
@@ -182,8 +200,15 @@ export function useControlDeckState() {
     if (tab !== "maintenance") {
       return;
     }
-    void reloadPreview({ includeCandidateNames: true, urgent: true });
+    void reloadPreview({ includeCandidateNames: false, urgent: true });
   }, [tab]);
+
+  useEffect(() => {
+    void reloadPromptPreview({
+      threadId: selectedId,
+      urgent: false
+    });
+  }, [selectedId, configView?.effectiveConfig]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -220,6 +245,7 @@ export function useControlDeckState() {
       void reloadSessions();
       void reloadSidePanels().catch(() => undefined);
       void reloadPreview().catch(() => undefined);
+      void reloadPromptPreview({ threadId: selectedId }).catch(() => undefined);
       if (selectedId) {
         void fetchSessionDetail(selectedId)
           .then(setDetail)
@@ -244,6 +270,7 @@ export function useControlDeckState() {
           void reloadSessions();
           void reloadSidePanels().catch(() => undefined);
           void reloadPreview().catch(() => undefined);
+          void reloadPromptPreview({ threadId: selectedId }).catch(() => undefined);
           if (selectedId) {
             void fetchSessionDetail(selectedId)
               .then(setDetail)
@@ -263,7 +290,8 @@ export function useControlDeckState() {
   const refreshAfterAction = (threadId: string) => {
     void reloadSessions();
     void reloadSidePanels().catch(() => undefined);
-    void reloadPreview({ includeCandidateNames: tab === "maintenance" }).catch(() => undefined);
+    void reloadPreview({ includeCandidateNames: false }).catch(() => undefined);
+    void reloadPromptPreview({ threadId }).catch(() => undefined);
     void fetchSessionDetail(threadId)
       .then(setDetail)
       .catch(() => undefined);
@@ -315,6 +343,7 @@ export function useControlDeckState() {
       const result = await updateConfig(userConfig);
       setConfigView(result.config);
       await reloadSidePanels();
+      await reloadPromptPreview({ threadId: selectedId });
       setNotice({
         tone: "success",
         text: result.restartRequired
@@ -362,10 +391,13 @@ export function useControlDeckState() {
     setNotice,
     lastSyncAt,
     previewRefreshing,
+    promptPreview,
+    promptPreviewRefreshing,
     savingConfig,
     selectedSummary,
     refreshSessions: reloadSessions,
     refreshPreview: reloadPreview,
+    refreshPromptPreview: () => reloadPromptPreview({ threadId: selectedId, urgent: true }),
     refreshSidePanels: reloadSidePanels,
     saveConfig,
     actions: {

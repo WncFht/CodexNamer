@@ -1,7 +1,15 @@
 import * as React from "react";
 
 import type { UiNotice } from "./useControlDeckState.js";
-import { formatWhen, groupSessionsByTime, sessionDisplayTitle, toneForSession } from "./browser-utils.js";
+import {
+  formatWhen,
+  groupSessionsByTime,
+  sessionDisplayTitle,
+  sessionListSubtitle,
+  sessionListTitle,
+  toneForSession
+} from "./browser-utils.js";
+import { autoRenameReasonLabel, autoRenameStatusLabel, sessionStatusLabel, t, type UiLanguage } from "./i18n.js";
 import { TranscriptPanel } from "./TranscriptPanel.js";
 import type { SessionDetail, SessionSummary } from "./types.js";
 
@@ -21,6 +29,7 @@ export function SessionBrowser(props: {
   showHiddenTranscript: boolean;
   error: string | null;
   notice: UiNotice | null;
+  uiLanguage: UiLanguage;
   onSearchChange: (value: string) => void;
   onDirtyOnlyChange: (value: boolean) => void;
   onToggleShowHiddenTranscript: (value: boolean) => void;
@@ -34,24 +43,25 @@ export function SessionBrowser(props: {
   onToggleFreeze: () => void | Promise<void>;
   onToggleManualOverride: () => void | Promise<void>;
 }) {
-  const groupedSessions = groupSessionsByTime(props.sessions);
+  const groupedSessions = groupSessionsByTime(props.sessions, props.uiLanguage);
   const actionLabelLower = props.actionLabel?.toLowerCase();
+  const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
 
   return (
     <section className={props.sessionPaneCollapsed ? "history-layout session-pane-collapsed" : "history-layout"}>
       <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"}>
         <header className="view-header session-list-header">
           <div>
-            <p className="panel-kicker">Conversation Archive</p>
+            <p className="panel-kicker">{tt("conversationArchive")}</p>
             <h2>{props.selectedWorkspaceLabel}</h2>
-            <span className="badge">{props.sessions.length} sessions</span>
+            <span className="badge">{props.sessions.length} {tt("sessionCountSuffix")}</span>
           </div>
           <div className="header-actions">
             <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
-              {props.sessionPaneCollapsed ? "Show Sessions" : "Hide Sessions"}
+              {props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions")}
             </button>
-            <button className="btn-refresh" onClick={props.onRefresh} title="Refresh" type="button">
-              &#8635; Refresh
+            <button className="btn-refresh" onClick={props.onRefresh} title={tt("refresh")} type="button">
+              &#8635; {tt("refresh")}
             </button>
             <label className="checkbox-inline">
               <input
@@ -59,22 +69,22 @@ export function SessionBrowser(props: {
                 onChange={(event) => props.onDirtyOnlyChange(event.target.checked)}
                 type="checkbox"
               />
-              Dirty only
+              {tt("dirtyOnly")}
             </label>
             <input
               className="filter-input"
               onChange={(event) => props.onSearchChange(event.target.value)}
-              placeholder="Filter sessions..."
+              placeholder={tt("filterSessions")}
               value={props.search}
             />
           </div>
         </header>
 
         <div className="session-list">
-          {props.loadingSessions ? <div className="loading-state history-empty">Loading sessions...</div> : null}
+          {props.loadingSessions ? <div className="loading-state history-empty">{tt("loadingSessions")}</div> : null}
           {!props.loadingSessions && props.sessions.length === 0 ? (
             <div className="history-empty">
-              {props.error ? "API not ready yet. The dashboard will retry automatically." : "No sessions matched the current filter."}
+              {props.error ? tt("apiNotReady") : tt("noSessions")}
             </div>
           ) : null}
           {groupedSessions.map((group) => (
@@ -92,15 +102,15 @@ export function SessionBrowser(props: {
                 >
                   <div className="session-item-topline">
                     <span className={`session-status-dot ${toneForSession(session)}`} />
-                    <span className="session-updated">{formatWhen(session.updatedAt)}</span>
-                    <span className="session-state-label">{session.statusEstimate ?? "unknown"}</span>
+                    <span className="session-updated">{formatWhen(session.updatedAt, props.uiLanguage)}</span>
+                    <span className="session-state-label">{sessionStatusLabel(session.statusEstimate, props.uiLanguage)}</span>
                   </div>
-                  <div className="session-item-title">{sessionDisplayTitle(session)}</div>
-                  <div className="session-item-subtitle">{session.candidateName ?? session.threadId}</div>
+                  <div className="session-item-title">{sessionListTitle(session)}</div>
+                  <div className="session-item-subtitle">{sessionListSubtitle(session)}</div>
                   <div className="session-item-meta">
                     <span>{session.workspaceLabel}</span>
-                    <span>{session.provider ?? "unknown provider"}</span>
-                    <span>{session.taskCompleteCount} tasks</span>
+                    <span>{session.provider ?? tt("unknownProvider")}</span>
+                    <span>{session.taskCompleteCount} {props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}</span>
                   </div>
                 </button>
               ))}
@@ -125,45 +135,45 @@ export function SessionBrowser(props: {
             <header className="view-header chat-header">
               <div className="chat-title-wrap">
                 <div className="chat-title-block">
-                  <p className="panel-kicker">Selected Session</p>
+                  <p className="panel-kicker">{tt("selectedSession")}</p>
                   <h2 className="editable-title">{sessionDisplayTitle(props.detail)}</h2>
                   <div className="chat-meta-bar">
                     <span>{props.detail.cwd ?? props.detail.workspaceLabel}</span>
-                    <span>{props.detail.provider ?? "unknown provider"}</span>
-                    <span>{props.detail.model ?? "unknown model"}</span>
-                    <span>{props.detail.tokenTotal} tokens</span>
+                    <span>{props.detail.provider ?? tt("unknownProvider")}</span>
+                    <span>{props.detail.model ?? tt("unknownModel")}</span>
+                    <span>{props.detail.tokenTotal} {props.uiLanguage === "zh-CN" ? "tokens" : "tokens"}</span>
                   </div>
                 </div>
                 <div className="chat-header-right">
                   <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
-                    {props.sessionPaneCollapsed ? "Show Sessions" : "Hide Sessions"}
+                    {props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions")}
                   </button>
-                  {props.detail.dirty ? <span className="chip danger">dirty</span> : <span className="chip success">clean</span>}
-                  {props.detail.frozen ? <span className="chip warning">frozen</span> : null}
-                  {props.detail.manualOverride ? <span className="chip manual">manual</span> : null}
+                  {props.detail.dirty ? <span className="chip danger">{tt("dirty")}</span> : <span className="chip success">{tt("clean")}</span>}
+                  {props.detail.frozen ? <span className="chip warning">{tt("frozen")}</span> : null}
+                  {props.detail.manualOverride ? <span className="chip manual">{tt("manual")}</span> : null}
                   <button className="btn-sm" disabled={props.actioning} onClick={props.onSuggest} type="button">
-                    {props.actioning && props.actionLabel?.includes("Suggest") ? "Suggesting..." : "Suggest"}
+                    {props.actioning && props.actionLabel?.includes("Suggest") ? tt("suggesting") : tt("suggest")}
                   </button>
                   <button className="btn-sm" disabled={props.actioning} onClick={props.onApply} type="button">
-                    {props.actioning && props.actionLabel?.includes("Applying") ? "Applying..." : "Apply"}
+                    {props.actioning && props.actionLabel?.includes("Applying") ? tt("applying") : tt("apply")}
                   </button>
                   <button className="btn-sm" disabled={props.actioning} onClick={props.onToggleFreeze} type="button">
                     {props.actioning && actionLabelLower?.includes("freez")
                       ? props.detail.frozen
-                        ? "Unfreezing..."
-                        : "Freezing..."
+                        ? tt("unfreezing")
+                        : tt("freezing")
                       : props.detail.frozen
-                        ? "Unfreeze"
-                        : "Freeze"}
+                        ? tt("unfreeze")
+                        : tt("freeze")}
                   </button>
                   <button className="btn-sm" disabled={props.actioning} onClick={props.onToggleManualOverride} type="button">
                     {props.actioning && actionLabelLower?.includes("manual")
                       ? props.detail.manualOverride
-                        ? "Clearing..."
-                        : "Saving..."
+                        ? tt("clearing")
+                        : tt("saving")
                       : props.detail.manualOverride
-                        ? "Clear Manual"
-                        : "Manual Override"}
+                        ? tt("clearManual")
+                        : tt("manualOverride")}
                   </button>
                 </div>
               </div>
@@ -173,39 +183,41 @@ export function SessionBrowser(props: {
               <div className="error-banner notice-banner error">{props.error}</div>
             ) : null}
 
-            {props.loadingDetail ? <div className="loading-state chat-loading">Loading session detail...</div> : null}
+            {props.loadingDetail ? <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div> : null}
 
             <TranscriptPanel
               detail={props.detail}
               showHiddenTranscript={props.showHiddenTranscript}
               onToggleShowHiddenTranscript={props.onToggleShowHiddenTranscript}
+              uiLanguage={props.uiLanguage}
             />
 
             <div className="chat-footer-panels single-panel">
               <section className="detail-panel">
-                <p className="panel-kicker">Timeline</p>
-                <h3>Rename history</h3>
+                <p className="panel-kicker">{tt("timeline")}</p>
+                <h3>{tt("renameHistory")}</h3>
                 <div className="history-stack">
                   {(props.detail.renameHistory ?? []).slice(0, 10).map((entry, index) => (
                     <article className="history-row" key={`${index}-${entry.appliedAt}-${entry.newName}`}>
                       <div>
                         <strong>{entry.newName}</strong>
                         <p>
-                          {entry.kind} / {entry.source} / {entry.status}
+                          {entry.kind} / {entry.source} / {autoRenameStatusLabel(entry.status, props.uiLanguage)}
+                          {entry.reason ? ` / ${autoRenameReasonLabel(entry.reason, props.uiLanguage)}` : ""}
                         </p>
                       </div>
-                      <span>{formatWhen(entry.appliedAt)}</span>
+                      <span>{formatWhen(entry.appliedAt, props.uiLanguage)}</span>
                     </article>
                   ))}
                   {(props.detail.renameHistory ?? []).length === 0 ? (
-                    <div className="history-empty">No rename history yet.</div>
+                    <div className="history-empty">{tt("noRenameHistory")}</div>
                   ) : null}
                 </div>
               </section>
             </div>
           </>
         ) : (
-          <div className="history-empty">Select a session to inspect transcript and rename history.</div>
+          <div className="history-empty">{tt("selectSessionHint")}</div>
         )}
       </section>
     </section>

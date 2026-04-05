@@ -126,9 +126,19 @@ describe("local api", () => {
 
   it("supports session filters and auto-rename preview endpoint", async () => {
     const workspace = await createTempWorkspace();
+    const candidateReadyAt = new Date(Date.now() - 3 * 60_000).toISOString();
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
+      watch: {
+        scanIntervalSeconds: 300,
+        candidateIdleSeconds: 60,
+        finalizeIdleSeconds: 600,
+        renameCooldownSeconds: 900,
+        minRolloutGrowthBytes: 4096,
+        minTaskCompleteDelta: 1,
+        maxAutoRenamesPerSession: 2
+      }
     });
     cleanup.push(async () => manager.close());
 
@@ -136,7 +146,8 @@ describe("local api", () => {
       codexHome: workspace.codexHome,
       threadId: "019d-api-filter-1",
       userMessage: "实现 web 页面",
-      lastAgentMessage: "已经补上 sessions 页面"
+      lastAgentMessage: "已经补上 sessions 页面",
+      updatedAt: candidateReadyAt
     });
     await writeRolloutFixture({
       codexHome: workspace.codexHome,
@@ -168,6 +179,16 @@ describe("local api", () => {
     });
     expect(preview.statusCode).toBe(200);
     expect(Array.isArray(preview.json().items)).toBe(true);
+    expect(preview.json().items.find((item: { threadId: string }) => item.threadId === "019d-api-filter-1")?.status).toBe("suggest");
+
+    const promptPreview = await app.inject({
+      method: "GET",
+      url: "/api/v1/ai/prompt-preview?threadId=019d-api-filter-1"
+    });
+    expect(promptPreview.statusCode).toBe(200);
+    expect(promptPreview.json().threadId).toBe("019d-api-filter-1");
+    expect(promptPreview.json().prompt).toContain("实现 web 页面");
+    expect(promptPreview.json().renameContext.strategy).toBeDefined();
   });
 
   it("returns paginated session transcript details", async () => {
@@ -255,6 +276,9 @@ describe("local api", () => {
       method: "PUT",
       url: "/api/v1/config",
       payload: {
+        general: {
+          uiLanguage: "zh-CN"
+        },
         naming: {
           maxLength: 48,
           template: "{{summary}}"
@@ -265,6 +289,7 @@ describe("local api", () => {
       }
     });
     expect(update.statusCode).toBe(200);
+    expect(update.json().config.effectiveConfig.general.uiLanguage).toBe("zh-CN");
     expect(update.json().config.effectiveConfig.naming.maxLength).toBe(48);
     expect(update.json().config.effectiveConfig.watch.candidateIdleSeconds).toBe(33);
 
@@ -276,6 +301,7 @@ describe("local api", () => {
     expect(events.json().items.some((item: { type: string }) => item.type === "config.updated")).toBe(true);
 
     const written = await fs.readFile(configPath, "utf8");
+    expect(written).toContain('ui_language = "zh-CN"');
     expect(written).toContain('max_length = 48');
     expect(written).toContain('candidate_idle_seconds = 33');
   });

@@ -3,11 +3,22 @@ import { Box, Text, useApp, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 
 import { LocalApiClient } from "./api.js";
+import {
+  autoRenameReasonLabel,
+  autoRenameStatusLabel,
+  formatUiWhen,
+  normalizeUiLanguage,
+  sessionStatusLabel,
+  t,
+  type UiLanguage
+} from "./i18n.js";
 import { computeTerminalLayout, measureDisplayWidth, truncateDisplayText, wrapDisplayText } from "./layout.js";
 import type {
+  AutoRenamePreviewResponse,
   BatchApplyResponse,
   ConfigDocument,
   ConfigView,
+  PromptPreviewResponse,
   ProviderProfile,
   SessionDetail,
   SessionSummary,
@@ -21,6 +32,7 @@ type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
 type ScreenMode = "browser" | "settings";
 type BrowserViewMode = "split" | "detail" | "sessions";
 type SettingKey =
+  | "uiLanguage"
   | "namingTemplate"
   | "namingMaxLength"
   | "namingLanguage"
@@ -42,6 +54,7 @@ type SettingKey =
   | "providerWireApi";
 
 type SettingsDraft = {
+  uiLanguage: UiLanguage;
   namingTemplate: string;
   namingMaxLength: string;
   namingLanguage: string;
@@ -81,21 +94,52 @@ const THEME = {
   bgDark: "#141413"
 } as const;
 
-function formatWhen(value?: string): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  return new Date(value).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
-
 function compactWhitespace(value: string | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function inLanguage(language: UiLanguage, zh: string, en: string): string {
+  return language === "zh-CN" ? zh : en;
+}
+
+function transcriptRoleLabel(role: SessionTranscriptEntry["role"] | "all", language: UiLanguage): string {
+  const map =
+    language === "zh-CN"
+      ? {
+          all: "全部",
+          user: "用户",
+          assistant: "助手",
+          tool: "工具",
+          system: "系统"
+        }
+      : {
+          all: "all",
+          user: "user",
+          assistant: "assistant",
+          tool: "tool",
+          system: "system"
+        };
+  return map[role];
+}
+
+function transcriptKindLabel(kind: SessionTranscriptEntry["kind"], language: UiLanguage): string {
+  const map =
+    language === "zh-CN"
+      ? {
+          message: "消息",
+          tool_call: "工具调用",
+          tool_output: "工具输出",
+          reasoning: "思考",
+          status: "状态"
+        }
+      : {
+          message: "message",
+          tool_call: "tool_call",
+          tool_output: "tool_output",
+          reasoning: "reasoning",
+          status: "status"
+        };
+  return map[kind];
 }
 
 function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: number): Array<{ item: T; index: number }> {
@@ -200,6 +244,7 @@ function normalizeProfile(raw: unknown): ProviderProfile {
 
 function buildSettingsDraft(configView: ConfigView): SettingsDraft {
   const effective = asRecord(configView.effectiveConfig);
+  const general = asRecord(effective.general);
   const naming = asRecord(effective.naming);
   const rename = asRecord(effective.rename);
   const watch = asRecord(effective.watch);
@@ -209,6 +254,7 @@ function buildSettingsDraft(configView: ConfigView): SettingsDraft {
   const selectedProfile = profiles.find((profile) => profile.profileId === selectedProfileId) ?? profiles[0];
 
   return {
+    uiLanguage: general.uiLanguage === "zh-CN" ? "zh-CN" : "en-US",
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
     namingLanguage: asString(naming.language, "zh-CN"),
@@ -259,6 +305,9 @@ function fitDisplayLine(value: string | undefined, width: number, fallback = "n/
 
 function encodeSettingsDraft(draft: SettingsDraft): ConfigDocument {
   return {
+    general: {
+      uiLanguage: draft.uiLanguage
+    },
     rename: {
       mode: draft.renameMode as RenameMode,
       autoApply: draft.renameAutoApply as RenameAutoApply
@@ -309,17 +358,21 @@ function SessionRow(props: {
   session: SessionSummary;
   active: boolean;
   width: number;
+  uiLanguage: UiLanguage;
 }) {
   const title = props.session.officialName ?? props.session.candidateName ?? props.session.threadId;
   const line1 = truncateDisplayText(title, props.width);
   const line2 = truncateDisplayText(
     [
-      formatWhen(props.session.updatedAt),
+      formatUiWhen(props.session.updatedAt, props.uiLanguage),
       props.session.projectName ?? props.session.cwd ?? "n/a",
       props.session.provider ?? "n/a",
-      props.session.dirty ? "dirty" : "clean",
-      props.session.frozen ? "frozen" : null,
-      props.session.manualOverride ? "manual" : null
+      props.session.dirty
+        ? inLanguage(props.uiLanguage, "dirty", "dirty")
+        : inLanguage(props.uiLanguage, "clean", "clean"),
+      props.session.frozen ? inLanguage(props.uiLanguage, "冻结", "frozen") : null,
+      props.session.manualOverride ? inLanguage(props.uiLanguage, "手动覆盖", "manual") : null,
+      props.session.statusEstimate ? sessionStatusLabel(props.session.statusEstimate, props.uiLanguage) : null
     ]
       .filter(Boolean)
       .join(" · "),
@@ -351,11 +404,16 @@ function TranscriptRow(props: {
   active: boolean;
   width: number;
   compact: boolean;
+  uiLanguage: UiLanguage;
 }) {
-  const header = [props.entry.role, props.entry.kind, props.entry.name ?? props.entry.phase ?? props.entry.hiddenReason ?? null]
+  const header = [
+    transcriptRoleLabel(props.entry.role, props.uiLanguage),
+    transcriptKindLabel(props.entry.kind, props.uiLanguage),
+    props.entry.name ?? props.entry.phase ?? props.entry.hiddenReason ?? null
+  ]
     .filter(Boolean)
     .join(" · ");
-  const content = compactWhitespace(props.entry.content) || "(empty)";
+  const content = compactWhitespace(props.entry.content) || inLanguage(props.uiLanguage, "(空)", "(empty)");
 
   return (
     <Box flexDirection="column" width={props.width} marginBottom={props.compact ? 0 : 1}>
@@ -368,7 +426,7 @@ function TranscriptRow(props: {
           {fitDisplayLine(header, Math.max(12, props.width - 14), "")}
         </Text>
         <Text color={props.active ? THEME.bgDark : THEME.muted} backgroundColor={props.active ? THEME.bgAccent : undefined}>
-          {fitDisplayLine(formatWhen(props.entry.timestamp), 11, "")}
+          {fitDisplayLine(formatUiWhen(props.entry.timestamp, props.uiLanguage), 11, "")}
         </Text>
       </Box>
       <Text color={props.active ? THEME.bgDark : THEME.text} backgroundColor={props.active ? THEME.bgAccent : undefined} wrap="truncate-end">
@@ -378,11 +436,13 @@ function TranscriptRow(props: {
   );
 }
 
-function PreviewRow(props: { item: BatchApplyResponse["items"][number]; width: number }) {
-  const tone = props.item.status === "apply" ? THEME.success : THEME.muted;
-  const content = `${truncateDisplayText(props.item.threadId, 12)} | ${props.item.status} | ${
-    props.item.candidateName ?? props.item.reason
-  }`;
+function PreviewRow(props: { item: AutoRenamePreviewResponse["items"][number]; width: number; uiLanguage: UiLanguage }) {
+  const tone =
+    props.item.status === "apply" ? THEME.success : props.item.status === "suggest" ? THEME.warning : THEME.muted;
+  const content = `${truncateDisplayText(props.item.threadId, 12)} | ${autoRenameStatusLabel(
+    props.item.status,
+    props.uiLanguage
+  )} | ${truncateDisplayText(props.item.candidateName ?? autoRenameReasonLabel(props.item.reason, props.uiLanguage), Math.max(18, props.width - 24))}`;
   return (
     <Box width={props.width}>
       <Text color={tone} wrap="truncate-end">
@@ -429,7 +489,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading sessions...");
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<BatchApplyResponse["items"]>([]);
+  const [preview, setPreview] = useState<AutoRenamePreviewResponse["items"]>([]);
   const [transcriptPage, setTranscriptPage] = useState<SessionTranscriptPage | null>(null);
   const [transcriptItems, setTranscriptItems] = useState<SessionTranscriptEntry[]>([]);
   const [transcriptIndex, setTranscriptIndex] = useState(0);
@@ -443,6 +503,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsIndex, setSettingsIndex] = useState(0);
+  const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
+  const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
   const metrics = useTerminalMetrics();
   const layout = computeTerminalLayout(metrics, {
     screenMode,
@@ -468,31 +530,37 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const selectedProfile = settingsDraft?.providerProfiles.find(
     (profile) => profile.profileId === settingsDraft.selectedProfileId
   );
+  const uiLanguage = normalizeUiLanguage(configView);
+  const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
+  const previewSuggestCount = preview.filter((item) => item.status === "suggest").length;
+  const previewApplyCount = preview.filter((item) => item.status === "apply").length;
+  const previewSkipCount = preview.filter((item) => item.status === "skip").length;
 
   const settingsFields = useMemo(() => {
     const profile = selectedProfile;
     return [
-      { key: "namingTemplate", label: "Naming / Template", value: settingsDraft?.namingTemplate ?? "" },
-      { key: "namingMaxLength", label: "Naming / Max length", value: settingsDraft?.namingMaxLength ?? "" },
-      { key: "namingLanguage", label: "Naming / Language", value: settingsDraft?.namingLanguage ?? "" },
-      { key: "namingContextStrategy", label: "Naming / Context strategy", value: settingsDraft?.namingContextStrategy ?? "" },
-      { key: "namingContextMaxChars", label: "Naming / Context max chars", value: settingsDraft?.namingContextMaxChars ?? "" },
-      { key: "renameMode", label: "Rename / Mode", value: settingsDraft?.renameMode ?? "" },
-      { key: "renameAutoApply", label: "Rename / Auto apply", value: settingsDraft?.renameAutoApply ?? "" },
-      { key: "candidateIdleSeconds", label: "Cadence / Candidate idle sec", value: settingsDraft?.candidateIdleSeconds ?? "" },
-      { key: "finalizeIdleSeconds", label: "Cadence / Finalize idle sec", value: settingsDraft?.finalizeIdleSeconds ?? "" },
-      { key: "renameCooldownSeconds", label: "Cadence / Cooldown sec", value: settingsDraft?.renameCooldownSeconds ?? "" },
+      { key: "uiLanguage", label: inLanguage(uiLanguage, "界面 / 语言", "UI / Language"), value: settingsDraft?.uiLanguage ?? "" },
+      { key: "namingTemplate", label: inLanguage(uiLanguage, "命名 / 模板", "Naming / Template"), value: settingsDraft?.namingTemplate ?? "" },
+      { key: "namingMaxLength", label: inLanguage(uiLanguage, "命名 / 最大长度", "Naming / Max length"), value: settingsDraft?.namingMaxLength ?? "" },
+      { key: "namingLanguage", label: inLanguage(uiLanguage, "命名 / 语言", "Naming / Language"), value: settingsDraft?.namingLanguage ?? "" },
+      { key: "namingContextStrategy", label: inLanguage(uiLanguage, "命名 / 上下文策略", "Naming / Context strategy"), value: settingsDraft?.namingContextStrategy ?? "" },
+      { key: "namingContextMaxChars", label: inLanguage(uiLanguage, "命名 / 上下文长度上限", "Naming / Context max chars"), value: settingsDraft?.namingContextMaxChars ?? "" },
+      { key: "renameMode", label: inLanguage(uiLanguage, "重命名 / 模式", "Rename / Mode"), value: settingsDraft?.renameMode ?? "" },
+      { key: "renameAutoApply", label: inLanguage(uiLanguage, "重命名 / 自动应用", "Rename / Auto apply"), value: settingsDraft?.renameAutoApply ?? "" },
+      { key: "candidateIdleSeconds", label: inLanguage(uiLanguage, "节奏 / 候选空闲秒数", "Cadence / Candidate idle sec"), value: settingsDraft?.candidateIdleSeconds ?? "" },
+      { key: "finalizeIdleSeconds", label: inLanguage(uiLanguage, "节奏 / 终稿空闲秒数", "Cadence / Finalize idle sec"), value: settingsDraft?.finalizeIdleSeconds ?? "" },
+      { key: "renameCooldownSeconds", label: inLanguage(uiLanguage, "节奏 / 冷却秒数", "Cadence / Cooldown sec"), value: settingsDraft?.renameCooldownSeconds ?? "" },
       { key: "aiBackend", label: "AI / Backend", value: settingsDraft?.aiBackend ?? "" },
-      { key: "aiProviderSource", label: "AI / Provider source", value: settingsDraft?.aiProviderSource ?? "" },
+      { key: "aiProviderSource", label: inLanguage(uiLanguage, "AI / Provider 来源", "AI / Provider source"), value: settingsDraft?.aiProviderSource ?? "" },
       { key: "aiProfile", label: "AI / Profile", value: settingsDraft?.aiProfile ?? "" },
-      { key: "aiTimeoutSeconds", label: "AI / Timeout", value: settingsDraft?.aiTimeoutSeconds ?? "" },
-      { key: "aiTemperature", label: "AI / Temperature", value: settingsDraft?.aiTemperature ?? "" },
-      { key: "providerBaseUrl", label: `Provider / baseUrl (${profile?.profileId ?? "n/a"})`, value: profile?.baseUrl ?? "" },
-      { key: "providerModel", label: "Provider / model", value: profile?.model ?? "" },
-      { key: "providerApiKey", label: "Provider / apiKey", value: profile?.apiKey ?? "" },
-      { key: "providerWireApi", label: "Provider / wireApi", value: profile?.wireApi ?? "" }
+      { key: "aiTimeoutSeconds", label: inLanguage(uiLanguage, "AI / 超时", "AI / Timeout"), value: settingsDraft?.aiTimeoutSeconds ?? "" },
+      { key: "aiTemperature", label: inLanguage(uiLanguage, "AI / 温度", "AI / Temperature"), value: settingsDraft?.aiTemperature ?? "" },
+      { key: "providerBaseUrl", label: inLanguage(uiLanguage, `Provider / Base URL (${profile?.profileId ?? tt("nA")})`, `Provider / baseUrl (${profile?.profileId ?? tt("nA")})`), value: profile?.baseUrl ?? "" },
+      { key: "providerModel", label: inLanguage(uiLanguage, "Provider / 模型", "Provider / model"), value: profile?.model ?? "" },
+      { key: "providerApiKey", label: "Provider / API key", value: profile?.apiKey ?? "" },
+      { key: "providerWireApi", label: "Provider / Wire API", value: profile?.wireApi ?? "" }
     ] as Array<{ key: SettingKey; label: string; value: string }>;
-  }, [selectedProfile, settingsDraft]);
+  }, [selectedProfile, settingsDraft, tt, uiLanguage]);
 
   const activeSetting = settingsFields[settingsIndex];
 
@@ -520,9 +588,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           ? payload.items.findIndex((item) => item.threadId === selected.threadId)
           : 0;
       setSelectedIndex(nextIndex >= 0 ? nextIndex : 0);
-      setMessage(`Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`);
+      setMessage(
+        inLanguage(
+          uiLanguage,
+          `已加载 ${payload.items.length} 个会话（dirty ${payload.counts.dirty} / 冻结 ${payload.counts.frozen}）`,
+          `Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`
+        )
+      );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
       setSessions([]);
       setSelectedIndex(0);
     } finally {
@@ -541,7 +615,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       setDetail(payload);
       setRenameDraft(payload.candidateName ?? payload.officialName ?? "");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
       setDetail(null);
     }
   };
@@ -567,7 +641,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       setTranscriptItems(payload.items);
       setTranscriptIndex(Math.max(0, payload.items.length - 1));
     } catch (nextError) {
-      setTranscriptError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setTranscriptError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
       setTranscriptPage(null);
       setTranscriptItems([]);
       setTranscriptIndex(0);
@@ -584,7 +658,28 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         setSettingsDraft(buildSettingsDraft(payload));
       }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    }
+  };
+
+  const reloadPromptPreview = async (threadId?: string, options?: { silent?: boolean }) => {
+    setPromptPreviewRefreshing(true);
+    try {
+      const payload = await client.getPromptPreview(threadId);
+      setPromptPreview(payload);
+      if (!options?.silent) {
+        setMessage(
+          inLanguage(
+            uiLanguage,
+            payload.synthetic ? "已刷新 synthetic prompt 预览" : "已刷新当前会话 prompt 预览",
+            payload.synthetic ? "Refreshed synthetic prompt preview" : "Refreshed prompt preview for selected session"
+          )
+        );
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setPromptPreviewRefreshing(false);
     }
   };
 
@@ -605,9 +700,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       setTranscriptItems((previous) => [...payload.items, ...previous]);
       setTranscriptPage(payload);
       setTranscriptIndex((previous) => previous + payload.items.length);
-      setMessage(`Loaded ${payload.items.length} earlier transcript events`);
+      setMessage(
+        inLanguage(
+          uiLanguage,
+          `已加载更早的 ${payload.items.length} 条 transcript 事件`,
+          `Loaded ${payload.items.length} earlier transcript events`
+        )
+      );
     } catch (nextError) {
-      setTranscriptError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setTranscriptError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
     } finally {
       setTranscriptLoading(false);
     }
@@ -620,14 +721,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
     setLoading(true);
     setError(null);
-    setMessage("Running action...");
+    setMessage(inLanguage(uiLanguage, "正在执行操作...", "Running action..."));
     try {
       await operation();
       await reloadSessions(selected.threadId);
       await reloadDetail(selected.threadId);
+      await reloadPromptPreview(selected.threadId, { silent: true });
       setMessage(successMessage);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
     } finally {
       setLoading(false);
     }
@@ -635,13 +737,24 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
   const refreshPreview = async () => {
     try {
-      setMessage("Refreshing preview...");
-      const payload = await client.batchApplyDirty(true);
+      setMessage(inLanguage(uiLanguage, "正在刷新自动命名预览...", "Refreshing auto-rename preview..."));
+      const payload = await client.getAutoRenamePreview({
+        includeCandidateNames: true,
+        limit: 12
+      });
       setPreview(payload.items.slice(0, 12));
       setShowPreviewPanel(true);
-      setMessage(`Preview refreshed: ${payload.items.filter((item) => item.status === "apply").length} ready`);
+      const suggestCount = payload.items.filter((item) => item.status === "suggest").length;
+      const applyCount = payload.items.filter((item) => item.status === "apply").length;
+      setMessage(
+        inLanguage(
+          uiLanguage,
+          `预览已刷新：建议 ${suggestCount} / 应用 ${applyCount}`,
+          `Preview refreshed: ${suggestCount} suggest / ${applyCount} apply`
+        )
+      );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
     }
   };
 
@@ -679,6 +792,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
 
     setSettingsDirty(true);
+    if (key === "uiLanguage") {
+      setSettingsDraft({ ...settingsDraft, uiLanguage: cycle(settingsDraft.uiLanguage, ["en-US", "zh-CN"] as const) });
+      return;
+    }
     if (key === "renameMode") {
       setSettingsDraft({ ...settingsDraft, renameMode: cycle(settingsDraft.renameMode, ["heuristic", "hybrid", "ai"] as const) });
       return;
@@ -719,15 +836,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
     setLoading(true);
     setError(null);
-    setMessage("Saving settings...");
+    setMessage(inLanguage(uiLanguage, "正在保存设置...", "Saving settings..."));
     try {
       const payload = await client.updateConfig(encodeSettingsDraft(settingsDraft));
       setConfigView(payload.config);
       setSettingsDraft(buildSettingsDraft(payload.config));
       setSettingsDirty(false);
-      setMessage(payload.restartRequired ? "Saved settings (restart required)." : "Saved settings.");
+      await reloadPromptPreview(selected?.threadId, { silent: true });
+      setMessage(
+        payload.restartRequired
+          ? inLanguage(uiLanguage, "设置已保存（需要重启）。", "Saved settings (restart required).")
+          : inLanguage(uiLanguage, "设置已保存。", "Saved settings.")
+      );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unknown error");
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
     } finally {
       setLoading(false);
     }
@@ -745,6 +867,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   useEffect(() => {
     void reloadTranscript(selected?.threadId);
   }, [selected?.threadId, showHiddenTranscript, transcriptRole]);
+
+  useEffect(() => {
+    void reloadPromptPreview(selected?.threadId, { silent: true });
+  }, [selected?.threadId]);
 
   useEffect(() => {
     setExpandedTranscript(false);
@@ -818,9 +944,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         void saveSettings();
         return;
       }
+      if (input === "p") {
+        void reloadPromptPreview(selected?.threadId);
+        return;
+      }
       if (input === "R") {
         setSettingsDirty(false);
         void reloadConfig();
+        void reloadPromptPreview(selected?.threadId, { silent: true });
         return;
       }
       return;
@@ -991,19 +1122,37 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
 
     if (input === "s" && selected) {
-      void runAction(() => client.suggest(selected.threadId), `Suggested ${truncateDisplayText(selected.threadId, 12)}`);
+      void runAction(
+        () => client.suggest(selected.threadId),
+        inLanguage(
+          uiLanguage,
+          `已建议 ${truncateDisplayText(selected.threadId, 12)}`,
+          `Suggested ${truncateDisplayText(selected.threadId, 12)}`
+        )
+      );
       return;
     }
 
     if (input === "a" && selected) {
-      void runAction(() => client.apply(selected.threadId), `Applied ${truncateDisplayText(selected.threadId, 12)}`);
+      void runAction(
+        () => client.apply(selected.threadId),
+        inLanguage(
+          uiLanguage,
+          `已应用 ${truncateDisplayText(selected.threadId, 12)}`,
+          `Applied ${truncateDisplayText(selected.threadId, 12)}`
+        )
+      );
       return;
     }
 
     if (input === "f" && detail) {
       void runAction(
         () => client.freeze(detail.threadId, !detail.frozen),
-        `${detail.frozen ? "Unfroze" : "Froze"} ${truncateDisplayText(detail.threadId, 12)}`
+        inLanguage(
+          uiLanguage,
+          `${detail.frozen ? "已解冻" : "已冻结"} ${truncateDisplayText(detail.threadId, 12)}`,
+          `${detail.frozen ? "Unfroze" : "Froze"} ${truncateDisplayText(detail.threadId, 12)}`
+        )
       );
       return;
     }
@@ -1011,7 +1160,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (input === "m" && detail) {
       void runAction(
         () => client.setManualOverride(detail.threadId, !detail.manualOverride),
-        `${detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${truncateDisplayText(detail.threadId, 12)}`
+        inLanguage(
+          uiLanguage,
+          `${detail.manualOverride ? "已清除手动覆盖" : "已启用手动覆盖"} ${truncateDisplayText(detail.threadId, 12)}`,
+          `${detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${truncateDisplayText(detail.threadId, 12)}`
+        )
       );
       return;
     }
@@ -1019,18 +1172,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (input === "A") {
       setLoading(true);
       setError(null);
-      setMessage("Applying batch rename...");
+      setMessage(inLanguage(uiLanguage, "正在批量应用命名...", "Applying batch rename..."));
       void client
         .batchApplyDirty(false)
-        .then(async (payload) => {
-          setPreview(payload.items.slice(0, 12));
+        .then(async (payload: BatchApplyResponse) => {
+          await refreshPreview();
           setShowPreviewPanel(true);
-          setMessage(`Batch apply finished: ${payload.items.filter((item) => item.status === "apply").length} applied candidates`);
+          setMessage(
+            inLanguage(
+              uiLanguage,
+              `批量应用完成：已应用 ${payload.items.filter((item) => item.action === "applied").length} 个候选名`,
+              `Batch apply finished: ${payload.items.filter((item) => item.action === "applied").length} applied candidates`
+            )
+          );
           await reloadSessions(selected?.threadId);
           await reloadDetail(selected?.threadId);
+          await reloadPromptPreview(selected?.threadId, { silent: true });
         })
         .catch((nextError) => {
-          setError(nextError instanceof Error ? nextError.message : "Unknown error");
+          setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
         })
         .finally(() => {
           setLoading(false);
@@ -1040,10 +1200,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
   const transcriptSummary = useMemo(() => {
     if (!transcriptPage) {
-      return "Transcript not loaded";
+      return inLanguage(uiLanguage, "尚未加载 transcript", "Transcript not loaded");
     }
-    return `${transcriptItems.length}/${transcriptPage.totalItems} loaded · ${transcriptRole} · ${showHiddenTranscript ? "hidden:on" : "hidden:off"}`;
-  }, [showHiddenTranscript, transcriptItems.length, transcriptPage, transcriptRole]);
+    return `${transcriptItems.length}/${transcriptPage.totalItems} ${inLanguage(uiLanguage, "已加载", "loaded")} · ${transcriptRoleLabel(
+      transcriptRole,
+      uiLanguage
+    )} · ${showHiddenTranscript ? inLanguage(uiLanguage, "隐藏:开", "hidden:on") : inLanguage(uiLanguage, "隐藏:关", "hidden:off")}`;
+  }, [showHiddenTranscript, transcriptItems.length, transcriptPage, transcriptRole, uiLanguage]);
 
   const selectedTranscript = transcriptItems[transcriptIndex];
   const expandedTranscriptLines = useMemo(() => {
@@ -1059,14 +1222,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     normalizedExpandedTranscriptScroll,
     normalizedExpandedTranscriptScroll + expandedTranscriptVisibleCount
   );
-  const detailTitle = detail ? detail.officialName ?? detail.candidateName ?? detail.threadId : "No session selected";
+  const detailTitle = detail
+    ? detail.officialName ?? detail.candidateName ?? detail.threadId
+    : inLanguage(uiLanguage, "当前未选中会话", "No session selected");
   const detailTitleLines = useMemo(
     () => wrapDisplayText(detailTitle, layout.detailInnerWidth).slice(0, 2),
     [detailTitle, layout.detailInnerWidth]
   );
   const resolvedProviderSummary = asRecord(configView?.effectiveConfig).resolvedProvider
     ? JSON.stringify(asRecord(asRecord(configView?.effectiveConfig).resolvedProvider))
-    : "n/a";
+    : tt("nA");
+  const settingsPromptLineBudget = Math.max(3, layout.topSectionHeight - 11);
+  const settingsPromptLines = useMemo(() => {
+    const promptText =
+      promptPreview?.prompt ??
+      (promptPreviewRefreshing
+        ? inLanguage(uiLanguage, "正在加载 prompt 预览...", "Loading prompt preview...")
+        : tt("noPreviewLoaded"));
+    return wrapDisplayText(promptText, layout.detailInnerWidth).slice(0, settingsPromptLineBudget);
+  }, [layout.detailInnerWidth, promptPreview?.prompt, promptPreviewRefreshing, settingsPromptLineBudget, tt, uiLanguage]);
 
   useEffect(() => {
     if (expandedTranscriptScroll > expandedTranscriptMaxScroll) {
@@ -1078,7 +1252,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     <Box flexDirection="column" width={layout.listWidth} height={layout.listHeight}>
       <Box justifyContent="space-between" width={layout.listWidth}>
         <Text color={focusPane === "sessions" ? THEME.accent : THEME.muted}>
-          {focusPane === "sessions" ? "Archive / " : ""}Sessions [{sessions.length}]
+          {focusPane === "sessions" ? inLanguage(uiLanguage, "归档 / ", "Archive / ") : ""}
+          {inLanguage(uiLanguage, "会话", "Sessions")} [{sessions.length}]
         </Text>
         <Text color={THEME.muted}>
           {browserViewMode} {layout.columns}x{layout.rows}
@@ -1093,13 +1268,18 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         height={Math.max(4, layout.listHeight - 1)}
         overflow="hidden"
       >
-        {sessions.length === 0 ? <Text color={THEME.muted}>No sessions matched the current filter.</Text> : null}
+        {sessions.length === 0 ? (
+          <Text color={THEME.muted}>
+            {inLanguage(uiLanguage, "当前筛选下没有匹配会话。", "No sessions matched the current filter.")}
+          </Text>
+        ) : null}
         {visibleSessions.map(({ item, index }) => (
           <SessionRow
             key={`${index}-${item.threadId}`}
             session={item}
             active={focusPane === "sessions" && index === selectedIndex}
             width={layout.listInnerWidth}
+            uiLanguage={uiLanguage}
           />
         ))}
       </Box>
@@ -1110,7 +1290,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     <Box flexDirection="column" width={layout.detailWidth} height={layout.detailHeight}>
       <Box justifyContent="space-between" width={layout.detailWidth}>
         <Text color={focusPane === "transcript" ? THEME.accent : THEME.muted}>
-          {focusPane === "transcript" ? "Reading room / " : ""}Detail & Transcript
+          {focusPane === "transcript" ? inLanguage(uiLanguage, "阅读 / ", "Reading room / ") : ""}
+          {inLanguage(uiLanguage, "详情与 Transcript", "Detail & Transcript")}
         </Text>
         <Text color={THEME.muted}>{expandedTranscript ? "expanded-entry" : transcriptSummary}</Text>
       </Box>
@@ -1136,7 +1317,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
-            [`updated ${formatWhen(detail?.updatedAt)}`, `${detail?.tokenTotal ?? 0} tokens`, detail?.dirty ? "dirty" : "clean", detail?.frozen ? "frozen" : null, detail?.manualOverride ? "manual" : null]
+            [
+              `${inLanguage(uiLanguage, "更新于", "updated")} ${formatUiWhen(detail?.updatedAt, uiLanguage)}`,
+              `${detail?.tokenTotal ?? 0} tokens`,
+              detail?.dirty ? inLanguage(uiLanguage, "dirty", "dirty") : inLanguage(uiLanguage, "clean", "clean"),
+              detail?.frozen ? inLanguage(uiLanguage, "冻结", "frozen") : null,
+              detail?.manualOverride ? inLanguage(uiLanguage, "手动覆盖", "manual") : null
+            ]
               .filter(Boolean)
               .join(" | "),
             layout.detailInnerWidth
@@ -1145,23 +1332,31 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color={THEME.manual} wrap="truncate-end">
           {fitDisplayLine(
             detail?.candidateName
-              ? `candidate: ${truncateDisplayText(detail.candidateName, Math.max(12, layout.detailInnerWidth - 11))}`
-              : "candidate: n/a",
+              ? `${inLanguage(uiLanguage, "候选名", "candidate")}: ${truncateDisplayText(detail.candidateName, Math.max(12, layout.detailInnerWidth - 11))}`
+              : `${inLanguage(uiLanguage, "候选名", "candidate")}: ${tt("nA")}`,
             layout.detailInnerWidth
           )}
         </Text>
         {detail?.renameHistory?.[0] ? (
           <Text color={THEME.muted} wrap="truncate-end">
             {fitDisplayLine(
-              `last rename: ${detail.renameHistory[0].newName} | ${detail.renameHistory[0].kind}/${detail.renameHistory[0].source} | ${formatWhen(detail.renameHistory[0].appliedAt)}`,
+              `${inLanguage(uiLanguage, "最近一次命名", "last rename")}: ${detail.renameHistory[0].newName} | ${detail.renameHistory[0].kind}/${detail.renameHistory[0].source} | ${formatUiWhen(detail.renameHistory[0].appliedAt, uiLanguage)}`,
               layout.detailInnerWidth
             )}
           </Text>
         ) : (
-          <Text color={THEME.muted}>{fitDisplayLine("last rename: none", layout.detailInnerWidth)}</Text>
+          <Text color={THEME.muted}>
+            {fitDisplayLine(inLanguage(uiLanguage, "最近一次命名: 无", "last rename: none"), layout.detailInnerWidth)}
+          </Text>
         )}
         <Box marginTop={1} width={layout.detailInnerWidth}>
-          <Text color={THEME.accent}>{transcriptLoading ? "Loading transcript..." : expandedTranscript ? "Expanded entry" : "Conversation"}</Text>
+          <Text color={THEME.accent}>
+            {transcriptLoading
+              ? inLanguage(uiLanguage, "正在加载 transcript...", "Loading transcript...")
+              : expandedTranscript
+                ? inLanguage(uiLanguage, "展开条目", "Expanded entry")
+                : inLanguage(uiLanguage, "会话内容", "Conversation")}
+          </Text>
         </Box>
         {transcriptError ? (
           <Text color={THEME.danger} wrap="truncate-end">
@@ -1169,7 +1364,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           </Text>
         ) : null}
         {!expandedTranscript && visibleTranscript.length === 0 && !transcriptLoading ? (
-          <Text color={THEME.muted}>No transcript events matched the current filter.</Text>
+          <Text color={THEME.muted}>
+            {inLanguage(uiLanguage, "当前筛选下没有匹配的 transcript 事件。", "No transcript events matched the current filter.")}
+          </Text>
         ) : null}
         {expandedTranscript
           ? visibleExpandedTranscriptLines.map((line: string, index: number) => (
@@ -1184,6 +1381,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 active={focusPane === "transcript" && index === transcriptIndex}
                 width={layout.detailInnerWidth}
                 compact={layout.compact && browserViewMode !== "detail"}
+                uiLanguage={uiLanguage}
               />
             ))}
         {expandedTranscript ? (
@@ -1191,11 +1389,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(
                 selectedTranscript
-                  ? `${selectedTranscript.role}/${selectedTranscript.kind} · lines ${normalizedExpandedTranscriptScroll + 1}-${Math.min(
+                  ? `${transcriptRoleLabel(selectedTranscript.role, uiLanguage)}/${transcriptKindLabel(selectedTranscript.kind, uiLanguage)} · ${inLanguage(uiLanguage, "行", "lines")} ${normalizedExpandedTranscriptScroll + 1}-${Math.min(
                       normalizedExpandedTranscriptScroll + expandedTranscriptVisibleCount,
                       expandedTranscriptLines.length
-                    )}/${expandedTranscriptLines.length} · enter/esc close`
-                  : "No transcript selected",
+                    )}/${expandedTranscriptLines.length} · ${inLanguage(uiLanguage, "回车/esc 关闭", "enter/esc close")}`
+                  : inLanguage(uiLanguage, "当前没有选中的 transcript 条目", "No transcript selected"),
                 layout.detailInnerWidth
               )}
             </Text>
@@ -1206,28 +1404,28 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               <Text color={THEME.muted} wrap="truncate-end">
                 {fitDisplayLine(
                   selectedTranscript
-                    ? `selected: ${selectedTranscript.role}/${selectedTranscript.kind} · ${formatWhen(selectedTranscript.timestamp)} · enter expand`
+                    ? `${inLanguage(uiLanguage, "选中", "selected")}: ${transcriptRoleLabel(selectedTranscript.role, uiLanguage)}/${transcriptKindLabel(selectedTranscript.kind, uiLanguage)} · ${formatUiWhen(selectedTranscript.timestamp, uiLanguage)} · ${inLanguage(uiLanguage, "回车展开", "enter expand")}`
                     : transcriptPage?.hasMore
-                      ? "Press o to load earlier transcript events."
-                      : "No more transcript events.",
+                      ? inLanguage(uiLanguage, "按 o 加载更早 transcript 事件。", "Press o to load earlier transcript events.")
+                      : inLanguage(uiLanguage, "没有更多 transcript 事件了。", "No more transcript events."),
                   layout.detailInnerWidth
                 )}
               </Text>
             </Box>
             <Box marginTop={1}>
-              <Text color={THEME.accent}>Rename history</Text>
+              <Text color={THEME.accent}>{inLanguage(uiLanguage, "命名历史", "Rename history")}</Text>
             </Box>
             {(detail?.renameHistory ?? []).slice(0, browserViewMode === "detail" ? 4 : 2).map((entry, index) => (
               <Text key={`history-${index}`} color={THEME.muted} wrap="truncate-end">
                 {fitDisplayLine(
-                  `${formatWhen(entry.appliedAt)} | ${entry.kind}/${entry.source}/${entry.status} | ${entry.newName}`,
+                  `${formatUiWhen(entry.appliedAt, uiLanguage)} | ${entry.kind}/${entry.source}/${autoRenameStatusLabel(entry.status, uiLanguage)} | ${entry.newName}`,
                   layout.detailInnerWidth
                 )}
               </Text>
             ))}
             {(detail?.renameHistory ?? []).length === 0 ? (
               <Text color={THEME.muted} wrap="truncate-end">
-                {fitDisplayLine("No rename history yet.", layout.detailInnerWidth)}
+                {fitDisplayLine(inLanguage(uiLanguage, "还没有命名历史。", "No rename history yet."), layout.detailInnerWidth)}
               </Text>
             ) : null}
           </>
@@ -1239,8 +1437,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const settingsPanel = (
     <Box flexDirection="column" width={layout.listWidth} height={layout.topSectionHeight}>
       <Box justifyContent="space-between" width={layout.listWidth}>
-        <Text color={THEME.accent}>Settings</Text>
-        <Text color={THEME.muted}>{settingsDirty ? "dirty" : "synced"}</Text>
+        <Text color={THEME.accent}>{tt("settings")}</Text>
+        <Text color={THEME.muted}>{settingsDirty ? tt("dirty") : tt("synced")}</Text>
       </Box>
       <Box
         borderStyle="round"
@@ -1267,8 +1465,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const settingsInfoPanel = (
     <Box flexDirection="column" width={layout.detailWidth} height={layout.topSectionHeight}>
       <Box justifyContent="space-between" width={layout.detailWidth}>
-        <Text color={THEME.accent}>Config detail</Text>
-        <Text color={THEME.muted}>{configView?.paths.userConfigPath ?? "n/a"}</Text>
+        <Text color={THEME.accent}>{tt("configDetail")}</Text>
+        <Text color={THEME.muted}>{configView?.paths.userConfigPath ?? tt("nA")}</Text>
       </Box>
       <Box
         borderStyle="round"
@@ -1280,23 +1478,55 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         overflow="hidden"
       >
         <Text color={THEME.accent} wrap="truncate-end">
-          {truncateDisplayText(`selected profile: ${selectedProfile?.profileId ?? "n/a"}`, layout.detailInnerWidth)}
+          {truncateDisplayText(`${tt("selectedProfile")}: ${selectedProfile?.profileId ?? tt("nA")}`, layout.detailInnerWidth)}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`baseUrl: ${selectedProfile?.baseUrl ?? "n/a"}`, layout.detailInnerWidth)}
+          {truncateDisplayText(`baseUrl: ${selectedProfile?.baseUrl ?? tt("nA")}`, layout.detailInnerWidth)}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`model: ${selectedProfile?.model ?? "n/a"}`, layout.detailInnerWidth)}
+          {truncateDisplayText(`model: ${selectedProfile?.model ?? tt("nA")}`, layout.detailInnerWidth)}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`wireApi: ${selectedProfile?.wireApi ?? "n/a"}`, layout.detailInnerWidth)}
+          {truncateDisplayText(`wireApi: ${selectedProfile?.wireApi ?? tt("nA")}`, layout.detailInnerWidth)}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`resolved: ${resolvedProviderSummary}`, layout.detailInnerWidth)}
+          {truncateDisplayText(`${tt("resolved")}: ${resolvedProviderSummary}`, layout.detailInnerWidth)}
+        </Text>
+        <Box marginTop={1}>
+          <Text color={THEME.accent} wrap="truncate-end">
+            {fitDisplayLine(
+              `${tt("promptPreview")} · ${promptPreviewRefreshing ? tt("refreshing") : promptPreview?.synthetic ? tt("promptSynthetic") : tt("promptSelected")}`,
+              layout.detailInnerWidth
+            )}
+          </Text>
+        </Box>
+        <Text color={THEME.muted} wrap="truncate-end">
+          {fitDisplayLine(
+            `${inLanguage(uiLanguage, "线程", "thread")}: ${promptPreview?.threadId ?? tt("nA")} | ${inLanguage(uiLanguage, "策略", "strategy")}: ${promptPreview?.renameContext.strategy ?? tt("nA")}`,
+            layout.detailInnerWidth
+          )}
+        </Text>
+        {settingsPromptLines.map((line, index) => (
+          <Text color={THEME.text} key={`settings-prompt-${index}`} wrap="truncate-end">
+            {fitDisplayLine(line, layout.detailInnerWidth, "")}
+          </Text>
+        ))}
+        <Text color={THEME.muted} wrap="truncate-end">
+          {fitDisplayLine(
+            `${autoRenameStatusLabel("suggest", uiLanguage)} ${previewSuggestCount} · ${autoRenameStatusLabel("apply", uiLanguage)} ${previewApplyCount} · ${autoRenameStatusLabel("skip", uiLanguage)} ${previewSkipCount}`,
+            layout.detailInnerWidth
+          )}
         </Text>
         <Box marginTop={1}>
           <Text color={THEME.muted} wrap="truncate-end">
-            e/edit field  space cycle enum  s save  R reload  , back to browser
+            {fitDisplayLine(
+              inLanguage(
+                uiLanguage,
+                "e 编辑字段  space 枚举切换  s 保存  p 刷新 prompt  R 重载  , 返回浏览",
+                "e edit field  space cycle enum  s save  p refresh prompt  R reload  , back to browser"
+              ),
+              layout.detailInnerWidth
+            )}
           </Text>
         </Box>
       </Box>
@@ -1309,8 +1539,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color={THEME.accent}>Codex Session Manager TUI</Text>
         <Text color={THEME.muted}>
           {screenMode === "browser"
-            ? `${dirtyOnly ? "dirty-only" : "all"} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
-            : `settings | api ${props.apiBase}`}
+            ? `${dirtyOnly ? tt("dirtyOnly") : tt("all")} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
+            : `${tt("settings")} | api ${props.apiBase}`}
         </Text>
       </Box>
 
@@ -1320,13 +1550,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
       {!props.interactive ? (
         <Box marginTop={1}>
-          <Text color={THEME.warning}>Input disabled: current stdin does not support raw mode.</Text>
+          <Text color={THEME.warning}>{tt("inputDisabled")}</Text>
         </Box>
       ) : null}
 
       {inputMode === "search" ? (
         <Box marginTop={1}>
-          <Text color={THEME.accent}>Search: </Text>
+          <Text color={THEME.accent}>{`${tt("search")}: `}</Text>
           <TextInput
             value={searchDraft}
             onChange={setSearchDraft}
@@ -1340,7 +1570,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
       {inputMode === "rename" ? (
         <Box marginTop={1}>
-          <Text color={THEME.manual}>Rename: </Text>
+          <Text color={THEME.manual}>{`${tt("rename")}: `}</Text>
           <TextInput
             value={renameDraft}
             onChange={setRenameDraft}
@@ -1350,7 +1580,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               if (!detail || !nextName) {
                 return;
               }
-              void runAction(() => client.rename(detail.threadId, nextName), `Renamed ${truncateDisplayText(detail.threadId, 12)}`);
+              void runAction(
+                () => client.rename(detail.threadId, nextName),
+                inLanguage(
+                  uiLanguage,
+                  `已重命名 ${truncateDisplayText(detail.threadId, 12)}`,
+                  `Renamed ${truncateDisplayText(detail.threadId, 12)}`
+                )
+              );
             }}
           />
         </Box>
@@ -1386,11 +1623,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
           {showPreviewPanel ? (
             <Box marginTop={1} flexDirection="column" height={Math.max(5, layout.previewHeight || 8)}>
-              <Text color={THEME.accent}>Batch preview</Text>
+              <Text color={THEME.accent}>
+                {`${tt("batchPreview")} · ${autoRenameStatusLabel("suggest", uiLanguage)} ${previewSuggestCount} · ${autoRenameStatusLabel("apply", uiLanguage)} ${previewApplyCount}`}
+              </Text>
               <Box borderStyle="round" borderColor={THEME.border} flexDirection="column" paddingX={1} height={Math.max(4, Math.max(5, layout.previewHeight || 8) - 1)} overflow="hidden">
-                {preview.length === 0 ? <Text color={THEME.muted}>No preview loaded.</Text> : null}
+                {preview.length === 0 ? <Text color={THEME.muted}>{tt("noPreviewLoaded")}</Text> : null}
                 {preview.slice(0, Math.max(3, layout.visiblePreviewCount)).map((item, index) => (
-                  <PreviewRow key={`${index}-${item.threadId}`} item={item} width={layout.previewInnerWidth} />
+                  <PreviewRow key={`${index}-${item.threadId}`} item={item} width={layout.previewInnerWidth} uiLanguage={uiLanguage} />
                 ))}
               </Box>
             </Box>
@@ -1401,16 +1640,24 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           {settingsPanel}
           <Box borderStyle="round" borderColor={THEME.border} flexDirection="column" paddingX={1} height={Math.max(5, Math.min(10, layout.rows - layout.topSectionHeight - 6))}>
             <Text color={THEME.accent} wrap="truncate-end">
-              {fitDisplayLine(activeSetting ? `${activeSetting.label}: ${activeSetting.value}` : "No setting selected", layout.previewInnerWidth)}
+              {fitDisplayLine(activeSetting ? `${activeSetting.label}: ${activeSetting.value}` : tt("noSettingSelected"), layout.previewInnerWidth)}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine(`profile ${selectedProfile?.profileId ?? "n/a"} | model ${selectedProfile?.model ?? "n/a"}`, layout.previewInnerWidth)}
+              {fitDisplayLine(`profile ${selectedProfile?.profileId ?? tt("nA")} | model ${selectedProfile?.model ?? tt("nA")}`, layout.previewInnerWidth)}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine(`baseUrl ${selectedProfile?.baseUrl ?? "n/a"}`, layout.previewInnerWidth)}
+              {fitDisplayLine(`baseUrl ${selectedProfile?.baseUrl ?? tt("nA")}`, layout.previewInnerWidth)}
             </Text>
+            {settingsPromptLines.slice(0, 2).map((line, index) => (
+              <Text color={THEME.text} key={`compact-settings-prompt-${index}`} wrap="truncate-end">
+                {fitDisplayLine(line, layout.previewInnerWidth, "")}
+              </Text>
+            ))}
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine("e edit  space cycle  s save  R reload  , back", layout.previewInnerWidth)}
+              {fitDisplayLine(
+                inLanguage(uiLanguage, "e 编辑  space 切换  s 保存  p prompt  R 重载  , 返回", "e edit  space cycle  s save  p prompt  R reload  , back"),
+                layout.previewInnerWidth
+              )}
             </Text>
           </Box>
         </Box>
@@ -1425,15 +1672,39 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         {screenMode === "browser" ? (
           <>
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine(", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  o older  H hidden  1-5 role", layout.columns - 2, "")}
+              {fitDisplayLine(
+                inLanguage(
+                  uiLanguage,
+                  ", 设置  z 聚焦  enter 展开  h/l 面板  tab 切换  j/k 移动  g/G 首尾  o 更早  H 隐藏  1-5 角色",
+                  ", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  o older  H hidden  1-5 role"
+                ),
+                layout.columns - 2,
+                ""
+              )}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine("/ search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch  q quit", layout.columns - 2, "")}
+              {fitDisplayLine(
+                inLanguage(
+                  uiLanguage,
+                  "/ 搜索  r 重命名  s 建议  a 应用  f 冻结  m 手动覆盖  p 预览  A 批量应用  q 退出",
+                  "/ search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch  q quit"
+                ),
+                layout.columns - 2,
+                ""
+              )}
             </Text>
           </>
         ) : (
           <Text color={THEME.muted} wrap="truncate-end">
-            {fitDisplayLine(", browser  j/k field  e edit  space cycle  s save  R reload  q quit", layout.columns - 2, "")}
+            {fitDisplayLine(
+              inLanguage(
+                uiLanguage,
+                ", 浏览  j/k 字段  e 编辑  space 切换  s 保存  p 刷新 prompt  R 重载  q 退出",
+                ", browser  j/k field  e edit  space cycle  s save  p refresh prompt  R reload  q quit"
+              ),
+              layout.columns - 2,
+              ""
+            )}
           </Text>
         )}
       </Box>

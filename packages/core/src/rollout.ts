@@ -173,6 +173,20 @@ function mergeEventIntoSession(
     session.updatedAt = timestamp;
   }
 
+  const applyTokenUsage = (info: unknown) => {
+    if (!info || typeof info !== "object") {
+      return;
+    }
+    const totalUsage = (info as Record<string, unknown>).total_token_usage;
+    if (!totalUsage || typeof totalUsage !== "object") {
+      return;
+    }
+    const totalTokens = (totalUsage as Record<string, unknown>).total_tokens;
+    if (typeof totalTokens === "number") {
+      session.tokenTotal = totalTokens;
+    }
+  };
+
   switch (event.type) {
     case "session_meta": {
       session.threadId = String(payload.id ?? session.threadId);
@@ -200,17 +214,14 @@ function mergeEventIntoSession(
       break;
     }
     case "token_count": {
-      const info = payload.info as Record<string, unknown> | undefined;
-      const totalUsage = info?.total_token_usage as Record<string, unknown> | undefined;
-      const totalTokens = totalUsage?.total_tokens;
-      if (typeof totalTokens === "number") {
-        session.tokenTotal = totalTokens;
-      }
+      applyTokenUsage(payload.info);
       break;
     }
     case "event_msg": {
       const eventType = payload.type as string | undefined;
-      if (eventType === "user_message") {
+      if (eventType === "token_count") {
+        applyTokenUsage(payload.info);
+      } else if (eventType === "user_message") {
         const message = excerpt(stripControl(payload.message as string | undefined), 200);
         if (message) {
           if (!session.firstUserMessage) {
@@ -282,8 +293,13 @@ export async function ingestRolloutFile(params: {
 }): Promise<RolloutIngestResult> {
   const stat = params.stat ?? (await fs.stat(params.rolloutPath));
   const previousCursor = params.previousCursor;
-  const startOffset =
+  const incrementalOffset =
     previousCursor && previousCursor.lastOffset <= stat.size ? previousCursor.lastOffset : 0;
+  const shouldReprocessWholeFile =
+    incrementalOffset > 0 &&
+    params.previousSession !== undefined &&
+    params.previousSession.tokenTotal <= 0;
+  const startOffset = shouldReprocessWholeFile ? 0 : incrementalOffset;
   const growthBytes = stat.size - startOffset;
 
   const handle = await fs.open(params.rolloutPath, "r");
@@ -320,6 +336,20 @@ export async function ingestRolloutFile(params: {
   let lastAgentChanged = false;
   let lastUserChanged = false;
 
+  if (shouldReprocessWholeFile) {
+    session.taskCompleteCount = 0;
+    session.tokenTotal = 0;
+    session.firstUserMessage = undefined;
+    session.lastUserMessage = undefined;
+    session.lastAgentMessage = undefined;
+    session.createdAt = undefined;
+    session.updatedAt = undefined;
+    session.model = undefined;
+    session.modelProvider = undefined;
+    session.cwd = undefined;
+    session.projectName = undefined;
+  }
+
   for (const line of processable.split(/\r?\n/)) {
     if (line.trim().length === 0) {
       continue;
@@ -345,7 +375,7 @@ export async function ingestRolloutFile(params: {
     session: session.threadId ? session : undefined,
     cursor: {
       rolloutPath: params.rolloutPath,
-      lastOffset: nextOffset === 0 ? stat.size : nextOffset,
+      lastOffset: shouldReprocessWholeFile ? stat.size : nextOffset === 0 ? stat.size : nextOffset,
       lastSize: stat.size,
       lastMtime: stat.mtime.toISOString(),
       lastScanAt: new Date().toISOString()

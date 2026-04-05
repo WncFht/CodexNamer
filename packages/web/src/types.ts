@@ -2,6 +2,7 @@ export type SessionSummary = {
   threadId: string;
   cwd?: string;
   projectName?: string;
+  firstUserMessage?: string;
   workspaceId: string;
   workspaceLabel: string;
   updatedAt?: string;
@@ -125,6 +126,29 @@ export type OverviewResponse = {
     named: number;
     withCandidate: number;
   };
+  runtime: {
+    configuredAutoApply: string;
+    actualExecution: "preview-only";
+    daemonAutoApply: boolean;
+    explain: string;
+  };
+  workload: {
+    totalTokens: number;
+    totalTasks: number;
+    dirtyTokens: number;
+    activeTokens: number;
+    candidateReadyTokens: number;
+    finalizeReadyTokens: number;
+    appliedTokens: number;
+    averageTokensPerSession: number;
+    averageTokensPerDirtySession: number;
+    topWorkspacesByTokens: Array<{
+      workspaceId: string;
+      workspaceLabel: string;
+      sessions: number;
+      tokens: number;
+    }>;
+  };
   pipeline: {
     discovered: number;
     active: number;
@@ -149,6 +173,20 @@ export type OverviewResponse = {
     autoApplied: number;
     lastAppliedAt?: string;
   };
+  activity: {
+    windowDays: number;
+    buckets: Array<{
+      date: string;
+      label: string;
+      applied: number;
+      previewOnly: number;
+      skipped: number;
+      failed: number;
+      autoApplied: number;
+      manualApplied: number;
+      aiApplied: number;
+    }>;
+  };
 };
 
 export type ProviderProfile = {
@@ -171,6 +209,7 @@ export type ConfigDocument = {
   general?: {
     codexHome?: string;
     stateDir?: string;
+    uiLanguage?: "en-US" | "zh-CN";
   };
   rename?: {
     mode?: "heuristic" | "ai" | "hybrid";
@@ -242,9 +281,35 @@ export type AutoRenamePreviewResponse = {
   items: Array<{
     threadId: string;
     candidateName?: string;
-    status: "skip" | "apply";
+    status: "skip" | "suggest" | "apply";
     reason: string;
   }>;
+};
+
+export type PromptPreviewResponse = {
+  threadId: string;
+  synthetic: boolean;
+  prompt: string;
+  renameContext: {
+    requestedStrategy: string;
+    strategy: string;
+    maxChars: number;
+    text: string;
+    truncated: boolean;
+    fallbackReason?: string;
+    selectedChars: number;
+    segments: Array<{
+      role: "user" | "assistant";
+      content: string;
+      source: string;
+      timestamp?: string;
+    }>;
+    summarySignals: {
+      firstUserMessage?: string;
+      lastUserMessage?: string;
+      lastAgentMessage?: string;
+    };
+  };
 };
 
 export type ApiEventsResponse = {

@@ -4,52 +4,390 @@ import type {
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
-import { basenameSafe, excerpt, stripControl, toUtcIso } from "./util.js";
+import { buildRenameContext } from "./rename-context.js";
+import { basenameSafe, excerpt, normalizeWhitespace, stripControl, toUtcIso } from "./util.js";
+
+type TopicRule = {
+  scope: string;
+  zh: string;
+  en: string;
+  patterns: RegExp[];
+};
+
+const KIND_RULES: Array<{ kind: string; patterns: RegExp[] }> = [
+  {
+    kind: "fix",
+    patterns: [/(fix|修复|bug|报错|错误|异常|失效|不生效|不能|无法)/i]
+  },
+  {
+    kind: "debug",
+    patterns: [/(debug|排查|定位|trace|诊断)/i]
+  },
+  {
+    kind: "review",
+    patterns: [/(review|审查|梳理|盘点|对齐|现状|逻辑|流程)/i]
+  },
+  {
+    kind: "design",
+    patterns: [/(design|方案|架构|策略|更具体|更复杂|细节|summary|scope|prompt)/i]
+  },
+  {
+    kind: "research",
+    patterns: [/(research|调研|分析|评估|compare|对比|看看)/i]
+  },
+  {
+    kind: "migration",
+    patterns: [/(migrat|迁移|升级|upgrade|切换|替换|兼容)/i]
+  },
+  {
+    kind: "refactor",
+    patterns: [/(refactor|重构|整理代码|整理逻辑)/i]
+  },
+  {
+    kind: "test",
+    patterns: [/(test|测试|验证|冒烟|回归)/i]
+  },
+  {
+    kind: "docs",
+    patterns: [/(docs|文档|readme|说明)/i]
+  },
+  {
+    kind: "ops",
+    patterns: [/(deploy|运维|部署|发布|重启|值班|环境)/i]
+  },
+  {
+    kind: "feat",
+    patterns: [/(feat|实现|新增|接入|补齐|支持|增加)/i]
+  }
+];
+
+const TOPIC_RULES: TopicRule[] = [
+  {
+    scope: "settings",
+    zh: "Web 设置",
+    en: "web settings",
+    patterns: [/(web|页面|ui)/i, /(setting|settings|配置|config)/i]
+  },
+  {
+    scope: "settings",
+    zh: "设置",
+    en: "settings",
+    patterns: [/(setting|settings|配置|config)/i]
+  },
+  {
+    scope: "rename",
+    zh: "自动重命名逻辑",
+    en: "auto rename flow",
+    patterns: [/(auto[\s-]?rename|自动重命名|rename)/i, /(逻辑|流程|策略|状态|行为)/i]
+  },
+  {
+    scope: "naming",
+    zh: "命名细节",
+    en: "naming detail",
+    patterns: [/(name|命名)/i, /(更具体|更复杂|细节|summary|scope|标题)/i]
+  },
+  {
+    scope: "context",
+    zh: "rename context",
+    en: "rename context",
+    patterns: [/(context|上下文|transcript|对话记录)/i]
+  },
+  {
+    scope: "prompt",
+    zh: "AI prompt",
+    en: "AI prompt",
+    patterns: [/(prompt)/i]
+  },
+  {
+    scope: "provider",
+    zh: "provider 配置",
+    en: "provider config",
+    patterns: [/(provider|base url|api key|wire api|model provider)/i]
+  },
+  {
+    scope: "workspace",
+    zh: "工作区",
+    en: "workspace",
+    patterns: [/(workspace|工作区)/i]
+  },
+  {
+    scope: "history",
+    zh: "会话历史",
+    en: "session history",
+    patterns: [/(history|历史|timeline|会话历史)/i]
+  },
+  {
+    scope: "tests",
+    zh: "测试",
+    en: "tests",
+    patterns: [/(test|测试|vitest|jest|冒烟|回归)/i]
+  },
+  {
+    scope: "build",
+    zh: "构建",
+    en: "build",
+    patterns: [/(build|构建|编译|tsc)/i]
+  },
+  {
+    scope: "docs",
+    zh: "文档",
+    en: "docs",
+    patterns: [/(docs|文档|readme|说明)/i]
+  },
+  {
+    scope: "web",
+    zh: "Web",
+    en: "web",
+    patterns: [/(web|浏览器|页面|frontend)/i]
+  },
+  {
+    scope: "tui",
+    zh: "TUI",
+    en: "TUI",
+    patterns: [/(tui|终端界面)/i]
+  },
+  {
+    scope: "api",
+    zh: "API",
+    en: "API",
+    patterns: [/(api|fastify|endpoint|路由)/i]
+  },
+  {
+    scope: "daemon",
+    zh: "daemon",
+    en: "daemon",
+    patterns: [/(daemon|watcher|后台)/i]
+  }
+];
+
+function prefersChinese(language: string): boolean {
+  return /^zh\b/i.test(language);
+}
+
+function normalizeTaskText(value?: string): string | undefined {
+  const stripped = normalizeWhitespace(stripControl(value));
+  if (!stripped) {
+    return undefined;
+  }
+
+  return stripped
+    .replace(/[❮]/g, " ")
+    .replace(/\btopic[s]?:?/gi, " ")
+    .replace(/\b\d+[.)、:：]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function collectTaskTexts(session: MaterializedSession): Array<{ text: string; weight: number }> {
+  const renameContext = session.renameContext;
+  const latestTranscriptUser = renameContext?.segments
+    .slice()
+    .reverse()
+    .find((segment) => segment.role === "user")?.content;
+  const latestTranscriptAssistant = renameContext?.segments
+    .slice()
+    .reverse()
+    .find((segment) => segment.role === "assistant")?.content;
+  const sources = [
+    { text: session.lastUserMessage, weight: 8 },
+    { text: latestTranscriptUser, weight: 7 },
+    { text: session.firstUserMessage, weight: 5 },
+    { text: latestTranscriptAssistant, weight: 3 },
+    { text: session.lastAgentMessage, weight: 2 },
+    { text: renameContext?.text, weight: 1 }
+  ];
+
+  return sources
+    .map((source) => ({
+      text: normalizeTaskText(source.text) ?? "",
+      weight: source.weight
+    }))
+    .filter((item) => item.text.length > 0);
+}
 
 function classifyKind(session: MaterializedSession): string {
-  const joined = [
-    session.firstUserMessage,
-    session.lastUserMessage,
-    session.lastAgentMessage
-  ]
-    .filter(Boolean)
+  const joined = collectTaskTexts(session)
+    .map((item) => item.text)
     .join(" ")
     .toLowerCase();
 
-  if (/(fix|bug|错误|修复|异常)/.test(joined)) {
-    return "fix";
-  }
-  if (/(refactor|重构)/.test(joined)) {
-    return "refactor";
-  }
-  if (/(docs|文档|readme)/.test(joined)) {
-    return "docs";
-  }
-  if (/(research|调研|分析|看看|review|compare)/.test(joined)) {
-    return "research";
-  }
-  if (/(feat|新增|实现|增加)/.test(joined)) {
-    return "feat";
+  for (const rule of KIND_RULES) {
+    if (rule.patterns.some((pattern) => pattern.test(joined))) {
+      return rule.kind;
+    }
   }
 
   return "chore";
 }
 
-function buildSummary(session: MaterializedSession, maxLength: number): string {
+function kindActionLabel(kind: string, language: string, secondary = false): string {
+  const zhPrimary: Record<string, string> = {
+    fix: "修复",
+    debug: "排查",
+    review: "梳理",
+    design: "设计",
+    research: "调研",
+    migration: "迁移",
+    refactor: "重构",
+    test: "验证",
+    docs: "撰写",
+    ops: "处理",
+    feat: "实现",
+    chore: "处理"
+  };
+  const zhSecondary: Record<string, string> = {
+    fix: "并梳理",
+    debug: "并定位",
+    review: "并校准",
+    design: "并增强",
+    research: "并补充",
+    migration: "并适配",
+    refactor: "并整理",
+    test: "并回归",
+    docs: "并补齐",
+    ops: "并清理",
+    feat: "并补齐",
+    chore: "并处理"
+  };
+  const enPrimary: Record<string, string> = {
+    fix: "fix",
+    debug: "debug",
+    review: "review",
+    design: "design",
+    research: "research",
+    migration: "migrate",
+    refactor: "refactor",
+    test: "verify",
+    docs: "document",
+    ops: "operate",
+    feat: "implement",
+    chore: "handle"
+  };
+  const enSecondary: Record<string, string> = {
+    fix: "and review",
+    debug: "and inspect",
+    review: "and align",
+    design: "and refine",
+    research: "and expand",
+    migration: "and adapt",
+    refactor: "and tidy",
+    test: "and regress",
+    docs: "and extend",
+    ops: "and clean up",
+    feat: "and cover",
+    chore: "and handle"
+  };
+
+  if (prefersChinese(language)) {
+    return (secondary ? zhSecondary : zhPrimary)[kind] ?? (secondary ? "并处理" : "处理");
+  }
+
+  return (secondary ? enSecondary : enPrimary)[kind] ?? (secondary ? "and handle" : "handle");
+}
+
+function detectTopics(session: MaterializedSession, language: string): Array<{ scope: string; label: string; score: number }> {
+  const scores = new Map<string, { scope: string; label: string; score: number }>();
+
+  for (const source of collectTaskTexts(session)) {
+    for (const rule of TOPIC_RULES) {
+      if (rule.patterns.every((pattern) => pattern.test(source.text))) {
+        const key = `${rule.scope}:${prefersChinese(language) ? rule.zh : rule.en}`;
+        const existing = scores.get(key);
+        if (existing) {
+          existing.score += source.weight + rule.patterns.length;
+        } else {
+          scores.set(key, {
+            scope: rule.scope,
+            label: prefersChinese(language) ? rule.zh : rule.en,
+            score: source.weight + rule.patterns.length
+          });
+        }
+      }
+    }
+  }
+
+  return Array.from(scores.values()).sort((left, right) => right.score - left.score);
+}
+
+function detectIssueSuffix(joined: string, language: string): string | undefined {
+  if (/(save|保存)/i.test(joined) && /(重置|reset|不能|无法|失败|不生效)/i.test(joined)) {
+    return prefersChinese(language) ? "保存问题" : "save issue";
+  }
+  if (/(显示|展示|加载|刷新|render|display)/i.test(joined) && /(不能|无法|失败|异常|卡住|重置)/i.test(joined)) {
+    return prefersChinese(language) ? "显示问题" : "display issue";
+  }
+  if (/(不能|无法|失败|异常|报错|重置|失效|不生效|不可)/i.test(joined)) {
+    return prefersChinese(language) ? "问题" : "issue";
+  }
+  return undefined;
+}
+
+function composeFragment(action: string, topic: string, language: string, suffix?: string): string {
+  if (prefersChinese(language)) {
+    return `${action}${topic}${suffix ?? ""}`.trim();
+  }
+
+  return [action, topic, suffix].filter(Boolean).join(" ").trim();
+}
+
+function fallbackExcerptSummary(session: MaterializedSession, maxLength: number): string {
+  const renameContext = session.renameContext;
+  const latestTranscriptUser = renameContext?.segments
+    .slice()
+    .reverse()
+    .find((segment) => segment.role === "user")?.content;
+  const latestTranscriptAssistant = renameContext?.segments
+    .slice()
+    .reverse()
+    .find((segment) => segment.role === "assistant")?.content;
   const preferred = [
+    latestTranscriptUser,
     session.lastUserMessage,
+    latestTranscriptAssistant,
     session.firstUserMessage,
-    session.lastAgentMessage
+    session.lastAgentMessage,
+    renameContext?.text
   ];
 
   for (const candidate of preferred) {
-    const value = excerpt(stripControl(candidate), maxLength);
+    const value = excerpt(normalizeTaskText(candidate), maxLength);
     if (value) {
       return value;
     }
   }
 
   return session.projectName ?? session.threadId;
+}
+
+function buildSummary(session: MaterializedSession, kind: string, maxLength: number, language: string): string {
+  const topics = detectTopics(session, language);
+  const joined = collectTaskTexts(session)
+    .map((item) => item.text)
+    .join(" ");
+  const primary = topics[0];
+  const secondary = topics.find((topic) => topic.scope !== primary?.scope);
+  const issueSuffix = detectIssueSuffix(joined, language);
+
+  if (!primary) {
+    return fallbackExcerptSummary(session, maxLength);
+  }
+
+  const primarySuffix =
+    kind === "fix" || kind === "debug"
+      ? issueSuffix
+      : undefined;
+  const fragments = [
+    composeFragment(kindActionLabel(kind, language), primary.label, language, primarySuffix)
+  ];
+
+  if (secondary) {
+    fragments.push(composeFragment(kindActionLabel(kind, language, true), secondary.label, language));
+  }
+
+  const joinedSummary = prefersChinese(language)
+    ? fragments.join("")
+    : fragments.join(" ");
+  return excerpt(joinedSummary, maxLength) ?? fallbackExcerptSummary(session, maxLength);
 }
 
 function formatTime(timestamp: string | undefined, pattern: string): string {
@@ -103,19 +441,33 @@ export function suggestNameHeuristically(
   session: MaterializedSession,
   config: EffectiveConfig
 ): RenameSuggestion {
-  const kind = classifyKind(session);
-  const summary = buildSummary(session, Math.min(48, config.naming.maxLength));
-  const scope = session.projectName && session.projectName !== "fanghaotian"
-    ? session.projectName
-    : undefined;
+  const renameContext = session.renameContext ?? buildRenameContext(session, config);
+  const materialized = {
+    ...session,
+    renameContext
+  };
+  const kind = classifyKind(materialized);
+  const summary = buildSummary(
+    materialized,
+    kind,
+    Math.min(56, config.naming.maxLength),
+    config.naming.language
+  );
+  const topicScope = detectTopics(materialized, config.naming.language)[0]?.scope;
+  const scope =
+    topicScope && topicScope !== "web" && topicScope !== "session"
+      ? topicScope
+      : materialized.projectName && materialized.projectName !== "fanghaotian"
+        ? materialized.projectName
+        : undefined;
 
-  let name = renderTemplate(config.naming.template, session, { kind, summary, scope });
+  let name = renderTemplate(config.naming.template, materialized, { kind, summary, scope });
   if (name.length > config.naming.maxLength) {
     name = name.slice(0, config.naming.maxLength).trim();
   }
 
   return {
-    threadId: session.threadId,
+    threadId: materialized.threadId,
     name,
     source: "heuristic",
     kind,
@@ -124,4 +476,3 @@ export function suggestNameHeuristically(
     generatedAt: toUtcIso()
   };
 }
-

@@ -11,6 +11,7 @@ import {
   type EffectiveConfig,
   type MaterializedSession,
   type OverviewReport,
+  type PromptPreview,
   type RenameSuggestion,
   type ScanReport,
   type SessionDetail,
@@ -22,7 +23,7 @@ import {
 
 import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "./config.js";
 import { StateDatabase } from "./database.js";
-import { createRenameInferenceService, inspectRenameProvider } from "./provider.js";
+import { buildRenamePrompt, createRenameInferenceService, inspectRenameProvider } from "./provider.js";
 import { buildSessionRevision } from "./revision.js";
 import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "./rollout.js";
 import {
@@ -30,25 +31,8 @@ import {
   compactSessionIndex,
   readSessionIndex
 } from "./session-index.js";
-
-function estimateStatus(detail: SessionDetail, config: EffectiveConfig, now: Date): SessionStatusEstimate {
-  const lastUpdated = detail.updatedAt ? new Date(detail.updatedAt).getTime() : 0;
-  const ageSeconds = lastUpdated > 0 ? (now.getTime() - lastUpdated) / 1000 : Number.POSITIVE_INFINITY;
-
-  if (!detail.firstUserMessage && !detail.lastAgentMessage) {
-    return "discovered";
-  }
-  if (!detail.dirty) {
-    return "applied";
-  }
-  if (ageSeconds < config.watch.candidateIdleSeconds) {
-    return "active";
-  }
-  if (ageSeconds < config.watch.finalizeIdleSeconds) {
-    return "candidate_ready";
-  }
-  return "finalize_ready";
-}
+import { buildRenameContext } from "./rename-context.js";
+import { estimateSessionStatus, evaluateAutoRename } from "./auto-rename.js";
 
 function redactSecret(value?: string): string | undefined {
   return value ? "[redacted]" : undefined;
@@ -131,6 +115,24 @@ export class CodexSessionManager {
     return detail;
   }
 
+  private buildSyntheticPromptSession(): MaterializedSession {
+    return {
+      threadId: "provider-test",
+      rolloutPath: "<synthetic>",
+      cwd: process.cwd(),
+      projectName: path.basename(process.cwd()),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      modelProvider: this.config.inheritedCodex.modelProvider,
+      model: this.config.inheritedCodex.model,
+      firstUserMessage: "为当前会话生成一个简短、清晰的中文标题。",
+      lastUserMessage: "请测试当前 AI rename backend 是否可用。",
+      lastAgentMessage: "这是 provider test 的 synthetic session。",
+      taskCompleteCount: 1,
+      tokenTotal: 128
+    };
+  }
+
   async scan(): Promise<ScanReport> {
     const rolloutFiles = await discoverRolloutFiles(this.config.general.codexHome);
     let updatedSessions = 0;
@@ -141,6 +143,7 @@ export class CodexSessionManager {
       const previousCursor = this.db.getCursor(rolloutPath);
       if (
         previousCursor &&
+        (previousSession?.tokenTotal ?? 0) > 0 &&
         previousCursor.lastSize === stat.size &&
         previousCursor.lastMtime === stat.mtime.toISOString()
       ) {
@@ -193,7 +196,7 @@ export class CodexSessionManager {
       if (!detail) {
         continue;
       }
-      this.db.updateStatusEstimate(detail.threadId, estimateStatus(detail, this.config, now));
+        this.db.updateStatusEstimate(detail.threadId, estimateSessionStatus(detail, this.config, now));
     }
 
     return {
@@ -254,15 +257,25 @@ export class CodexSessionManager {
     });
   }
 
-  private materializeSessionForSuggestion(detail: SessionDetail): SessionDetail {
-    return detail;
+  private async materializeSessionForSuggestion(detail: SessionDetail): Promise<MaterializedSession> {
+    const transcript =
+      this.config.naming.contextStrategy === "user-assistant-transcript"
+        ? detail.transcript ?? (await readSessionTranscript(detail.rolloutPath))
+        : undefined;
+
+    return {
+      ...detail,
+      renameContext: buildRenameContext(detail, this.config, {
+        transcript
+      })
+    };
   }
 
   async suggest(threadId: string): Promise<RenameSuggestion> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
 
-    const suggestion = await this.inferenceService.suggest(this.materializeSessionForSuggestion(detail));
+    const suggestion = await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail));
     this.db.saveCandidate(threadId, suggestion);
     return suggestion;
   }
@@ -491,22 +504,12 @@ export class CodexSessionManager {
     if (options?.threadId) {
       await this.scan();
       const detail = this.requireSessionDetail(options.threadId);
-      session = this.materializeSessionForSuggestion(detail);
+      session = await this.materializeSessionForSuggestion(detail);
     } else {
+      const syntheticSession: MaterializedSession = this.buildSyntheticPromptSession();
       session = {
-        threadId: "provider-test",
-        rolloutPath: "<synthetic>",
-        cwd: process.cwd(),
-        projectName: path.basename(process.cwd()),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        modelProvider: this.config.inheritedCodex.modelProvider,
-        model: this.config.inheritedCodex.model,
-        firstUserMessage: "为当前会话生成一个简短、清晰的中文标题。",
-        lastUserMessage: "请测试当前 AI rename backend 是否可用。",
-        lastAgentMessage: "这是 provider test 的 synthetic session。",
-        taskCompleteCount: 1,
-        tokenTotal: 128
+        ...syntheticSession,
+        renameContext: buildRenameContext(syntheticSession, this.config)
       };
     }
 
@@ -520,6 +523,30 @@ export class CodexSessionManager {
         synthetic: !options?.threadId
       },
       suggestion
+    };
+  }
+
+  async buildPromptPreview(options?: { threadId?: string }): Promise<PromptPreview> {
+    let session: MaterializedSession;
+    if (options?.threadId) {
+      await this.scan();
+      const detail = this.requireSessionDetail(options.threadId);
+      session = await this.materializeSessionForSuggestion(detail);
+    } else {
+      const syntheticSession = this.buildSyntheticPromptSession();
+      session = {
+        ...syntheticSession,
+        renameContext: buildRenameContext(syntheticSession, this.config)
+      };
+    }
+
+    return {
+      threadId: session.threadId,
+      synthetic: !options?.threadId,
+      prompt: buildRenamePrompt(session, this.config),
+      renameContext:
+        session.renameContext ??
+        buildRenameContext(session, this.config)
     };
   }
 
@@ -571,7 +598,17 @@ export class CodexSessionManager {
 
   async overview(): Promise<OverviewReport> {
     await this.scan();
-    return this.db.getOverviewReport();
+    const report = this.db.getOverviewReport();
+    return {
+      ...report,
+      runtime: {
+        configuredAutoApply: this.config.rename.autoApply,
+        actualExecution: "preview-only",
+        daemonAutoApply: false,
+        explain:
+          "Current daemon behavior is scan + preview only. `finalize_ready` means eligible to apply, not already auto-applied."
+      }
+    };
   }
 
   async previewAutoRename(options?: {
@@ -596,48 +633,20 @@ export class CodexSessionManager {
         continue;
       }
 
-      const status = estimateStatus(detail, this.config, now);
-      if (detail.manualOverride) {
-        previews.push({ threadId: detail.threadId, status: "skip", reason: "manual_override" });
-        continue;
-      }
-      if (detail.frozen) {
-        previews.push({ threadId: detail.threadId, status: "skip", reason: "frozen" });
-        continue;
-      }
       const renameState = this.db.getRenameState(detail.threadId);
-      if ((renameState?.autoApplyCount ?? 0) >= this.config.watch.maxAutoRenamesPerSession) {
-        previews.push({
-          threadId: detail.threadId,
-          status: "skip",
-          reason: "max_auto_renames_reached"
-        });
-        continue;
-      }
-      if (renameState?.lastAutoApplySuccessAt) {
-        const ageSeconds =
-          (now.getTime() - new Date(renameState.lastAutoApplySuccessAt).getTime()) / 1000;
-        if (ageSeconds < this.config.watch.renameCooldownSeconds) {
-          previews.push({
-            threadId: detail.threadId,
-            status: "skip",
-            reason: "rename_cooldown"
-          });
-          continue;
-        }
-      }
-      if (status !== "finalize_ready") {
-        previews.push({ threadId: detail.threadId, status: "skip", reason: status });
-        continue;
-      }
+      const evaluation = evaluateAutoRename(detail, this.config, {
+        now,
+        renameState
+      });
 
       previews.push({
         threadId: detail.threadId,
-        candidateName: options?.includeCandidateNames
-          ? (await this.inferenceService.suggest(this.materializeSessionForSuggestion(detail))).name
-          : undefined,
-        status: "apply",
-        reason: "finalize_ready"
+        candidateName:
+          options?.includeCandidateNames && evaluation.action !== "skip"
+            ? (await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail))).name
+            : undefined,
+        status: evaluation.action,
+        reason: evaluation.reason
       });
     }
 

@@ -28,11 +28,19 @@ export async function writeRolloutFixture(params: {
   toolCallName?: string;
   toolCallArguments?: Record<string, unknown>;
   toolCallOutput?: string;
+  tokenEventStyle?: "top-level" | "event-msg";
 }): Promise<string> {
   const updatedAt = params.updatedAt ?? "2026-04-04T12:10:00.000Z";
   const rolloutDir = path.join(params.codexHome, "sessions", "2026", "04", "04");
   await fs.mkdir(rolloutDir, { recursive: true });
   const rolloutPath = path.join(rolloutDir, `rollout-${params.threadId}.jsonl`);
+  const tokenPayload = {
+    info: {
+      total_token_usage: {
+        total_tokens: 1234
+      }
+    }
+  };
   const lines = [
     JSON.stringify({
       timestamp: "2026-04-04T12:00:00.000Z",
@@ -121,14 +129,14 @@ export async function writeRolloutFixture(params: {
     }),
     JSON.stringify({
       timestamp: updatedAt,
-      type: "token_count",
-      payload: {
-        info: {
-          total_token_usage: {
-            total_tokens: 1234
-          }
-        }
-      }
+      type: params.tokenEventStyle === "event-msg" ? "event_msg" : "token_count",
+      payload:
+        params.tokenEventStyle === "event-msg"
+          ? {
+              type: "token_count",
+              ...tokenPayload
+            }
+          : tokenPayload
     })
   ];
   await fs.writeFile(rolloutPath, `${lines.join("\n")}\n`, "utf8");

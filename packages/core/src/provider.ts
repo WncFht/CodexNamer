@@ -15,6 +15,7 @@ import type {
 } from "@codex-session-manager/shared";
 
 import { suggestNameHeuristically } from "./naming.js";
+import { buildRenameContext } from "./rename-context.js";
 import { stripControl, toUtcIso } from "./util.js";
 
 const execFileAsync = promisify(execFile);
@@ -86,7 +87,8 @@ function normalizePromptField(value: string | undefined, maxLength: number): str
   return `${compact.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
-function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
+export function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
+  const renameContext = session.renameContext ?? buildRenameContext(session, config);
   const parts = [
     "You generate a concise session rename suggestion for Codex Session Manager.",
     "Return only a JSON object with keys: name, kind, summary, scope.",
@@ -94,8 +96,10 @@ function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig
     "Use only the session context provided below.",
     `Target language: ${config.naming.language}.`,
     `Max final name length: ${config.naming.maxLength}.`,
-    "Prefer a short, concrete summary suitable for a session list.",
-    "Allowed kind values: feat, fix, refactor, docs, research, chore, ops.",
+    "Prefer a short but specific summary suitable for a session list.",
+    "Make the rename concrete: capture the main subsystem plus the actual action, issue, or review focus.",
+    "If the session has two tightly related goals, use one short secondary fragment rather than a generic umbrella noun.",
+    "Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.",
     "",
     "Session context:",
     `threadId: ${session.threadId}`,
@@ -103,11 +107,19 @@ function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig
     `cwd: ${session.cwd ?? ""}`,
     `modelProvider: ${session.modelProvider ?? ""}`,
     `model: ${session.model ?? ""}`,
+    `requestedContextStrategy: ${renameContext.requestedStrategy}`,
+    `resolvedContextStrategy: ${renameContext.strategy}`,
+    `contextTruncated: ${String(renameContext.truncated)}`,
+    `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
+    `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
     `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
     `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
     `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
     `taskCompleteCount: ${session.taskCompleteCount}`,
     `tokenTotal: ${session.tokenTotal}`,
+    "",
+    "Rename context:",
+    normalizePromptField(renameContext.text, renameContext.maxChars),
     "",
     "Name template preference:",
     config.naming.template
@@ -446,7 +458,7 @@ async function callChatCompletionsApi(
         {
           role: "system",
           content:
-            "You generate concise session names. Return JSON only with keys: name, kind, summary, scope."
+            "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope."
         },
         {
           role: "user",

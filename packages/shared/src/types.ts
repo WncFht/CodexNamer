@@ -3,12 +3,42 @@ export type AiBackend = "none" | "codex" | "openai-compatible";
 export type ProviderSource = "explicit" | "inherit-codex" | "mixed";
 export type ProviderWireApi = "responses" | "chat_completions" | "auto";
 export type RenameContextStrategy = "summary-signals" | "user-assistant-transcript";
+export type UiLanguage = "en-US" | "zh-CN";
+export type RenameContextSegmentSource =
+  | "summary_first_user"
+  | "summary_last_user"
+  | "summary_last_assistant"
+  | "transcript_seed"
+  | "transcript_recent";
 export type RenameSource = "heuristic" | "ai" | "hybrid" | "manual" | "batch" | "recovered";
 export type RenameHistoryKind = "auto" | "manual" | "batch" | "compact-rewrite";
 export type RenameStatus = "applied" | "skipped" | "failed" | "preview_only";
 export type SessionStatusEstimate = "discovered" | "active" | "candidate_ready" | "finalize_ready" | "applied" | "idle" | "archived_hint" | "missing";
 export type SessionTranscriptRole = "user" | "assistant" | "tool" | "system";
 export type SessionTranscriptKind = "message" | "tool_call" | "tool_output" | "reasoning" | "status";
+
+export interface RenameContextSegment {
+  role: "user" | "assistant";
+  content: string;
+  source: RenameContextSegmentSource;
+  timestamp?: string;
+}
+
+export interface RenameContext {
+  requestedStrategy: RenameContextStrategy;
+  strategy: RenameContextStrategy;
+  maxChars: number;
+  text: string;
+  truncated: boolean;
+  fallbackReason?: "missing_transcript" | "empty_transcript";
+  selectedChars: number;
+  segments: RenameContextSegment[];
+  summarySignals: {
+    firstUserMessage?: string;
+    lastUserMessage?: string;
+    lastAgentMessage?: string;
+  };
+}
 
 export interface WatchConfig {
   scanIntervalSeconds: number;
@@ -39,6 +69,7 @@ export interface RenameConfig {
 export interface GeneralConfig {
   codexHome: string;
   stateDir: string;
+  uiLanguage: UiLanguage;
 }
 
 export interface AiConfig {
@@ -123,6 +154,13 @@ export interface ConfigView {
   effectiveConfig: Record<string, unknown>;
 }
 
+export interface PromptPreview {
+  threadId: string;
+  synthetic: boolean;
+  prompt: string;
+  renameContext: RenameContext;
+}
+
 export type ApiEventType =
   | "scan.completed"
   | "session.suggested"
@@ -190,6 +228,7 @@ export interface MaterializedSession {
   lastAgentMessage?: string;
   taskCompleteCount: number;
   tokenTotal: number;
+  renameContext?: RenameContext;
 }
 
 export interface WorkspaceSummary {
@@ -293,6 +332,7 @@ export interface SessionSummary {
   threadId: string;
   cwd?: string;
   projectName?: string;
+  firstUserMessage?: string;
   workspaceId: string;
   workspaceLabel: string;
   updatedAt?: string;
@@ -341,7 +381,7 @@ export interface DoctorReport {
 export interface AutoRenamePreview {
   threadId: string;
   candidateName?: string;
-  status: "skip" | "apply";
+  status: "skip" | "suggest" | "apply";
   reason: string;
 }
 
@@ -355,6 +395,29 @@ export interface OverviewReport {
     manualOverride: number;
     named: number;
     withCandidate: number;
+  };
+  runtime: {
+    configuredAutoApply: string;
+    actualExecution: "preview-only";
+    daemonAutoApply: boolean;
+    explain: string;
+  };
+  workload: {
+    totalTokens: number;
+    totalTasks: number;
+    dirtyTokens: number;
+    activeTokens: number;
+    candidateReadyTokens: number;
+    finalizeReadyTokens: number;
+    appliedTokens: number;
+    averageTokensPerSession: number;
+    averageTokensPerDirtySession: number;
+    topWorkspacesByTokens: Array<{
+      workspaceId: string;
+      workspaceLabel: string;
+      sessions: number;
+      tokens: number;
+    }>;
   };
   pipeline: {
     discovered: number;
@@ -379,5 +442,19 @@ export interface OverviewReport {
     batchApplied: number;
     autoApplied: number;
     lastAppliedAt?: string;
+  };
+  activity: {
+    windowDays: number;
+    buckets: Array<{
+      date: string;
+      label: string;
+      applied: number;
+      previewOnly: number;
+      skipped: number;
+      failed: number;
+      autoApplied: number;
+      manualApplied: number;
+      aiApplied: number;
+    }>;
   };
 }

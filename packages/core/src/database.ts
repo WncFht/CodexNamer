@@ -492,7 +492,7 @@ export class StateDatabase {
   listSessions(filters?: { dirty?: boolean }): SessionSummary[] {
     const rows = this.db
       .prepare(
-        `SELECT s.thread_id, s.cwd, s.project_name, s.updated_at, s.latest_official_name,
+        `SELECT s.thread_id, s.cwd, s.project_name, s.first_user_message, s.updated_at, s.latest_official_name,
                 s.model_provider, s.model, s.task_complete_count, s.status_estimate,
                 rs.current_candidate_name, rs.last_applied_revision, rs.manual_override, rs.frozen,
                 rs.dirty_since_rename
@@ -507,6 +507,7 @@ export class StateDatabase {
         threadId: row.thread_id as string,
         cwd: (row.cwd as string | null) ?? undefined,
         projectName: (row.project_name as string | null) ?? undefined,
+        firstUserMessage: (row.first_user_message as string | null) ?? undefined,
         workspaceId: workspaceIdForCwd((row.cwd as string | null) ?? undefined),
         workspaceLabel: workspaceLabelForCwd(
           (row.cwd as string | null) ?? undefined,
@@ -640,6 +641,14 @@ export class StateDatabase {
   getOverviewReport(): OverviewReport {
     const sessions = this.listSessions();
     const workspaces = this.listWorkspaceSummaries();
+    const workloadRows = this.db
+      .prepare(
+        `SELECT s.cwd, s.project_name, s.token_total, s.task_complete_count, s.status_estimate,
+                COALESCE(rs.dirty_since_rename, 0) AS dirty_since_rename
+         FROM sessions s
+         LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id`
+      )
+      .all() as Array<Record<string, unknown>>;
     const pipeline: OverviewReport["pipeline"] = {
       discovered: 0,
       active: 0,
@@ -682,6 +691,66 @@ export class StateDatabase {
       }
     }
 
+    const topWorkspaceMap = new Map<
+      string,
+      OverviewReport["workload"]["topWorkspacesByTokens"][number]
+    >();
+    let totalTokens = 0;
+    let totalTasks = 0;
+    let dirtyTokens = 0;
+    let activeTokens = 0;
+    let candidateReadyTokens = 0;
+    let finalizeReadyTokens = 0;
+    let appliedTokens = 0;
+
+    for (const row of workloadRows) {
+      const tokenTotal = Number(row.token_total ?? 0);
+      const taskCompleteCount = Number(row.task_complete_count ?? 0);
+      const cwd = (row.cwd as string | null) ?? undefined;
+      const projectName = (row.project_name as string | null) ?? undefined;
+      const statusEstimate = (row.status_estimate as SessionStatusEstimate | null) ?? undefined;
+      const isDirty = toBoolean((row.dirty_since_rename as number | null) ?? 0);
+      const workspaceId = workspaceIdForCwd(cwd);
+      const workspaceLabel = workspaceLabelForCwd(cwd, projectName);
+
+      totalTokens += tokenTotal;
+      totalTasks += taskCompleteCount;
+
+      if (isDirty) {
+        dirtyTokens += tokenTotal;
+      }
+
+      switch (statusEstimate) {
+        case "active":
+          activeTokens += tokenTotal;
+          break;
+        case "candidate_ready":
+          candidateReadyTokens += tokenTotal;
+          break;
+        case "finalize_ready":
+          finalizeReadyTokens += tokenTotal;
+          break;
+        case "applied":
+          appliedTokens += tokenTotal;
+          break;
+        default:
+          break;
+      }
+
+      const existingWorkspace = topWorkspaceMap.get(workspaceId);
+      if (existingWorkspace) {
+        existingWorkspace.sessions += 1;
+        existingWorkspace.tokens += tokenTotal;
+      } else {
+        topWorkspaceMap.set(workspaceId, {
+          workspaceId,
+          workspaceLabel,
+          sessions: 1,
+          tokens: tokenTotal
+        });
+      }
+    }
+
     const renameStatsRow = this.db
       .prepare(
         `SELECT
@@ -701,6 +770,57 @@ export class StateDatabase {
       )
       .get() as Record<string, unknown>;
 
+    const activityWindowDays = 14;
+    const bucketStart = new Date();
+    bucketStart.setUTCHours(0, 0, 0, 0);
+    bucketStart.setUTCDate(bucketStart.getUTCDate() - (activityWindowDays - 1));
+    const activityRows = this.db
+      .prepare(
+        `SELECT
+            substr(applied_at, 1, 10) AS day,
+            SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END) AS applied,
+            SUM(CASE WHEN status = 'preview_only' THEN 1 ELSE 0 END) AS preview_only,
+            SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN status = 'applied' AND kind = 'auto' THEN 1 ELSE 0 END) AS auto_applied,
+            SUM(CASE WHEN status = 'applied' AND kind = 'manual' THEN 1 ELSE 0 END) AS manual_applied,
+            SUM(CASE WHEN status = 'applied' AND source = 'ai' THEN 1 ELSE 0 END) AS ai_applied
+         FROM rename_history
+         WHERE applied_at >= ?
+         GROUP BY day
+         ORDER BY day`
+      )
+      .all(bucketStart.toISOString()) as Array<Record<string, unknown>>;
+    const activityByDate = new Map<string, Record<string, unknown>>();
+    for (const row of activityRows) {
+      if (typeof row.day === "string") {
+        activityByDate.set(row.day, row);
+      }
+    }
+
+    const activityBuckets: OverviewReport["activity"]["buckets"] = [];
+    for (let index = 0; index < activityWindowDays; index += 1) {
+      const date = new Date(bucketStart);
+      date.setUTCDate(bucketStart.getUTCDate() + index);
+      const day = date.toISOString().slice(0, 10);
+      const row = activityByDate.get(day);
+      activityBuckets.push({
+        date: day,
+        label: `${String(date.getUTCMonth() + 1).padStart(2, "0")}/${String(
+          date.getUTCDate()
+        ).padStart(2, "0")}`,
+        applied: Number(row?.applied ?? 0),
+        previewOnly: Number(row?.preview_only ?? 0),
+        skipped: Number(row?.skipped ?? 0),
+        failed: Number(row?.failed ?? 0),
+        autoApplied: Number(row?.auto_applied ?? 0),
+        manualApplied: Number(row?.manual_applied ?? 0),
+        aiApplied: Number(row?.ai_applied ?? 0)
+      });
+    }
+
+    const dirtySessionCount = sessions.filter((item) => item.dirty).length;
+
     return {
       sessions: {
         total: sessions.length,
@@ -711,6 +831,32 @@ export class StateDatabase {
         manualOverride: sessions.filter((item) => item.manualOverride).length,
         named: sessions.filter((item) => Boolean(item.officialName)).length,
         withCandidate: sessions.filter((item) => Boolean(item.candidateName)).length
+      },
+      runtime: {
+        configuredAutoApply: "unknown",
+        actualExecution: "preview-only",
+        daemonAutoApply: false,
+        explain: "The current daemon scans sessions and prints preview evaluations, but it does not call apply()."
+      },
+      workload: {
+        totalTokens,
+        totalTasks,
+        dirtyTokens,
+        activeTokens,
+        candidateReadyTokens,
+        finalizeReadyTokens,
+        appliedTokens,
+        averageTokensPerSession: sessions.length > 0 ? Math.round(totalTokens / sessions.length) : 0,
+        averageTokensPerDirtySession:
+          dirtySessionCount > 0 ? Math.round(dirtyTokens / dirtySessionCount) : 0,
+        topWorkspacesByTokens: Array.from(topWorkspaceMap.values())
+          .sort((left, right) => {
+            if (right.tokens !== left.tokens) {
+              return right.tokens - left.tokens;
+            }
+            return right.sessions - left.sessions;
+          })
+          .slice(0, 6)
       },
       pipeline,
       renameHistory: {
@@ -726,6 +872,10 @@ export class StateDatabase {
         batchApplied: Number(renameStatsRow.batch_applied ?? 0),
         autoApplied: Number(renameStatsRow.auto_applied ?? 0),
         lastAppliedAt: (renameStatsRow.last_applied_at as string | null) ?? undefined
+      },
+      activity: {
+        windowDays: activityWindowDays,
+        buckets: activityBuckets
       }
     };
   }

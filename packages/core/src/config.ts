@@ -50,7 +50,8 @@ function getNumber(record: Record<string, unknown>, ...keys: string[]): number |
 const DEFAULT_CONFIG: EffectiveConfig = {
   general: {
     codexHome: "~/.codex",
-    stateDir: `~/${DEFAULT_STATE_RELATIVE_PATH}`
+    stateDir: `~/${DEFAULT_STATE_RELATIVE_PATH}`,
+    uiLanguage: "en-US"
   },
   rename: {
     mode: "hybrid",
@@ -65,7 +66,9 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     preset: "conventional",
     template: "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
     maxLength: 72,
-    language: "zh-CN"
+    language: "zh-CN",
+    contextStrategy: "summary-signals",
+    contextMaxChars: 8_000
   },
   ai: {
     backend: "codex",
@@ -189,7 +192,8 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
   return {
     general: {
       codexHome: getString(general, "codex_home", "codexHome"),
-      stateDir: getString(general, "state_dir", "stateDir")
+      stateDir: getString(general, "state_dir", "stateDir"),
+      uiLanguage: getString(general, "ui_language", "uiLanguage") as EffectiveConfig["general"]["uiLanguage"] | undefined
     },
     rename: {
       mode: getString(rename, "mode") as EffectiveConfig["rename"]["mode"] | undefined,
@@ -216,7 +220,13 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       preset: getString(naming, "preset"),
       template: getString(naming, "template"),
       maxLength: getNumber(naming, "max_length", "maxLength"),
-      language: getString(naming, "language")
+      language: getString(naming, "language"),
+      contextStrategy: getString(
+        naming,
+        "context_strategy",
+        "contextStrategy"
+      ) as EffectiveConfig["naming"]["contextStrategy"] | undefined,
+      contextMaxChars: getNumber(naming, "context_max_chars", "contextMaxChars")
     },
     ai: {
       backend: getString(ai, "backend") as EffectiveConfig["ai"]["backend"] | undefined,
@@ -335,7 +345,8 @@ function serializeConfigDocument(document: ConfigDocument): string {
   const payload = stripEmptyRecord({
     general: stripEmptyRecord({
       codex_home: document.general?.codexHome,
-      state_dir: document.general?.stateDir
+      state_dir: document.general?.stateDir,
+      ui_language: document.general?.uiLanguage
     }),
     rename: stripEmptyRecord({
       mode: document.rename?.mode,
@@ -356,7 +367,9 @@ function serializeConfigDocument(document: ConfigDocument): string {
       preset: document.naming?.preset,
       template: document.naming?.template,
       max_length: document.naming?.maxLength,
-      language: document.naming?.language
+      language: document.naming?.language,
+      context_strategy: document.naming?.contextStrategy,
+      context_max_chars: document.naming?.contextMaxChars
     }),
     ai: stripEmptyRecord({
       backend: document.ai?.backend,
@@ -543,7 +556,8 @@ export async function loadEffectiveConfig(options?: {
 
   effective.general = {
     codexHome: expandHome(effective.general.codexHome ?? mergedGeneral.codexHome),
-    stateDir: expandHome(effective.general.stateDir ?? mergedGeneral.stateDir)
+    stateDir: expandHome(effective.general.stateDir ?? mergedGeneral.stateDir),
+    uiLanguage: effective.general.uiLanguage ?? mergedGeneral.uiLanguage ?? DEFAULT_CONFIG.general.uiLanguage
   };
 
   effective.inheritedCodex = await loadCodexInheritedConfig(effective.general.codexHome);

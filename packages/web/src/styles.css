@@ -253,12 +253,15 @@ pre {
 }
 
 .project-item .name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .project-item .count {
+  flex-shrink: 0;
   margin-left: 8px;
   padding: 1px 7px;
   border-radius: 10px;
@@ -319,6 +322,7 @@ pre {
 }
 
 .session-list-view {
+  min-width: 0;
   border-right: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
 }
@@ -354,6 +358,21 @@ pre {
   font-weight: 500;
   line-height: 1.14;
   letter-spacing: -0.02em;
+}
+
+.session-list-header {
+  align-items: flex-start;
+}
+
+.session-list-header > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-list-header h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .badge {
@@ -828,6 +847,10 @@ pre {
   font-weight: 500;
   line-height: 1.24;
   letter-spacing: -0.02em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .session-item-subtitle {
@@ -1062,6 +1085,59 @@ pre {
   font-size: 18px;
   font-weight: 500;
   line-height: 1.18;
+}
+
+.ops-layout {
+  padding: 18px;
+  overflow: auto;
+  align-content: start;
+}
+
+.ops-span-wide {
+  grid-column: 1 / -1;
+}
+
+.ops-runtime-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.ops-runtime-header {
+  align-items: flex-start;
+}
+
+.ops-runtime-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ops-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.ops-chart-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.ops-chart-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.ops-chart-canvas {
+  min-height: 320px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
+  border: 1px solid var(--border-strong);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.ops-disclosure {
+  margin-top: 12px;
 }
 
 .signal-grid {

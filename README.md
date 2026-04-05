@@ -30,10 +30,18 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 优先直接走 Responses / Chat Completions
 - 只有直连不可用时才回退 `codex exec`
 
+当前自动重命名的运行态还需要明确区分“评估结果”和“实际落盘”：
+
+- `evaluateAutoRename()` 统一给出 `skip / suggest / apply`
+- `candidate_ready` 会在 UI 里显示为 `suggest`
+- `finalize_ready` 会在 UI 里显示为 `apply`
+- 但当前 daemon 仍然是 `scan + preview`，不会自动把名字写回 `session_index.jsonl`
+- 因此前端里看到的 `apply` 表示“允许应用”，不是“已经自动应用”
+
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 - Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
-- WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、maintenance 视图
+- WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、运行态面板
 - TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
 ## 文档导航
@@ -42,6 +50,7 @@ Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 - [产品范围](./docs/spec/product-scope.md)
 - [数据模型](./docs/spec/data-model.md)
 - [触发与生命周期](./docs/spec/trigger-and-lifecycle.md)
+- [Auto Rename 评估与 Context 构建](./docs/spec/rename-evaluation-and-context.md)
 - [CLI / API / UI 设计](./docs/spec/cli-api-ui.md)
 - [WebUI / TUI / Local API 详细设计](./docs/spec/web-tui-local-api-design.md)
 - [Claude 设计系统接入说明](./docs/design/claude/ADOPTION.md)
@@ -197,6 +206,7 @@ npm run web
 
 现在 `npm run web` 会自动：
 
+- 查找并关闭当前 repo 之前残留的旧 Web / API / launcher 实例
 - 复用一个健康的本地 API
 - 或者在 `42110+` 范围内找可用端口启动 API
 - 然后把 Vite 代理指向对应 API
@@ -208,9 +218,26 @@ npm run web
 WebUI 当前包含 3 个主视图：
 
 - `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
-- `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置，并直接写回 `~/.config/codex-session-manager/config.toml`
-- `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置、AI/dirty/manual/frozen 总览卡片，并直接写回 `~/.config/codex-session-manager/config.toml`
-- `Maintenance`：doctor 与 auto-rename preview
+- `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
+- `Rename Ops / 运行态`：自动重命名运行态、近期应用活动、命名来源分布、工作区 token 压力、预览队列与原始 doctor 信息
+
+`Rename Ops / 运行态` 页当前默认只拉取状态级 preview：
+
+- 默认只展示 `skip / suggest / apply` 状态与原因
+- 候选名改成按需载入，避免页面一打开就触发全量 AI 命名
+- 图表使用与 `ccLoad` 趋势页同一实现家族的 ECharts canvas 方案，按主题色自动取值，并用 `ResizeObserver` 适配容器尺寸
+
+Web/TUI 现在都支持两种界面语言：
+
+- `en-US`
+- `zh-CN`
+
+对应配置项为：
+
+```toml
+[general]
+ui_language = "zh-CN"
+```
 
 当前 WebUI 的视觉系统已开始按上游 `awesome-design-md/claude` 重构，参考文件位于：
 
@@ -262,7 +289,14 @@ Settings 界面里：
 - `e`：编辑当前字段
 - `space`：对枚举字段循环切换
 - `s`：保存到用户配置
+- `p`：刷新当前 AI prompt preview
 - `R`：从磁盘重新加载
+
+自动命名预览现在显式区分三种状态：
+
+- `skip`
+- `suggest`：表示 `candidate_ready`
+- `apply`：表示 `finalize_ready`
 
 ### 4. 使用 CLI
 
@@ -335,6 +369,12 @@ curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/rename \
 
 ```bash
 curl http://127.0.0.1:42110/api/v1/config
+```
+
+获取当前 AI prompt preview：
+
+```bash
+curl 'http://127.0.0.1:42110/api/v1/ai/prompt-preview?threadId=<thread-id>'
 ```
 
 写回用户配置：

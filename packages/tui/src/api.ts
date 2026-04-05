@@ -1,8 +1,10 @@
 import type {
+  AutoRenamePreviewResponse,
   BatchApplyResponse,
   ConfigDocument,
   ConfigUpdateResponse,
   ConfigView,
+  PromptPreviewResponse,
   SessionDetail,
   SessionTranscriptPage,
   SessionsResponse
@@ -123,6 +125,28 @@ export class LocalApiClient {
         previewOnly
       })
     });
+  }
+
+  getAutoRenamePreview(params?: {
+    includeCandidateNames?: boolean;
+    limit?: number;
+  }): Promise<AutoRenamePreviewResponse> {
+    const url = new URL(this.resolve("/api/v1/auto-rename/preview"));
+    if (params?.includeCandidateNames) {
+      url.searchParams.set("includeCandidateNames", "true");
+    }
+    if (params?.limit) {
+      url.searchParams.set("limit", String(params.limit));
+    }
+    return requestJson<AutoRenamePreviewResponse>(url.toString());
+  }
+
+  getPromptPreview(threadId?: string): Promise<PromptPreviewResponse> {
+    const url = new URL(this.resolve("/api/v1/ai/prompt-preview"));
+    if (threadId) {
+      url.searchParams.set("threadId", threadId);
+    }
+    return requestJson<PromptPreviewResponse>(url.toString());
   }
 
   getConfig(): Promise<ConfigView> {

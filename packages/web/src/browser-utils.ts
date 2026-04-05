@@ -1,15 +1,9 @@
 import type { SessionDetail, SessionSummary } from "./types.js";
+import type { UiLanguage } from "./i18n.js";
+import { formatUiWhen, timeGroupLabel } from "./i18n.js";
 
-export function formatWhen(value?: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-  return new Date(value).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+export function formatWhen(value: string | undefined | null, language: UiLanguage): string {
+  return formatUiWhen(value, language);
 }
 
 export function toneForSession(session: SessionSummary): string {
@@ -72,7 +66,10 @@ function getTimeGroup(value?: string): TimeGroupLabel {
   return "Earlier";
 }
 
-export function groupSessionsByTime(sessions: SessionSummary[]): Array<{ label: TimeGroupLabel; items: SessionSummary[] }> {
+export function groupSessionsByTime(
+  sessions: SessionSummary[],
+  language: UiLanguage
+): Array<{ label: string; items: SessionSummary[] }> {
   const groups = new Map<TimeGroupLabel, SessionSummary[]>();
   for (const label of TIME_GROUP_ORDER) {
     groups.set(label, []);
@@ -83,11 +80,24 @@ export function groupSessionsByTime(sessions: SessionSummary[]): Array<{ label: 
   }
 
   return TIME_GROUP_ORDER.map((label) => ({
-    label,
+    label: timeGroupLabel(label, language),
     items: groups.get(label) ?? []
   })).filter((group) => group.items.length > 0);
 }
 
 export function sessionDisplayTitle(session: SessionSummary | SessionDetail): string {
   return session.officialName ?? session.candidateName ?? session.threadId;
+}
+
+export function sessionListTitle(session: SessionSummary | SessionDetail): string {
+  const firstUserMessage = session.firstUserMessage?.trim();
+  return firstUserMessage && firstUserMessage.length > 0 ? firstUserMessage : sessionDisplayTitle(session);
+}
+
+export function sessionListSubtitle(session: SessionSummary | SessionDetail): string {
+  const firstUserMessage = session.firstUserMessage?.trim();
+  if (firstUserMessage && firstUserMessage.length > 0) {
+    return sessionDisplayTitle(session);
+  }
+  return session.candidateName ?? session.threadId;
 }

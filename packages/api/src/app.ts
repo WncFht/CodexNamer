@@ -255,6 +255,13 @@ export async function buildApiServer(options?: {
     };
   });
 
+  app.get("/api/v1/ai/prompt-preview", async (request) => {
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    return manager.buildPromptPreview({
+      threadId: typeof query.threadId === "string" ? query.threadId : undefined
+    });
+  });
+
   app.get("/api/v1/overview", async () => manager.overview());
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
