@@ -255,6 +255,8 @@ export async function buildApiServer(options?: {
     };
   });
 
+  app.get("/api/v1/overview", async () => manager.overview());
+
   app.get("/api/v1/sessions/:id", async (request, reply) => {
     const params = request.params as { id: string };
     const query = (request.query as Record<string, unknown> | undefined) ?? {};

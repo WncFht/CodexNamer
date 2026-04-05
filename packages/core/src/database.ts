@@ -4,6 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import type {
   MaterializedSession,
+  OverviewReport,
   RenameHistoryRecord,
   RenameHistoryKind,
   RenameSource,
@@ -634,6 +635,99 @@ export class StateDatabase {
           operator: (item.operator as string | null) ?? undefined
         } satisfies RenameHistoryRecord;
       });
+  }
+
+  getOverviewReport(): OverviewReport {
+    const sessions = this.listSessions();
+    const workspaces = this.listWorkspaceSummaries();
+    const pipeline: OverviewReport["pipeline"] = {
+      discovered: 0,
+      active: 0,
+      candidateReady: 0,
+      finalizeReady: 0,
+      applied: 0,
+      idle: 0,
+      archivedHint: 0,
+      missing: 0
+    };
+
+    for (const session of sessions) {
+      switch (session.statusEstimate) {
+        case "discovered":
+          pipeline.discovered += 1;
+          break;
+        case "active":
+          pipeline.active += 1;
+          break;
+        case "candidate_ready":
+          pipeline.candidateReady += 1;
+          break;
+        case "finalize_ready":
+          pipeline.finalizeReady += 1;
+          break;
+        case "applied":
+          pipeline.applied += 1;
+          break;
+        case "idle":
+          pipeline.idle += 1;
+          break;
+        case "archived_hint":
+          pipeline.archivedHint += 1;
+          break;
+        case "missing":
+          pipeline.missing += 1;
+          break;
+        default:
+          break;
+      }
+    }
+
+    const renameStatsRow = this.db
+      .prepare(
+        `SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END) AS applied,
+            SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN status = 'preview_only' THEN 1 ELSE 0 END) AS preview_only,
+            SUM(CASE WHEN status = 'applied' AND source = 'ai' THEN 1 ELSE 0 END) AS ai_applied,
+            SUM(CASE WHEN status = 'applied' AND source = 'heuristic' THEN 1 ELSE 0 END) AS heuristic_applied,
+            SUM(CASE WHEN status = 'applied' AND source = 'hybrid' THEN 1 ELSE 0 END) AS hybrid_applied,
+            SUM(CASE WHEN status = 'applied' AND source = 'manual' THEN 1 ELSE 0 END) AS manual_applied,
+            SUM(CASE WHEN status = 'applied' AND source = 'batch' THEN 1 ELSE 0 END) AS batch_applied,
+            SUM(CASE WHEN status = 'applied' AND kind = 'auto' THEN 1 ELSE 0 END) AS auto_applied,
+            MAX(CASE WHEN status = 'applied' THEN applied_at END) AS last_applied_at
+         FROM rename_history`
+      )
+      .get() as Record<string, unknown>;
+
+    return {
+      sessions: {
+        total: sessions.length,
+        workspaces: workspaces.length,
+        dirty: sessions.filter((item) => item.dirty).length,
+        clean: sessions.filter((item) => !item.dirty).length,
+        frozen: sessions.filter((item) => item.frozen).length,
+        manualOverride: sessions.filter((item) => item.manualOverride).length,
+        named: sessions.filter((item) => Boolean(item.officialName)).length,
+        withCandidate: sessions.filter((item) => Boolean(item.candidateName)).length
+      },
+      pipeline,
+      renameHistory: {
+        total: Number(renameStatsRow.total ?? 0),
+        applied: Number(renameStatsRow.applied ?? 0),
+        skipped: Number(renameStatsRow.skipped ?? 0),
+        failed: Number(renameStatsRow.failed ?? 0),
+        previewOnly: Number(renameStatsRow.preview_only ?? 0),
+        aiApplied: Number(renameStatsRow.ai_applied ?? 0),
+        heuristicApplied: Number(renameStatsRow.heuristic_applied ?? 0),
+        hybridApplied: Number(renameStatsRow.hybrid_applied ?? 0),
+        manualApplied: Number(renameStatsRow.manual_applied ?? 0),
+        batchApplied: Number(renameStatsRow.batch_applied ?? 0),
+        autoApplied: Number(renameStatsRow.auto_applied ?? 0),
+        lastAppliedAt: (renameStatsRow.last_applied_at as string | null) ?? undefined
+      }
+    };
   }
 
   setFrozen(threadId: string, frozen: boolean): void {

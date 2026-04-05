@@ -114,6 +114,113 @@ export type ProviderResponse = {
   resolvedProvider: Record<string, unknown>;
 };
 
+export type OverviewResponse = {
+  sessions: {
+    total: number;
+    workspaces: number;
+    dirty: number;
+    clean: number;
+    frozen: number;
+    manualOverride: number;
+    named: number;
+    withCandidate: number;
+  };
+  pipeline: {
+    discovered: number;
+    active: number;
+    candidateReady: number;
+    finalizeReady: number;
+    applied: number;
+    idle: number;
+    archivedHint: number;
+    missing: number;
+  };
+  renameHistory: {
+    total: number;
+    applied: number;
+    skipped: number;
+    failed: number;
+    previewOnly: number;
+    aiApplied: number;
+    heuristicApplied: number;
+    hybridApplied: number;
+    manualApplied: number;
+    batchApplied: number;
+    autoApplied: number;
+    lastAppliedAt?: string;
+  };
+};
+
+export type ProviderProfile = {
+  profileId: string;
+  backendKind?: "none" | "codex" | "openai-compatible";
+  displayName?: string;
+  providerSource?: "inherit-codex" | "explicit";
+  providerRef?: string;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  apiKeyRef?: string;
+  headers?: Record<string, string>;
+  wireApi?: "responses" | "chat_completions" | "auto";
+  enabled?: boolean;
+  isDefault?: boolean;
+};
+
+export type ConfigDocument = {
+  general?: {
+    codexHome?: string;
+    stateDir?: string;
+  };
+  rename?: {
+    mode?: "heuristic" | "ai" | "hybrid";
+    autoApply?: "off" | "idle-finalize" | "suggest-only";
+    manualOverrideWins?: boolean;
+    freezeManualName?: boolean;
+  };
+  watch?: {
+    scanIntervalSeconds?: number;
+    candidateIdleSeconds?: number;
+    finalizeIdleSeconds?: number;
+    renameCooldownSeconds?: number;
+    minRolloutGrowthBytes?: number;
+    minTaskCompleteDelta?: number;
+    maxAutoRenamesPerSession?: number;
+  };
+  naming?: {
+    preset?: string;
+    template?: string;
+    maxLength?: number;
+    language?: string;
+    contextStrategy?: "summary-signals" | "user-assistant-transcript";
+    contextMaxChars?: number;
+  };
+  ai?: {
+    backend?: "none" | "codex" | "openai-compatible";
+    providerSource?: "inherit-codex" | "explicit";
+    profile?: string;
+    timeoutSeconds?: number;
+    temperature?: number;
+  };
+  providerProfiles?: ProviderProfile[];
+  maintenance?: {
+    suggestCompactIndexAboveMb?: number;
+    suggestCompactIndexAboveLines?: number;
+    backupBeforeCompact?: boolean;
+  };
+};
+
+export type ConfigView = {
+  paths: {
+    cwd: string;
+    userConfigPath: string;
+    projectConfigPath: string;
+  };
+  userConfig: ConfigDocument;
+  projectOverride: ConfigDocument;
+  effectiveConfig: Record<string, unknown>;
+};
+
 export type DoctorResponse = {
   codexHomeExists: boolean;
   sessionsDirExists: boolean;
@@ -173,4 +280,10 @@ export type RenameFreezeResponse = {
 export type RenameManualOverrideResponse = {
   threadId: string;
   manualOverride: boolean;
+};
+
+export type ConfigUpdateResponse = {
+  writtenTo: string;
+  restartRequired: boolean;
+  config: ConfigView;
 };

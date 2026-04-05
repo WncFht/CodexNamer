@@ -1,7 +1,11 @@
 import type {
   AutoRenamePreviewResponse,
   ApiEventsResponse,
+  ConfigDocument,
+  ConfigUpdateResponse,
+  ConfigView,
   DoctorResponse,
+  OverviewResponse,
   ProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
@@ -116,8 +120,23 @@ export async function fetchProviders(): Promise<ProviderResponse> {
   return requestJson<ProviderResponse>("/api/v1/providers");
 }
 
+export async function fetchConfig(): Promise<ConfigView> {
+  return requestJson<ConfigView>("/api/v1/config");
+}
+
+export async function updateConfig(userConfig: ConfigDocument): Promise<ConfigUpdateResponse> {
+  return requestJson<ConfigUpdateResponse>("/api/v1/config", {
+    method: "PUT",
+    body: JSON.stringify({ userConfig })
+  });
+}
+
 export async function fetchDoctor(): Promise<DoctorResponse> {
   return requestJson<DoctorResponse>("/api/v1/doctor");
+}
+
+export async function fetchOverview(): Promise<OverviewResponse> {
+  return requestJson<OverviewResponse>("/api/v1/overview");
 }
 
 export async function fetchAutoRenamePreview(params?: {

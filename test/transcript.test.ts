@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readSessionTranscript, readSessionTranscriptPage } from "@codex-session-manager/core";
+import { readRenameTranscriptContext, readSessionTranscript, readSessionTranscriptPage } from "@codex-session-manager/core";
 
 import { createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 
@@ -57,5 +57,34 @@ describe("session transcript", () => {
       pageSize: 2
     });
     expect(olderPage.items[0]?.role).toBe("user");
+  });
+
+  it("builds rename context from user and assistant messages only", async () => {
+    const workspace = await createTempWorkspace();
+    const rolloutPath = await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId: "019d-transcript-rename-1",
+      userMessage: "把 user 和 assistant 的内容拼起来重命名",
+      lastAgentMessage: "已整理 transcript，并排除 tool 调用",
+      toolCallName: "shell_command",
+      toolCallArguments: {
+        command: "rg --files",
+        workdir: "/tmp/project-alpha"
+      },
+      toolCallOutput: "README.md\nsrc/index.ts"
+    });
+
+    const context = await readRenameTranscriptContext({
+      rolloutPath,
+      strategy: "user-assistant-transcript",
+      maxChars: 1200
+    });
+
+    expect(context.userMessagesText).toContain("user 和 assistant");
+    expect(context.assistantMessagesText).toContain("排除 tool 调用");
+    expect(context.contextText).toContain("User:");
+    expect(context.contextText).toContain("Assistant:");
+    expect(context.contextText).not.toContain("rg --files");
+    expect(context.contextText).not.toContain("README.md");
   });
 });

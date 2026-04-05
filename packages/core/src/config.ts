@@ -65,7 +65,9 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     preset: "conventional",
     template: "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
     maxLength: 72,
-    language: "zh-CN"
+    language: "zh-CN",
+    contextStrategy: "summary-signals",
+    contextMaxChars: 8000
   },
   ai: {
     backend: "codex",
@@ -216,7 +218,13 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       preset: getString(naming, "preset"),
       template: getString(naming, "template"),
       maxLength: getNumber(naming, "max_length", "maxLength"),
-      language: getString(naming, "language")
+      language: getString(naming, "language"),
+      contextStrategy: getString(
+        naming,
+        "context_strategy",
+        "contextStrategy"
+      ) as EffectiveConfig["naming"]["contextStrategy"] | undefined,
+      contextMaxChars: getNumber(naming, "context_max_chars", "contextMaxChars")
     },
     ai: {
       backend: getString(ai, "backend") as EffectiveConfig["ai"]["backend"] | undefined,
@@ -356,7 +364,9 @@ function serializeConfigDocument(document: ConfigDocument): string {
       preset: document.naming?.preset,
       template: document.naming?.template,
       max_length: document.naming?.maxLength,
-      language: document.naming?.language
+      language: document.naming?.language,
+      context_strategy: document.naming?.contextStrategy,
+      context_max_chars: document.naming?.contextMaxChars
     }),
     ai: stripEmptyRecord({
       backend: document.ai?.backend,

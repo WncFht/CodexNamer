@@ -10,6 +10,7 @@ import {
   type DoctorReport,
   type EffectiveConfig,
   type MaterializedSession,
+  type OverviewReport,
   type RenameSuggestion,
   type ScanReport,
   type SessionDetail,
@@ -23,7 +24,13 @@ import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "./config.j
 import { StateDatabase } from "./database.js";
 import { createRenameInferenceService, inspectRenameProvider } from "./provider.js";
 import { buildSessionRevision } from "./revision.js";
-import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "./rollout.js";
+import {
+  discoverRolloutFiles,
+  ingestRolloutFile,
+  readRenameTranscriptContext,
+  readSessionTranscript,
+  readSessionTranscriptPage
+} from "./rollout.js";
 import {
   appendSessionIndexRename,
   compactSessionIndex,
@@ -253,15 +260,31 @@ export class CodexSessionManager {
     });
   }
 
-  private materializeSessionForSuggestion(detail: SessionDetail): SessionDetail {
-    return detail;
+  private async materializeSessionForSuggestion(detail: SessionDetail): Promise<MaterializedSession> {
+    if (this.config.naming.contextStrategy !== "user-assistant-transcript") {
+      return detail;
+    }
+
+    const transcriptContext = await readRenameTranscriptContext({
+      rolloutPath: detail.rolloutPath,
+      strategy: this.config.naming.contextStrategy,
+      maxChars: this.config.naming.contextMaxChars
+    });
+
+    return {
+      ...detail,
+      renameContextStrategy: transcriptContext.strategy,
+      renameUserMessagesText: transcriptContext.userMessagesText,
+      renameAssistantMessagesText: transcriptContext.assistantMessagesText,
+      renameContextText: transcriptContext.contextText
+    };
   }
 
   async suggest(threadId: string): Promise<RenameSuggestion> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
 
-    const suggestion = await this.inferenceService.suggest(this.materializeSessionForSuggestion(detail));
+    const suggestion = await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail));
     this.db.saveCandidate(threadId, suggestion);
     return suggestion;
   }
@@ -490,7 +513,7 @@ export class CodexSessionManager {
     if (options?.threadId) {
       await this.scan();
       const detail = this.requireSessionDetail(options.threadId);
-      session = this.materializeSessionForSuggestion(detail);
+      session = await this.materializeSessionForSuggestion(detail);
     } else {
       session = {
         threadId: "provider-test",
@@ -568,6 +591,11 @@ export class CodexSessionManager {
     };
   }
 
+  async overview(): Promise<OverviewReport> {
+    await this.scan();
+    return this.db.getOverviewReport();
+  }
+
   async previewAutoRename(options?: {
     includeCandidateNames?: boolean;
     limit?: number;
@@ -628,7 +656,7 @@ export class CodexSessionManager {
       previews.push({
         threadId: detail.threadId,
         candidateName: options?.includeCandidateNames
-          ? (await this.inferenceService.suggest(this.materializeSessionForSuggestion(detail))).name
+          ? (await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail))).name
           : undefined,
         status: "apply",
         reason: "finalize_ready"

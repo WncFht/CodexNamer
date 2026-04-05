@@ -1,3 +1,5 @@
+import * as React from "react";
+
 import type { UiNotice } from "./useControlDeckState.js";
 import { formatWhen, groupSessionsByTime, sessionDisplayTitle, toneForSession } from "./browser-utils.js";
 import { TranscriptPanel } from "./TranscriptPanel.js";
@@ -8,6 +10,8 @@ export function SessionBrowser(props: {
   selectedWorkspaceLabel: string;
   selectedId?: string;
   detail: SessionDetail | null;
+  sessionPaneCollapsed: boolean;
+  sessionPaneWidth: number;
   loadingSessions: boolean;
   loadingDetail: boolean;
   actioning: boolean;
@@ -22,6 +26,9 @@ export function SessionBrowser(props: {
   onToggleShowHiddenTranscript: (value: boolean) => void;
   onRefresh: () => void;
   onSelectSession: (threadId: string) => void;
+  onToggleSessionPane: () => void;
+  onSessionPaneWidthChange: (delta: number) => void;
+  onStartSessionResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSuggest: () => void | Promise<void>;
   onApply: () => void | Promise<void>;
   onToggleFreeze: () => void | Promise<void>;
@@ -31,14 +38,18 @@ export function SessionBrowser(props: {
   const actionLabelLower = props.actionLabel?.toLowerCase();
 
   return (
-    <section className="history-layout">
-      <section className="session-list-view">
+    <section className={props.sessionPaneCollapsed ? "history-layout session-pane-collapsed" : "history-layout"}>
+      <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"}>
         <header className="view-header session-list-header">
           <div>
+            <p className="panel-kicker">Conversation Archive</p>
             <h2>{props.selectedWorkspaceLabel}</h2>
             <span className="badge">{props.sessions.length} sessions</span>
           </div>
           <div className="header-actions">
+            <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
+              {props.sessionPaneCollapsed ? "Show Sessions" : "Hide Sessions"}
+            </button>
             <button className="btn-refresh" onClick={props.onRefresh} title="Refresh" type="button">
               &#8635; Refresh
             </button>
@@ -98,12 +109,23 @@ export function SessionBrowser(props: {
         </div>
       </section>
 
+      {!props.sessionPaneCollapsed ? (
+        <div
+          className="history-splitter"
+          onPointerDown={props.onStartSessionResize}
+          role="separator"
+          aria-label="Resize session list"
+          aria-orientation="vertical"
+        />
+      ) : null}
+
       <section className="chat-view">
         {props.detail ? (
           <>
             <header className="view-header chat-header">
               <div className="chat-title-wrap">
                 <div className="chat-title-block">
+                  <p className="panel-kicker">Selected Session</p>
                   <h2 className="editable-title">{sessionDisplayTitle(props.detail)}</h2>
                   <div className="chat-meta-bar">
                     <span>{props.detail.cwd ?? props.detail.workspaceLabel}</span>
@@ -113,6 +135,9 @@ export function SessionBrowser(props: {
                   </div>
                 </div>
                 <div className="chat-header-right">
+                  <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
+                    {props.sessionPaneCollapsed ? "Show Sessions" : "Hide Sessions"}
+                  </button>
                   {props.detail.dirty ? <span className="chip danger">dirty</span> : <span className="chip success">clean</span>}
                   {props.detail.frozen ? <span className="chip warning">frozen</span> : null}
                   {props.detail.manualOverride ? <span className="chip manual">manual</span> : null}
@@ -144,10 +169,7 @@ export function SessionBrowser(props: {
               </div>
             </header>
 
-            {props.notice ? (
-              <div className={`error-banner notice-banner ${props.notice.tone}`}>{props.notice.text}</div>
-            ) : null}
-            {props.error && (!props.notice || props.notice.tone !== "error" || props.notice.text !== props.error) ? (
+            {props.error ? (
               <div className="error-banner notice-banner error">{props.error}</div>
             ) : null}
 
@@ -161,6 +183,7 @@ export function SessionBrowser(props: {
 
             <div className="chat-footer-panels single-panel">
               <section className="detail-panel">
+                <p className="panel-kicker">Timeline</p>
                 <h3>Rename history</h3>
                 <div className="history-stack">
                   {(props.detail.renameHistory ?? []).slice(0, 10).map((entry, index) => (

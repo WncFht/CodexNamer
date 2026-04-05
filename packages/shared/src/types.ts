@@ -2,6 +2,7 @@ export type RenameMode = "heuristic" | "ai" | "hybrid";
 export type AiBackend = "none" | "codex" | "openai-compatible";
 export type ProviderSource = "explicit" | "inherit-codex" | "mixed";
 export type ProviderWireApi = "responses" | "chat_completions" | "auto";
+export type RenameContextStrategy = "summary-signals" | "user-assistant-transcript";
 export type RenameSource = "heuristic" | "ai" | "hybrid" | "manual" | "batch" | "recovered";
 export type RenameHistoryKind = "auto" | "manual" | "batch" | "compact-rewrite";
 export type RenameStatus = "applied" | "skipped" | "failed" | "preview_only";
@@ -24,6 +25,8 @@ export interface NamingConfig {
   template: string;
   maxLength: number;
   language: string;
+  contextStrategy: RenameContextStrategy;
+  contextMaxChars: number;
 }
 
 export interface RenameConfig {
@@ -187,6 +190,10 @@ export interface MaterializedSession {
   lastAgentMessage?: string;
   taskCompleteCount: number;
   tokenTotal: number;
+  renameUserMessagesText?: string;
+  renameAssistantMessagesText?: string;
+  renameContextText?: string;
+  renameContextStrategy?: RenameContextStrategy;
 }
 
 export interface WorkspaceSummary {
@@ -340,4 +347,41 @@ export interface AutoRenamePreview {
   candidateName?: string;
   status: "skip" | "apply";
   reason: string;
+}
+
+export interface OverviewReport {
+  sessions: {
+    total: number;
+    workspaces: number;
+    dirty: number;
+    clean: number;
+    frozen: number;
+    manualOverride: number;
+    named: number;
+    withCandidate: number;
+  };
+  pipeline: {
+    discovered: number;
+    active: number;
+    candidateReady: number;
+    finalizeReady: number;
+    applied: number;
+    idle: number;
+    archivedHint: number;
+    missing: number;
+  };
+  renameHistory: {
+    total: number;
+    applied: number;
+    skipped: number;
+    failed: number;
+    previewOnly: number;
+    aiApplied: number;
+    heuristicApplied: number;
+    hybridApplied: number;
+    manualApplied: number;
+    batchApplied: number;
+    autoApplied: number;
+    lastAppliedAt?: string;
+  };
 }

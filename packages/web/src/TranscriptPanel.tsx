@@ -127,13 +127,16 @@ export function TranscriptPanel(props: {
   return (
     <section className="chat-view-shell">
       <div className="chat-toolbar">
-        <label className="chat-search">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search in conversation..."
-          />
-        </label>
+        <div className="chat-toolbar-copy">
+          <p className="panel-kicker">Transcript</p>
+          <label className="chat-search">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search in conversation..."
+            />
+          </label>
+        </div>
         <div className="chat-toolbar-actions">
           {(["all", "user", "assistant", "tool", "system"] as const).map((item) => (
             <button

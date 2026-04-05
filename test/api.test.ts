@@ -115,6 +115,13 @@ describe("local api", () => {
     });
     expect(doctor.statusCode).toBe(200);
     expect(doctor.json().provider).toBeDefined();
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/v1/overview"
+    });
+    expect(overview.statusCode).toBe(200);
+    expect(overview.json().sessions.total).toBeGreaterThanOrEqual(1);
   });
 
   it("supports session filters and auto-rename preview endpoint", async () => {

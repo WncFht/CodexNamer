@@ -1,9 +1,37 @@
+import * as React from "react";
+
 import { formatWhen } from "./browser-utils.js";
 import { SessionBrowser } from "./SessionBrowser.js";
+import { SettingsPanel } from "./SettingsPanel.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
+
+function readStoredNumber(key: string, fallback: number): number {
+  const raw = window.localStorage.getItem(key);
+  const parsed = raw ? Number(raw) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readStoredBoolean(key: string, fallback = false): boolean {
+  const raw = window.localStorage.getItem(key);
+  return raw === null ? fallback : raw === "true";
+}
 
 export function App() {
   const state = useControlDeckState();
+  const workspaceDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
+  const sessionDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
+  const [workspacePaneCollapsed, setWorkspacePaneCollapsed] = React.useState(() =>
+    readStoredBoolean("csm:workspacePaneCollapsed", false)
+  );
+  const [sessionPaneCollapsed, setSessionPaneCollapsed] = React.useState(() =>
+    readStoredBoolean("csm:sessionPaneCollapsed", false)
+  );
+  const [workspacePaneWidth, setWorkspacePaneWidth] = React.useState(() =>
+    readStoredNumber("csm:workspacePaneWidth", 280)
+  );
+  const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() =>
+    readStoredNumber("csm:sessionPaneWidth", 390)
+  );
   const previewApplyCount = state.preview?.items.filter((item) => item.status === "apply").length ?? 0;
   const selectedWorkspace =
     state.selectedWorkspaceId === ALL_WORKSPACES_ID
@@ -11,18 +39,103 @@ export function App() {
       : state.workspaces.find((item) => item.workspaceId === state.selectedWorkspaceId);
   const selectedWorkspaceLabel = selectedWorkspace?.workspaceLabel ?? "All workspaces";
 
+  React.useEffect(() => {
+    window.localStorage.setItem("csm:workspacePaneCollapsed", String(workspacePaneCollapsed));
+  }, [workspacePaneCollapsed]);
+
+  React.useEffect(() => {
+    window.localStorage.setItem("csm:sessionPaneCollapsed", String(sessionPaneCollapsed));
+  }, [sessionPaneCollapsed]);
+
+  React.useEffect(() => {
+    window.localStorage.setItem("csm:workspacePaneWidth", String(workspacePaneWidth));
+  }, [workspacePaneWidth]);
+
+  React.useEffect(() => {
+    window.localStorage.setItem("csm:sessionPaneWidth", String(sessionPaneWidth));
+  }, [sessionPaneWidth]);
+
+  React.useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (workspaceDragRef.current) {
+        const delta = event.clientX - workspaceDragRef.current.startX;
+        setWorkspacePaneWidth(Math.max(220, Math.min(420, workspaceDragRef.current.startWidth + delta)));
+      }
+      if (sessionDragRef.current) {
+        const delta = event.clientX - sessionDragRef.current.startX;
+        setSessionPaneWidth(Math.max(320, Math.min(560, sessionDragRef.current.startWidth + delta)));
+      }
+    };
+
+    const handlePointerUp = () => {
+      workspaceDragRef.current = null;
+      sessionDragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
+
+  const startWorkspaceResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setWorkspacePaneCollapsed(false);
+    workspaceDragRef.current = {
+      startX: event.clientX,
+      startWidth: workspacePaneWidth
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const startSessionResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setSessionPaneCollapsed(false);
+    sessionDragRef.current = {
+      startX: event.clientX,
+      startWidth: sessionPaneWidth
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
   return (
-    <div id="app">
-      <aside id="sidebar">
+    <div
+      id="app"
+      style={
+        {
+          "--sidebar-width": `${workspacePaneCollapsed ? 88 : workspacePaneWidth}px`,
+          "--session-list-width": `${sessionPaneCollapsed ? 0 : sessionPaneWidth}px`
+        } as React.CSSProperties
+      }
+    >
+      <aside className={workspacePaneCollapsed ? "collapsed" : undefined} id="sidebar">
         <div className="sidebar-header">
-          <h1 className="home-link">Codex Session</h1>
-          <p className="subtitle home-link">Manager</p>
+          <div>
+            <p className="sidebar-kicker">Claude Design MD</p>
+            <h1 className="home-link">Codex Session</h1>
+            <p className="subtitle home-link">Manager</p>
+            <p className="sidebar-copy">Warm editorial control surface for session naming, history, and maintenance.</p>
+          </div>
+          <div className="pane-controls">
+            <button className="pane-btn" onClick={() => setWorkspacePaneCollapsed((value) => !value)} title={workspacePaneCollapsed ? "Expand workspace pane" : "Collapse workspace pane"} type="button">
+              {workspacePaneCollapsed ? "Open" : "Fold"}
+            </button>
+          </div>
         </div>
 
         <div className="sidebar-actions">
           {[
             ["sessions", "Sessions"],
-            ["providers", "Providers"],
+            ["settings", "Settings"],
             ["maintenance", "Maintenance"]
           ].map(([id, label]) => (
             <button
@@ -87,7 +200,13 @@ export function App() {
         </div>
       </aside>
 
-      <div className="splitter" />
+      <div
+        className="splitter"
+        onPointerDown={startWorkspaceResize}
+        role="separator"
+        aria-label="Resize workspace pane"
+        aria-orientation="vertical"
+      />
 
       <main id="content">
         {state.tab === "sessions" ? (
@@ -96,6 +215,8 @@ export function App() {
             selectedWorkspaceLabel={selectedWorkspaceLabel}
             selectedId={state.selectedId}
             detail={state.detail}
+            sessionPaneCollapsed={sessionPaneCollapsed}
+            sessionPaneWidth={sessionPaneWidth}
             loadingSessions={state.loadingSessions}
             loadingDetail={state.loadingDetail}
             actioning={state.actioning}
@@ -110,6 +231,11 @@ export function App() {
             onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
             onRefresh={() => void state.refreshSessions()}
             onSelectSession={(threadId) => state.setSelectedId(threadId)}
+            onToggleSessionPane={() => setSessionPaneCollapsed((value) => !value)}
+            onSessionPaneWidthChange={(delta) =>
+              setSessionPaneWidth((value) => Math.max(320, Math.min(560, value + delta)))
+            }
+            onStartSessionResize={startSessionResize}
             onSuggest={() => state.actions.suggest()}
             onApply={() => state.actions.apply()}
             onToggleFreeze={() => state.actions.toggleFreeze()}
@@ -117,32 +243,31 @@ export function App() {
           />
         ) : null}
 
-        {state.tab === "providers" ? (
-          <section className="panel-grid">
-            <div className="detail-panel">
-              <h3>Resolved provider</h3>
-              <pre>{JSON.stringify(state.providers?.resolvedProvider ?? {}, null, 2)}</pre>
-            </div>
-            <div className="detail-panel">
-              <h3>AI config</h3>
-              <pre>{JSON.stringify(state.providers?.ai ?? {}, null, 2)}</pre>
-            </div>
-            <div className="detail-panel">
-              <h3>Inherited Codex</h3>
-              <pre>{JSON.stringify(state.providers?.inheritedCodex ?? {}, null, 2)}</pre>
-            </div>
-          </section>
+        {state.tab === "settings" ? (
+          <SettingsPanel
+            configView={state.configView}
+            overview={state.overview}
+            onReload={() => void state.refreshSidePanels()}
+            onSave={(patch) => state.saveConfig(patch)}
+            previewApplyCount={previewApplyCount}
+            providers={state.providers}
+            saving={state.savingConfig}
+          />
         ) : null}
 
         {state.tab === "maintenance" ? (
           <section className="panel-grid">
             <div className="detail-panel">
+              <p className="panel-kicker">Health</p>
               <h3>Doctor</h3>
               <pre>{JSON.stringify(state.doctor ?? {}, null, 2)}</pre>
             </div>
             <div className="detail-panel">
               <div className="panel-topline">
-                <h3>Auto rename preview</h3>
+                <div>
+                  <p className="panel-kicker">Scheduler</p>
+                  <h3>Auto rename preview</h3>
+                </div>
                 <button className="btn-sm" onClick={() => void state.refreshPreview({ includeCandidateNames: true, urgent: true })} type="button">
                   {state.previewRefreshing ? "Refreshing..." : "Refresh Preview"}
                 </button>

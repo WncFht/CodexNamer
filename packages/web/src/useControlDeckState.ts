@@ -2,20 +2,26 @@ import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState
 
 import {
   applySession,
+  fetchConfig,
   fetchAutoRenamePreview,
   fetchDoctor,
   fetchEvents,
+  fetchOverview,
   fetchProviders,
   fetchSessionDetail,
   fetchSessions,
   freezeSession,
   suggestSession,
-  toggleManualOverride
+  toggleManualOverride,
+  updateConfig
 } from "./api.js";
 import type {
   ApiEventsResponse,
   AutoRenamePreviewResponse,
+  ConfigDocument,
+  ConfigView,
   DoctorResponse,
+  OverviewResponse,
   ProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
@@ -26,7 +32,7 @@ import type {
   SessionsResponse
 } from "./types.js";
 
-export type TabId = "sessions" | "providers" | "maintenance";
+export type TabId = "sessions" | "settings" | "maintenance";
 export type UiNotice = {
   tone: "info" | "success" | "error";
   text: string;
@@ -42,7 +48,9 @@ export function useControlDeckState() {
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [providers, setProviders] = useState<ProviderResponse | null>(null);
+  const [configView, setConfigView] = useState<ConfigView | null>(null);
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [preview, setPreview] = useState<AutoRenamePreviewResponse | null>(null);
   const [search, setSearch] = useState("");
   const [dirtyOnly, setDirtyOnly] = useState(true);
@@ -55,6 +63,7 @@ export function useControlDeckState() {
   const [notice, setNotice] = useState<UiNotice | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
   const deferredSearch = useDeferredValue(search);
   const eventCursorRef = useRef(0);
 
@@ -79,9 +88,16 @@ export function useControlDeckState() {
   };
 
   const reloadSidePanels = async () => {
-    const [providerPayload, doctorPayload] = await Promise.all([fetchProviders(), fetchDoctor()]);
+    const [providerPayload, configPayload, doctorPayload, overviewPayload] = await Promise.all([
+      fetchProviders(),
+      fetchConfig(),
+      fetchDoctor(),
+      fetchOverview()
+    ]);
     setProviders(providerPayload);
+    setConfigView(configPayload);
     setDoctor(doctorPayload);
+    setOverview(overviewPayload);
   };
 
   const reloadPreview = async (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => {
@@ -288,6 +304,30 @@ export function useControlDeckState() {
     }
   };
 
+  const saveConfig = async (userConfig: ConfigDocument) => {
+    setSavingConfig(true);
+    setError(null);
+    setNotice({
+      tone: "info",
+      text: "Saving settings..."
+    });
+    try {
+      const result = await updateConfig(userConfig);
+      setConfigView(result.config);
+      await reloadSidePanels();
+      setNotice({
+        tone: "success",
+        text: result.restartRequired
+          ? `Saved to ${result.writtenTo}. Restart required for some changes.`
+          : `Saved to ${result.writtenTo}.`
+      });
+    } catch (nextError) {
+      setFailure(nextError);
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
   return {
     tab,
     setTab,
@@ -299,7 +339,9 @@ export function useControlDeckState() {
     setSelectedId,
     detail,
     providers,
+    configView,
     doctor,
+    overview,
     preview,
     search,
     setSearch: (value: string) => {
@@ -320,9 +362,12 @@ export function useControlDeckState() {
     setNotice,
     lastSyncAt,
     previewRefreshing,
+    savingConfig,
     selectedSummary,
     refreshSessions: reloadSessions,
     refreshPreview: reloadPreview,
+    refreshSidePanels: reloadSidePanels,
+    saveConfig,
     actions: {
       suggest: () =>
         detail
