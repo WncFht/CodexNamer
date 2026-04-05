@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyManagedProcess } from "../scripts/launch-ui.ts";
+import { classifyManagedProcess, detectLegacyRepoPath } from "../scripts/launch-ui.ts";
 
 describe("classifyManagedProcess", () => {
   const repoCwd = "/tmp/codex-session-manager";
@@ -10,7 +10,7 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/tsx", "/tmp/codex-session-manager/scripts/launch-ui.ts", "web"]
+          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/tsx", "scripts/launch-ui.ts", "web"]
         },
         repoCwd,
         "web"
@@ -21,7 +21,7 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/tsx", "/tmp/codex-session-manager/packages/api/src/index.ts"]
+          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/tsx", "packages/api/src/index.ts"]
         },
         repoCwd,
         "web"
@@ -33,8 +33,8 @@ describe("classifyManagedProcess", () => {
     expect(
       classifyManagedProcess(
         {
-          cwd: repoCwd,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/vite/bin/vite.js"]
+          cwd: `${repoCwd}/packages/web`,
+          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/vite"]
         },
         repoCwd,
         "web"
@@ -62,5 +62,17 @@ describe("classifyManagedProcess", () => {
         "web"
       )
     ).toBeUndefined();
+  });
+});
+
+describe("detectLegacyRepoPath", () => {
+  it("detects the pre-migration sibling repo for ai-tools workspaces", () => {
+    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager")).toBe(
+      "/home/fanghaotian/Desktop/src/codex-session-manager"
+    );
+  });
+
+  it("ignores repos that are not under ai-tools", () => {
+    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/codex-session-manager")).toBeUndefined();
   });
 });

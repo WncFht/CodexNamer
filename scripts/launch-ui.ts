@@ -84,9 +84,25 @@ async function readApiCwd(baseUrl: string): Promise<string | undefined> {
   }
 }
 
-async function isCompatibleApi(baseUrl: string, expectedCwd: string): Promise<boolean> {
-  const apiCwd = await readApiCwd(baseUrl);
-  return Boolean(apiCwd && apiCwd === path.resolve(expectedCwd));
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function detectLegacyRepoPath(repoCwd: string): string | undefined {
+  const normalizedRepo = path.resolve(repoCwd);
+  const repoName = path.basename(normalizedRepo);
+  const parentName = path.basename(path.dirname(normalizedRepo));
+  if (parentName !== "ai-tools") {
+    return undefined;
+  }
+
+  const legacyPath = path.resolve(normalizedRepo, "..", "..", repoName);
+  return legacyPath === normalizedRepo ? undefined : legacyPath;
 }
 
 async function canListen(host: string, port: number): Promise<boolean> {
@@ -120,18 +136,38 @@ function normalizeProcessArg(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+function matchesCommandPath(value: string, targetPath: string): boolean {
+  const normalized = normalizeProcessArg(value);
+  return normalized === targetPath || normalized.endsWith(`/${targetPath}`);
+}
+
 function isLauncherCommand(cmdline: string[], mode: UiMode): boolean {
-  return cmdline.some((value) => normalizeProcessArg(value).endsWith("/scripts/launch-ui.ts")) && cmdline.includes(mode);
+  return cmdline.some((value) => matchesCommandPath(value, "scripts/launch-ui.ts")) && cmdline.includes(mode);
 }
 
 function isApiCommand(cmdline: string[]): boolean {
-  return cmdline.some((value) => normalizeProcessArg(value).endsWith("/packages/api/src/index.ts"));
+  return cmdline.some((value) => matchesCommandPath(value, "packages/api/src/index.ts"));
 }
 
 function isWebDevCommand(cmdline: string[]): boolean {
   const normalized = cmdline.map((value) => normalizeProcessArg(value));
-  const referencesVite = normalized.some((value) => value.endsWith("/vite/bin/vite.js") || value === "vite");
+  const referencesVite = normalized.some(
+    (value) => value === "vite" || value.endsWith("/vite/bin/vite.js") || value.endsWith("/.bin/vite")
+  );
   return referencesVite && !normalized.includes("build") && !normalized.includes("preview");
+}
+
+function isRepoOwnedProcess(processCwd: string | undefined, repoCwd: string): boolean {
+  if (!processCwd) {
+    return false;
+  }
+
+  const resolvedProcessCwd = path.resolve(processCwd);
+  const resolvedRepoCwd = path.resolve(repoCwd);
+  return (
+    resolvedProcessCwd === resolvedRepoCwd ||
+    resolvedProcessCwd.startsWith(`${resolvedRepoCwd}${path.sep}`)
+  );
 }
 
 export function classifyManagedProcess(
@@ -139,8 +175,7 @@ export function classifyManagedProcess(
   repoCwd: string,
   mode: UiMode
 ): ManagedProcessKind | undefined {
-  const resolvedCwd = snapshot.cwd ? path.resolve(snapshot.cwd) : undefined;
-  if (!resolvedCwd || resolvedCwd !== path.resolve(repoCwd)) {
+  if (!isRepoOwnedProcess(snapshot.cwd, repoCwd)) {
     return undefined;
   }
 
@@ -195,12 +230,40 @@ async function readProcessSnapshot(pid: number): Promise<ProcessSnapshot | undef
   }
 }
 
-async function findManagedProcesses(mode: UiMode, repoCwd: string): Promise<ManagedProcessSnapshot[]> {
+async function readParentPid(pid: number): Promise<number | undefined> {
+  try {
+    const status = await fs.readFile(`/proc/${pid}/status`, "utf8");
+    const match = status.match(/^PPid:\s+(\d+)$/m);
+    return match ? Number(match[1]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function collectProtectedProcessIds(startPid: number): Promise<Set<number>> {
+  const protectedPids = new Set<number>();
+  let currentPid: number | undefined = startPid;
+
+  while (currentPid && currentPid > 1 && !protectedPids.has(currentPid)) {
+    protectedPids.add(currentPid);
+    currentPid = await readParentPid(currentPid);
+  }
+
+  return protectedPids;
+}
+
+async function findManagedProcesses(
+  mode: UiMode,
+  repoCwd: string,
+  options?: {
+    protectedPids?: Set<number>;
+  }
+): Promise<ManagedProcessSnapshot[]> {
   const pids = await listProcPids();
   const matches: ManagedProcessSnapshot[] = [];
 
   for (const pid of pids) {
-    if (pid === process.pid) {
+    if (options?.protectedPids?.has(pid)) {
       continue;
     }
 
@@ -281,7 +344,10 @@ async function cleanupStaleManagedProcesses(mode: UiMode, explicitApiBase?: stri
   }
 
   const repoCwd = process.cwd();
-  const matches = await findManagedProcesses(mode, repoCwd);
+  const protectedPids = await collectProtectedProcessIds(process.pid);
+  const matches = await findManagedProcesses(mode, repoCwd, {
+    protectedPids
+  });
   const filtered = matches.filter((processInfo) => !(explicitApiBase && processInfo.kind === "api"));
 
   if (filtered.length === 0) {
@@ -331,13 +397,16 @@ async function ensureApi(baseUrlOverride?: string): Promise<{
     const port = DEFAULT_API_PORT + offset;
     const baseUrl = `http://${DEFAULT_API_HOST}:${port}`;
     if (await isApiHealthy(baseUrl)) {
-      if (await isCompatibleApi(baseUrl, expectedCwd)) {
+      const apiCwd = await readApiCwd(baseUrl);
+      if (apiCwd && apiCwd === path.resolve(expectedCwd)) {
         return {
           baseUrl,
           reused: true
         };
       }
-      console.error(`[csm] Skipping healthy API at ${baseUrl} because it is bound to a different repo cwd.`);
+      console.error(
+        `[csm] Skipping healthy API at ${baseUrl} because it is bound to ${apiCwd ?? "<unknown cwd>"}.`
+      );
     }
 
     if (await canListen(DEFAULT_API_HOST, port)) {
@@ -375,6 +444,17 @@ function withApiBaseArgs(mode: UiMode, passthrough: string[], apiBase: string): 
 
 async function main(): Promise<void> {
   const { mode, passthrough, explicitApiBase } = parseArgs(process.argv.slice(2));
+  const repoCwd = process.cwd();
+  const webPort = process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT);
+  const legacyRepoPath = detectLegacyRepoPath(repoCwd);
+  console.error(`[csm] Launch mode: ${mode}`);
+  console.error(`[csm] Repo cwd: ${repoCwd}`);
+  if (mode === "web") {
+    console.error(`[csm] Requested web URL: http://127.0.0.1:${webPort}/`);
+  }
+  if (legacyRepoPath && (await pathExists(legacyRepoPath))) {
+    console.error(`[csm] Legacy same-name repo still exists at: ${legacyRepoPath}`);
+  }
   await cleanupStaleManagedProcesses(mode, explicitApiBase);
   const api = await ensureApi(explicitApiBase);
 
@@ -397,9 +477,12 @@ async function main(): Promise<void> {
   );
 
   if (api.reused) {
-    console.error(`[csm] Reusing API at ${api.baseUrl}`);
+    console.error(`[csm] Reusing API at ${api.baseUrl} for repo ${repoCwd}`);
   } else {
-    console.error(`[csm] Started API at ${api.baseUrl}`);
+    console.error(`[csm] Started API at ${api.baseUrl} for repo ${repoCwd}`);
+  }
+  if (mode === "web") {
+    console.error(`[csm] Launching web dev server on http://127.0.0.1:${webPort}/ via API ${api.baseUrl}`);
   }
 
   const terminate = (signal: NodeJS.Signals) => {
