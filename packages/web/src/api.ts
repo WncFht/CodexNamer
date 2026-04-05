@@ -1,6 +1,9 @@
 import type {
   AutoRenamePreviewResponse,
   ApiEventsResponse,
+  ConfigDocument,
+  ConfigUpdateResponse,
+  ConfigView,
   DoctorResponse,
   ProviderResponse,
   RenameApplyResponse,
@@ -114,6 +117,17 @@ export async function toggleManualOverride(
 
 export async function fetchProviders(): Promise<ProviderResponse> {
   return requestJson<ProviderResponse>("/api/v1/providers");
+}
+
+export async function fetchConfig(): Promise<ConfigView> {
+  return requestJson<ConfigView>("/api/v1/config");
+}
+
+export async function updateConfig(userConfig: ConfigDocument): Promise<ConfigUpdateResponse> {
+  return requestJson<ConfigUpdateResponse>("/api/v1/config", {
+    method: "PUT",
+    body: JSON.stringify({ userConfig })
+  });
 }
 
 export async function fetchDoctor(): Promise<DoctorResponse> {

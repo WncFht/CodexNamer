@@ -1,4 +1,12 @@
-import type { BatchApplyResponse, SessionDetail, SessionTranscriptPage, SessionsResponse } from "./types.js";
+import type {
+  BatchApplyResponse,
+  ConfigDocument,
+  ConfigUpdateResponse,
+  ConfigView,
+  SessionDetail,
+  SessionTranscriptPage,
+  SessionsResponse
+} from "./types.js";
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -114,6 +122,17 @@ export class LocalApiClient {
         },
         previewOnly
       })
+    });
+  }
+
+  getConfig(): Promise<ConfigView> {
+    return requestJson<ConfigView>(this.resolve("/api/v1/config"));
+  }
+
+  updateConfig(userConfig: ConfigDocument): Promise<ConfigUpdateResponse> {
+    return requestJson<ConfigUpdateResponse>(this.resolve("/api/v1/config"), {
+      method: "PUT",
+      body: JSON.stringify({ userConfig })
     });
   }
 }

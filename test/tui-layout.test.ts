@@ -17,6 +17,16 @@ describe("tui layout", () => {
     expect(layout.mode).toBe("full");
   });
 
+  test("expands detail pane in fullscreen detail mode", () => {
+    const layout = computeTerminalLayout(
+      { columns: 180, rows: 42 },
+      { screenMode: "browser", viewMode: "detail", showPreview: false }
+    );
+    expect(layout.detailWidth).toBeGreaterThan(150);
+    expect(layout.listHeight).toBe(0);
+    expect(layout.previewHeight).toBe(0);
+  });
+
   test("measures and truncates wide characters correctly", () => {
     expect(measureDisplayWidth("你好abc")).toBe(7);
     expect(truncateDisplayText("你好世界abc", 7)).toBe("你好世…");

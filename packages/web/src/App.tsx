@@ -1,5 +1,6 @@
 import { formatWhen } from "./browser-utils.js";
 import { SessionBrowser } from "./SessionBrowser.js";
+import { SettingsPanel } from "./SettingsPanel.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
 
 export function App() {
@@ -22,7 +23,7 @@ export function App() {
         <div className="sidebar-actions">
           {[
             ["sessions", "Sessions"],
-            ["providers", "Providers"],
+            ["settings", "Settings"],
             ["maintenance", "Maintenance"]
           ].map(([id, label]) => (
             <button
@@ -117,21 +118,14 @@ export function App() {
           />
         ) : null}
 
-        {state.tab === "providers" ? (
-          <section className="panel-grid">
-            <div className="detail-panel">
-              <h3>Resolved provider</h3>
-              <pre>{JSON.stringify(state.providers?.resolvedProvider ?? {}, null, 2)}</pre>
-            </div>
-            <div className="detail-panel">
-              <h3>AI config</h3>
-              <pre>{JSON.stringify(state.providers?.ai ?? {}, null, 2)}</pre>
-            </div>
-            <div className="detail-panel">
-              <h3>Inherited Codex</h3>
-              <pre>{JSON.stringify(state.providers?.inheritedCodex ?? {}, null, 2)}</pre>
-            </div>
-          </section>
+        {state.tab === "settings" ? (
+          <SettingsPanel
+            configView={state.configView}
+            onReload={() => void state.refreshSidePanels()}
+            onSave={(patch) => state.saveConfig(patch)}
+            providers={state.providers}
+            saving={state.savingConfig}
+          />
         ) : null}
 
         {state.tab === "maintenance" ? (

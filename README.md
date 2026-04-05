@@ -33,8 +33,8 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 - Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
-- WebUI：本地 session dashboard，支持会话浏览、详情查看、suggest/apply/freeze/manual override、provider 与 maintenance 视图
-- TUI：终端列表 + 详情布局，支持搜索、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
+- WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、maintenance 视图
+- TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
 ## 文档导航
 
@@ -201,6 +201,12 @@ npm run web
 
 - `http://127.0.0.1:43110`
 
+WebUI 当前包含 3 个主视图：
+
+- `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
+- `Settings`：命名模板、watch 阈值、AI backend/profile/default provider 配置，并直接写回 `~/.config/codex-session-manager/config.toml`
+- `Maintenance`：doctor 与 auto-rename preview
+
 ### 3. 启动 TUI
 
 ```bash
@@ -216,7 +222,14 @@ npm run tui -- --api-base http://127.0.0.1:42110
 常用快捷键：
 
 - `j/k`：移动
+- `tab`：在 session 列表与 transcript 之间切换焦点
 - `/`：搜索
+- `,`：打开 / 关闭 settings 界面
+- `z`：当前焦点 pane 全屏 / 还原
+- `v`：detail / transcript 直接全屏
+- `o`：加载更早的 transcript
+- `h`：显示 / 隐藏 hidden transcript
+- `1-5`：切换 transcript role 过滤
 - `s`：suggest
 - `a`：apply
 - `r`：manual rename
@@ -225,6 +238,14 @@ npm run tui -- --api-base http://127.0.0.1:42110
 - `p`：预览 dirty auto-rename
 - `A`：批量 apply dirty
 - `q`：退出
+
+Settings 界面里：
+
+- `j/k`：选择字段
+- `e`：编辑当前字段
+- `space`：对枚举字段循环切换
+- `s`：保存到用户配置
+- `R`：从磁盘重新加载
 
 ### 4. 使用 CLI
 
@@ -350,5 +371,6 @@ npm run tui -- --api-base http://127.0.0.1:42110
 - `npm run web:raw` 只启动 Vite，不会自动起 API
 - `npm run tui:raw` 只启动 TUI，不会自动起 API
 - `npm run tui` 在真实 TTY 下支持快捷键；非交互环境下会退化成只读渲染
+- Web Settings 表单保存会走 `PUT /api/v1/config`；当前运行中的 API 不支持热切换 `general.stateDir`
 - `PUT /api/v1/config` 只写 `codex-session-manager` 自己的用户配置，不会回写 Codex 自身配置
 - 当前不支持在运行中的 API 进程里热切换 `general.stateDir`；这个字段如果要改，建议停服务后修改配置再重启
