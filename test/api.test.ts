@@ -123,6 +123,33 @@ describe("local api", () => {
     expect(overview.statusCode).toBe(200);
     expect(overview.json().sessions.total).toBeGreaterThanOrEqual(1);
     expect(overview.json().runtime.daemonStatus).toBe("not_seen");
+
+    const logId = manager.db.startAiRequestLog({
+      threadId: "019d-api-2",
+      projectName: "project-alpha",
+      backend: "openai-compatible",
+      transport: "responses",
+      startedAt: "2026-04-04T12:00:00.000Z",
+      baseUrl: "http://example.test/v1",
+      model: "gpt-test",
+      promptChars: 128
+    });
+    manager.db.finishAiRequestLog({
+      id: logId,
+      status: "succeeded",
+      finishedAt: "2026-04-04T12:00:01.000Z",
+      durationMs: 1000,
+      responseChars: 64
+    });
+
+    const requestLogs = await app.inject({
+      method: "GET",
+      url: "/api/v1/ai/request-logs?limit=10"
+    });
+    expect(requestLogs.statusCode).toBe(200);
+    expect(requestLogs.json().activeCount).toBe(0);
+    expect(requestLogs.json().items[0].threadId).toBe("019d-api-2");
+    expect(requestLogs.json().items[0].status).toBe("succeeded");
   });
 
   it("supports session filters and auto-rename preview endpoint", async () => {

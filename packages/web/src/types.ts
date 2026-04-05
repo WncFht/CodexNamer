@@ -321,6 +321,28 @@ export type PromptPreviewResponse = {
   };
 };
 
+export type AiRequestLogResponse = {
+  activeCount: number;
+  lastFinishedAt?: string;
+  items: Array<{
+    id: number;
+    threadId: string;
+    projectName?: string;
+    backend: "codex" | "openai-compatible";
+    transport: "responses" | "chat_completions" | "codex-exec";
+    status: "running" | "succeeded" | "failed";
+    startedAt: string;
+    finishedAt?: string;
+    durationMs?: number;
+    baseUrl?: string;
+    model?: string;
+    promptChars?: number;
+    responseChars?: number;
+    error?: string;
+    metadata?: Record<string, string>;
+  }>;
+};
+
 export type ApiEventsResponse = {
   items: Array<{
     cursor: number;

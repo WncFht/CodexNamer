@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
+  type AiRequestLogReport,
   type ConfigDocument,
   type ConfigView,
   SESSION_INDEX_FILENAME,
@@ -106,7 +107,12 @@ export class CodexSessionManager {
       overrides?: Partial<EffectiveConfig>;
     }
   ) {
-    this.inferenceService = createRenameInferenceService(config);
+    this.inferenceService = createRenameInferenceService(config, {
+      requestLogger: {
+        start: (entry) => this.db.startAiRequestLog(entry),
+        finish: (entry) => this.db.finishAiRequestLog(entry)
+      }
+    });
     this.cwd = options?.cwd ?? process.cwd();
     this.configPath = options?.configPath;
     this.overrides = options?.overrides;
@@ -150,7 +156,12 @@ export class CodexSessionManager {
       overrides: this.overrides
     });
     this.config = nextConfig;
-    this.inferenceService = createRenameInferenceService(nextConfig);
+    this.inferenceService = createRenameInferenceService(nextConfig, {
+      requestLogger: {
+        start: (entry) => this.db.startAiRequestLog(entry),
+        finish: (entry) => this.db.finishAiRequestLog(entry)
+      }
+    });
     this.sessionIndexCache = undefined;
   }
 
@@ -667,6 +678,10 @@ export class CodexSessionManager {
         session.renameContext ??
         buildRenameContext(session, this.config)
     };
+  }
+
+  getAiRequestLogReport(limit?: number): AiRequestLogReport {
+    return this.db.getAiRequestLogReport(limit);
   }
 
   async doctor(): Promise<DoctorReport> {

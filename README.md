@@ -59,6 +59,7 @@ Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 - Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
 - WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、context 策略与字符预算配置、运行态面板；旧的 `rename.mode` 已不再在设置页暴露
+- 运行态面板现在还会显示 AI 请求日志，包含活跃请求、最近请求状态、传输方式、耗时与错误
 - TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
 ## 文档导航

@@ -1,4 +1,5 @@
 import type {
+  AiRequestLogResponse,
   AutoRenamePreviewResponse,
   ApiEventsResponse,
   ConfigDocument,
@@ -188,6 +189,14 @@ export async function fetchPromptPreview(threadId?: string): Promise<PromptPrevi
     url.searchParams.set("threadId", threadId);
   }
   return requestJson<PromptPreviewResponse>(url.toString());
+}
+
+export async function fetchAiRequestLogs(limit = 40): Promise<AiRequestLogResponse> {
+  const url = new URL("/api/v1/ai/request-logs", window.location.origin);
+  if (limit > 0) {
+    url.searchParams.set("limit", String(limit));
+  }
+  return requestJson<AiRequestLogResponse>(url.toString());
 }
 
 export async function fetchEvents(cursor: number): Promise<ApiEventsResponse> {

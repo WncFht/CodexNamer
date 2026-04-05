@@ -3,6 +3,11 @@ import path from "node:path";
 
 import Database from "better-sqlite3";
 import type {
+  AiBackend,
+  AiRequestLogRecord,
+  AiRequestLogReport,
+  AiRequestStatus,
+  AiRequestTransport,
   MaterializedSession,
   OverviewReport,
   RenameHistoryRecord,
@@ -59,6 +64,7 @@ export class StateDatabase {
   constructor(public readonly dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
+    this.db.pragma("busy_timeout = 5000");
     this.migrate();
   }
 
@@ -149,6 +155,27 @@ export class StateDatabase {
         key TEXT PRIMARY KEY,
         value_json TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS ai_request_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_id TEXT NOT NULL,
+        project_name TEXT,
+        backend TEXT NOT NULL,
+        transport TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        duration_ms INTEGER,
+        base_url TEXT,
+        model TEXT,
+        prompt_chars INTEGER,
+        response_chars INTEGER,
+        error TEXT,
+        metadata_json TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_ai_request_logs_started_at ON ai_request_logs(started_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_ai_request_logs_status ON ai_request_logs(status);
     `);
   }
 
@@ -684,6 +711,128 @@ export class StateDatabase {
           operator: (item.operator as string | null) ?? undefined
         } satisfies RenameHistoryRecord;
       });
+  }
+
+  startAiRequestLog(params: {
+    threadId: string;
+    projectName?: string;
+    backend: Exclude<AiBackend, "none">;
+    transport: AiRequestTransport;
+    startedAt: string;
+    baseUrl?: string;
+    model?: string;
+    promptChars?: number;
+    metadata?: Record<string, string>;
+  }): number {
+    const result = this.db
+      .prepare(
+        `INSERT INTO ai_request_logs (
+          thread_id, project_name, backend, transport, status, started_at, base_url, model, prompt_chars, metadata_json
+        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`
+      )
+      .run(
+        params.threadId,
+        params.projectName ?? null,
+        params.backend,
+        params.transport,
+        params.startedAt,
+        params.baseUrl ?? null,
+        params.model ?? null,
+        params.promptChars ?? null,
+        params.metadata ? JSON.stringify(params.metadata) : null
+      );
+
+    return Number(result.lastInsertRowid);
+  }
+
+  finishAiRequestLog(params: {
+    id: number;
+    status: Exclude<AiRequestStatus, "running">;
+    finishedAt: string;
+    durationMs: number;
+    responseChars?: number;
+    error?: string;
+    metadata?: Record<string, string>;
+  }): void {
+    const previous = this.db
+      .prepare(`SELECT metadata_json FROM ai_request_logs WHERE id = ?`)
+      .get(params.id) as Record<string, unknown> | undefined;
+    const previousMetadata =
+      typeof previous?.metadata_json === "string" && previous.metadata_json
+        ? (JSON.parse(previous.metadata_json) as Record<string, string>)
+        : {};
+    const mergedMetadata = {
+      ...previousMetadata,
+      ...(params.metadata ?? {})
+    };
+
+    this.db
+      .prepare(
+        `UPDATE ai_request_logs
+         SET status = ?, finished_at = ?, duration_ms = ?, response_chars = ?, error = ?, metadata_json = ?
+         WHERE id = ?`
+      )
+      .run(
+        params.status,
+        params.finishedAt,
+        Math.max(0, Math.trunc(params.durationMs)),
+        params.responseChars ?? null,
+        params.error ?? null,
+        Object.keys(mergedMetadata).length > 0 ? JSON.stringify(mergedMetadata) : null,
+        params.id
+      );
+  }
+
+  getAiRequestLogReport(limit = 40): AiRequestLogReport {
+    const rows = this.db
+      .prepare(
+        `SELECT id, thread_id, project_name, backend, transport, status, started_at, finished_at, duration_ms,
+                base_url, model, prompt_chars, response_chars, error, metadata_json
+         FROM ai_request_logs
+         ORDER BY started_at DESC, id DESC
+         LIMIT ?`
+      )
+      .all(Math.max(1, Math.trunc(limit))) as Array<Record<string, unknown>>;
+    const activeCount = Number(
+      (
+        this.db
+          .prepare(`SELECT COUNT(*) AS count FROM ai_request_logs WHERE status = 'running'`)
+          .get() as Record<string, unknown>
+      ).count ?? 0
+    );
+    const lastFinishedAt = (
+      this.db
+        .prepare(`SELECT finished_at FROM ai_request_logs WHERE finished_at IS NOT NULL ORDER BY finished_at DESC, id DESC LIMIT 1`)
+        .get() as Record<string, unknown> | undefined
+    )?.finished_at as string | undefined;
+
+    return {
+      activeCount,
+      lastFinishedAt,
+      items: rows.map((row) => ({
+        id: Number(row.id ?? 0),
+        threadId: (row.thread_id as string | null) ?? "",
+        projectName: (row.project_name as string | null) ?? undefined,
+        backend: row.backend as AiRequestLogRecord["backend"],
+        transport: row.transport as AiRequestTransport,
+        status: row.status as AiRequestStatus,
+        startedAt: (row.started_at as string | null) ?? "",
+        finishedAt: (row.finished_at as string | null) ?? undefined,
+        durationMs:
+          typeof row.duration_ms === "number" ? row.duration_ms : Number.isFinite(Number(row.duration_ms)) ? Number(row.duration_ms) : undefined,
+        baseUrl: (row.base_url as string | null) ?? undefined,
+        model: (row.model as string | null) ?? undefined,
+        promptChars:
+          typeof row.prompt_chars === "number" ? row.prompt_chars : Number.isFinite(Number(row.prompt_chars)) ? Number(row.prompt_chars) : undefined,
+        responseChars:
+          typeof row.response_chars === "number" ? row.response_chars : Number.isFinite(Number(row.response_chars)) ? Number(row.response_chars) : undefined,
+        error: (row.error as string | null) ?? undefined,
+        metadata:
+          typeof row.metadata_json === "string" && row.metadata_json
+            ? (JSON.parse(row.metadata_json) as Record<string, string>)
+            : undefined
+      }))
+    };
   }
 
   getOverviewReport(options?: {

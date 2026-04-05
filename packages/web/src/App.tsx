@@ -401,6 +401,7 @@ export function App() {
           {showMaintenancePanel ? (
             <React.Suspense fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}>
               <RenameOpsPanel
+                aiRequestLogs={state.aiRequestLogs}
                 doctor={state.doctor}
                 onRefreshPreview={(options) => state.refreshPreview(options)}
                 overview={state.overview}

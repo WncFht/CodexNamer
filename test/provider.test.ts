@@ -72,6 +72,73 @@ describe("provider backends", () => {
     expect(suggestion.kind).toBe("feat");
   });
 
+  it("records request logs for direct HTTP inference", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const service = new OpenAICompatibleRenameInferenceService(
+      buildConfigForTests({
+        ai: {
+          backend: "openai-compatible",
+          providerSource: "explicit",
+          profile: "default",
+          timeoutSeconds: 10,
+          temperature: 0.2
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            backendKind: "openai-compatible",
+            displayName: "default",
+            providerSource: "explicit",
+            baseUrl: "http://example.test/v1",
+            model: "gpt-test",
+            apiKey: "test-key",
+            wireApi: "responses",
+            enabled: true,
+            isDefault: true
+          }
+        ]
+      }),
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}'
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        ),
+      {
+        start(entry) {
+          events.push({ phase: "start", ...entry });
+          return 1;
+        },
+        finish(entry) {
+          events.push({ phase: "finish", ...entry });
+        }
+      }
+    );
+
+    await service.suggest({
+      threadId: "t-http-log",
+      rolloutPath: "/tmp/r.jsonl",
+      cwd: "/tmp/project",
+      projectName: "project",
+      taskCompleteCount: 1,
+      tokenTotal: 100,
+      firstUserMessage: "实现 session rename",
+      lastAgentMessage: "完成 session rename"
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]?.phase).toBe("start");
+    expect(events[0]?.transport).toBe("responses");
+    expect(events[1]?.phase).toBe("finish");
+    expect(events[1]?.status).toBe("succeeded");
+  });
+
   it("uses codex exec runner and reads structured output file", async () => {
     const writes: string[] = [];
     let schemaPayload = "";

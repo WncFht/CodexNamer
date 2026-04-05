@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
 import { autoRenameReasonLabel, autoRenameStatusLabel, formatUiNumber, t, type UiLanguage } from "./i18n.js";
-import type { AutoRenamePreviewResponse, DoctorResponse, OverviewResponse } from "./types.js";
+import type { AiRequestLogResponse, AutoRenamePreviewResponse, DoctorResponse, OverviewResponse } from "./types.js";
 
 type ChartTheme = {
   text: string;
@@ -49,6 +49,16 @@ function formatCompactNumber(value: number, language: UiLanguage): string {
 
 function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
+}
+
+function formatDurationMs(value: number | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "--";
+  }
+  if (value < 1000) {
+    return `${Math.max(0, Math.round(value))}ms`;
+  }
+  return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
 }
 
 function useChart(
@@ -201,6 +211,7 @@ function daemonStatusLabel(status: string | undefined, language: UiLanguage): st
 }
 
 export function RenameOpsPanel(props: {
+  aiRequestLogs: AiRequestLogResponse | null;
   overview: OverviewResponse | null;
   preview: AutoRenamePreviewResponse | null;
   previewRefreshing: boolean;
@@ -218,12 +229,14 @@ export function RenameOpsPanel(props: {
   const noDataLabel = isChinese ? "暂无数据" : "No data";
   const sessionsLabel = isChinese ? "个会话" : "sessions";
   const overview = props.overview;
+  const aiRequestLogs = props.aiRequestLogs;
   const previewItems = props.preview?.items ?? [];
   const previewApplyCount = previewItems.filter((item) => item.status === "apply").length;
   const previewSuggestCount = previewItems.filter((item) => item.status === "suggest").length;
   const previewSkipCount = previewItems.filter((item) => item.status === "skip").length;
   const previewHasCandidateNames = previewItems.some((item) => typeof item.candidateName === "string");
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
+  const latestAiRequest = aiRequestLogs?.items[0];
 
   const activityOption = React.useMemo(() => {
     if (!overview) {
@@ -630,6 +643,12 @@ export function RenameOpsPanel(props: {
           <span className="chip success">
             {inline("最近应用", "Last apply")}: {formatWhen(overview?.renameHistory.lastAppliedAt, props.uiLanguage)}
           </span>
+          <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
+            {inline("活跃 AI 请求", "Active AI requests")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
+          </span>
+          <span className="chip manual">
+            {inline("最近 AI 完成", "Last AI finish")}: {formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}
+          </span>
         </div>
 
         <div className="settings-metrics-grid ops-kpis">
@@ -675,6 +694,15 @@ export function RenameOpsPanel(props: {
             </strong>
             <p>
               {formatUiNumber(previewApplyCount, props.uiLanguage)} {inline("待应用", "apply")} / {formatUiNumber(previewSuggestCount, props.uiLanguage)} {inline("待建议", "suggest")}
+            </p>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">{inline("最近 AI 请求", "Latest AI request")}</span>
+            <strong>{latestAiRequest ? formatDurationMs(latestAiRequest.durationMs) : "--"}</strong>
+            <p>
+              {latestAiRequest
+                ? `${latestAiRequest.transport} / ${latestAiRequest.status}`
+                : inline("还没有请求日志", "No request logs yet")}
             </p>
           </article>
         </div>
@@ -734,6 +762,64 @@ export function RenameOpsPanel(props: {
               </div>
               <span>
                 {autoRenameStatusLabel(item.status, props.uiLanguage)} / {autoRenameReasonLabel(item.reason, props.uiLanguage)}
+              </span>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="detail-panel ops-span-wide">
+        <div className="panel-topline">
+          <div>
+            <p className="panel-kicker">AI</p>
+            <h3>{inline("模型请求日志", "Model request logs")}</h3>
+            <p className="settings-copy">
+              {inline(
+                "`apply` 表示该 session 已经稳定到可正式落盘。慢通常不是卡在状态机，而是卡在真正请求模型或 fallback。这里会显示最近的 HTTP / codex-exec 请求。",
+                "`apply` means the session is stable enough to land a final rename. When it feels slow, the bottleneck is usually the actual model request or fallback path, not the state machine. The latest HTTP / codex-exec requests are shown here."
+              )}
+            </p>
+          </div>
+          <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
+            {inline("活跃中", "Active")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
+          </span>
+        </div>
+
+        <div className="settings-inline-stats">
+          <div>
+            <dt>{inline("最近完成", "Last finished")}</dt>
+            <dd>{formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}</dd>
+          </div>
+          <div>
+            <dt>{inline("最新状态", "Latest status")}</dt>
+            <dd>{latestAiRequest?.status ?? noDataLabel}</dd>
+          </div>
+          <div>
+            <dt>{inline("最新传输", "Latest transport")}</dt>
+            <dd>{latestAiRequest?.transport ?? noDataLabel}</dd>
+          </div>
+          <div>
+            <dt>{inline("最新耗时", "Latest duration")}</dt>
+            <dd>{formatDurationMs(latestAiRequest?.durationMs)}</dd>
+          </div>
+        </div>
+
+        <div className="history-stack">
+          {(aiRequestLogs?.items ?? []).length === 0 ? (
+            <div className="history-empty">{inline("还没有 AI 请求日志。", "No AI request logs yet.")}</div>
+          ) : null}
+          {(aiRequestLogs?.items ?? []).slice(0, 16).map((item) => (
+            <article className="history-row" key={item.id}>
+              <div>
+                <strong>{item.projectName ?? item.threadId}</strong>
+                <p>
+                  {item.transport} / {item.backend} / {item.model ?? noDataLabel}
+                </p>
+                <p>{item.threadId}</p>
+                {item.error ? <p>{item.error}</p> : null}
+              </div>
+              <span>
+                {item.status} · {formatDurationMs(item.durationMs)} · {formatWhen(item.finishedAt ?? item.startedAt, props.uiLanguage)}
               </span>
             </article>
           ))}

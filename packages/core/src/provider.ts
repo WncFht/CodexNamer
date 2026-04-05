@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 
 import type {
   AiBackend,
+  AiRequestStatus,
+  AiRequestTransport,
   EffectiveConfig,
   MaterializedSession,
   ProviderProfile,
@@ -28,6 +30,29 @@ type JsonSuggestionPayload = {
   summary?: string;
   scope?: string;
 };
+
+export interface RenameInferenceRequestLogger {
+  start(entry: {
+    threadId: string;
+    projectName?: string;
+    backend: Exclude<AiBackend, "none">;
+    transport: AiRequestTransport;
+    startedAt: string;
+    baseUrl?: string;
+    model?: string;
+    promptChars?: number;
+    metadata?: Record<string, string>;
+  }): number;
+  finish(entry: {
+    id: number;
+    status: Exclude<AiRequestStatus, "running">;
+    finishedAt: string;
+    durationMs: number;
+    responseChars?: number;
+    error?: string;
+    metadata?: Record<string, string>;
+  }): void;
+}
 
 export interface RenameInferenceService {
   suggest(session: MaterializedSession, mode?: RenameMode): Promise<RenameSuggestion>;
@@ -72,6 +97,63 @@ export interface ProviderDiagnostics {
   preferredTransport: "none" | "http" | "codex-exec";
   canDirectHttp: boolean;
   codexFallbackEnabled: boolean;
+}
+
+function startRequestLog(
+  logger: RenameInferenceRequestLogger | undefined,
+  session: MaterializedSession,
+  params: {
+    backend: Exclude<AiBackend, "none">;
+    transport: AiRequestTransport;
+    baseUrl?: string;
+    model?: string;
+    promptChars: number;
+    metadata?: Record<string, string>;
+  }
+): { id?: number; startedAtMs: number; startedAt: string } {
+  const startedAtMs = Date.now();
+  const startedAt = toUtcIso(new Date(startedAtMs));
+  return {
+    id: logger?.start({
+      threadId: session.threadId,
+      projectName: session.projectName,
+      backend: params.backend,
+      transport: params.transport,
+      startedAt,
+      baseUrl: params.baseUrl,
+      model: params.model,
+      promptChars: params.promptChars,
+      metadata: params.metadata
+    }),
+    startedAtMs,
+    startedAt
+  };
+}
+
+function finishRequestLog(
+  logger: RenameInferenceRequestLogger | undefined,
+  context: { id?: number; startedAtMs: number },
+  params: {
+    status: Exclude<AiRequestStatus, "running">;
+    responseChars?: number;
+    error?: string;
+    metadata?: Record<string, string>;
+  }
+): void {
+  if (!logger || !context.id) {
+    return;
+  }
+
+  const finishedAtMs = Date.now();
+  logger.finish({
+    id: context.id,
+    status: params.status,
+    finishedAt: toUtcIso(new Date(finishedAtMs)),
+    durationMs: finishedAtMs - context.startedAtMs,
+    responseChars: params.responseChars,
+    error: params.error,
+    metadata: params.metadata
+  });
 }
 
 function normalizePromptField(value: string | undefined, maxLength: number): string {
@@ -385,14 +467,22 @@ export function inspectRenameProvider(config: EffectiveConfig): ProviderDiagnost
   };
 }
 
-async function parseJsonResponse(response: Response): Promise<Record<string, unknown>> {
+async function parseJsonResponse(response: Response): Promise<{
+  status: number;
+  text: string;
+  payload: Record<string, unknown>;
+}> {
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${text.slice(0, 400)}`);
   }
 
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    return {
+      status: response.status,
+      text,
+      payload: JSON.parse(text) as Record<string, unknown>
+    };
   } catch {
     throw new Error(`Invalid JSON response: ${text.slice(0, 400)}`);
   }
@@ -402,8 +492,22 @@ async function callResponsesApi(
   fetchImpl: FetchLike,
   provider: ResolvedProvider,
   config: EffectiveConfig,
-  prompt: string
+  prompt: string,
+  session: MaterializedSession,
+  logger?: RenameInferenceRequestLogger
 ): Promise<string> {
+  const logContext = startRequestLog(logger, session, {
+    backend: provider.requestedBackend,
+    transport: "responses",
+    baseUrl: provider.baseUrl,
+    model: provider.model,
+    promptChars: prompt.length,
+    metadata: {
+      profile: provider.profileId,
+      providerRef: provider.providerRef ?? "",
+      requestedBackend: provider.requestedBackend
+    }
+  });
   const headers: Record<string, string> = {
     "content-type": "application/json",
     ...provider.headers
@@ -415,27 +519,54 @@ async function callResponsesApi(
     }
   }
 
-  const response = await fetchImpl(buildResponsesUrl(provider.baseUrl!), {
-    method: "POST",
-    headers,
-    signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-    body: JSON.stringify({
-      model: provider.model,
-      temperature: config.ai.temperature,
-      input: prompt
-    })
-  });
+  try {
+    const response = await fetchImpl(buildResponsesUrl(provider.baseUrl!), {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
+      body: JSON.stringify({
+        model: provider.model,
+        temperature: config.ai.temperature,
+        input: prompt
+      })
+    });
 
-  const payload = await parseJsonResponse(response);
-  return extractResponsesText(payload);
+    const parsed = await parseJsonResponse(response);
+    const text = extractResponsesText(parsed.payload);
+    finishRequestLog(logger, logContext, {
+      status: "succeeded",
+      responseChars: text.length
+    });
+    return text;
+  } catch (error) {
+    finishRequestLog(logger, logContext, {
+      status: "failed",
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+    });
+    throw error;
+  }
 }
 
 async function callChatCompletionsApi(
   fetchImpl: FetchLike,
   provider: ResolvedProvider,
   config: EffectiveConfig,
-  prompt: string
+  prompt: string,
+  session: MaterializedSession,
+  logger?: RenameInferenceRequestLogger
 ): Promise<string> {
+  const logContext = startRequestLog(logger, session, {
+    backend: provider.requestedBackend,
+    transport: "chat_completions",
+    baseUrl: provider.baseUrl,
+    model: provider.model,
+    promptChars: prompt.length,
+    metadata: {
+      profile: provider.profileId,
+      providerRef: provider.providerRef ?? "",
+      requestedBackend: provider.requestedBackend
+    }
+  });
   const headers: Record<string, string> = {
     "content-type": "application/json",
     ...provider.headers
@@ -447,29 +578,42 @@ async function callChatCompletionsApi(
     }
   }
 
-  const response = await fetchImpl(buildChatCompletionsUrl(provider.baseUrl!), {
-    method: "POST",
-    headers,
-    signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-    body: JSON.stringify({
-      model: provider.model,
-      temperature: config.ai.temperature,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    })
-  });
+  try {
+    const response = await fetchImpl(buildChatCompletionsUrl(provider.baseUrl!), {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
+      body: JSON.stringify({
+        model: provider.model,
+        temperature: config.ai.temperature,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      })
+    });
 
-  const payload = await parseJsonResponse(response);
-  return extractChatCompletionText(payload);
+    const parsed = await parseJsonResponse(response);
+    const text = extractChatCompletionText(parsed.payload);
+    finishRequestLog(logger, logContext, {
+      status: "succeeded",
+      responseChars: text.length
+    });
+    return text;
+  } catch (error) {
+    finishRequestLog(logger, logContext, {
+      status: "failed",
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+    });
+    throw error;
+  }
 }
 
 export class NoneRenameInferenceService implements RenameInferenceService {
@@ -483,7 +627,8 @@ export class NoneRenameInferenceService implements RenameInferenceService {
 export class OpenAICompatibleRenameInferenceService extends NoneRenameInferenceService {
   constructor(
     config: EffectiveConfig,
-    private readonly fetchImpl: FetchLike = fetch
+    private readonly fetchImpl: FetchLike = fetch,
+    private readonly requestLogger?: RenameInferenceRequestLogger
   ) {
     super(config);
   }
@@ -514,14 +659,14 @@ export class OpenAICompatibleRenameInferenceService extends NoneRenameInferenceS
     try {
       let text = "";
       if (provider.wireApi === "responses") {
-        text = await callResponsesApi(this.fetchImpl, provider, this.config, prompt);
+        text = await callResponsesApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
       } else if (provider.wireApi === "chat_completions") {
-        text = await callChatCompletionsApi(this.fetchImpl, provider, this.config, prompt);
+        text = await callChatCompletionsApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
       } else {
         try {
-          text = await callResponsesApi(this.fetchImpl, provider, this.config, prompt);
+          text = await callResponsesApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
         } catch {
-          text = await callChatCompletionsApi(this.fetchImpl, provider, this.config, prompt);
+          text = await callChatCompletionsApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
         }
       }
 
@@ -610,7 +755,8 @@ class DefaultCodexCommandRunner implements CodexCommandRunner {
 export class CodexRenameInferenceService extends NoneRenameInferenceService {
   constructor(
     config: EffectiveConfig,
-    private readonly runner: CodexCommandRunner = new DefaultCodexCommandRunner()
+    private readonly runner: CodexCommandRunner = new DefaultCodexCommandRunner(),
+    private readonly requestLogger?: RenameInferenceRequestLogger
   ) {
     super(config);
   }
@@ -668,6 +814,17 @@ export class CodexRenameInferenceService extends NoneRenameInferenceService {
     }
 
     args.push(buildRenamePrompt(session, this.config));
+    const prompt = args[args.length - 1] ?? "";
+    const logContext = startRequestLog(this.requestLogger, session, {
+      backend: "codex",
+      transport: "codex-exec",
+      model: provider?.model,
+      promptChars: prompt.length,
+      metadata: {
+        profile: provider?.profileId ?? "default",
+        providerRef: provider?.providerRef ?? ""
+      }
+    });
 
     try {
       await this.runner.run(args, {
@@ -675,12 +832,20 @@ export class CodexRenameInferenceService extends NoneRenameInferenceService {
         env: process.env
       });
       const output = await fs.readFile(outputPath, "utf8");
+      finishRequestLog(this.requestLogger, logContext, {
+        status: "succeeded",
+        responseChars: output.length
+      });
       return sanitizeSuggestion(extractFirstJsonObject(output), fallback, this.config.naming.maxLength, {
         backend: "codex",
         profile: provider?.profileId ?? "default",
         providerRef: provider?.providerRef ?? ""
       });
     } catch (error) {
+      finishRequestLog(this.requestLogger, logContext, {
+        status: "failed",
+        error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+      });
       return {
         ...fallback,
         metadata: {
@@ -697,16 +862,20 @@ export class CodexRenameInferenceService extends NoneRenameInferenceService {
 
 export function createRenameInferenceService(
   config: EffectiveConfig,
-  options?: { fetchImpl?: FetchLike; codexRunner?: CodexCommandRunner }
+  options?: {
+    fetchImpl?: FetchLike;
+    codexRunner?: CodexCommandRunner;
+    requestLogger?: RenameInferenceRequestLogger;
+  }
 ): RenameInferenceService {
   if (config.ai.backend === "codex") {
     return new PreferredCodexRenameInferenceService(
-      new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl),
-      new CodexRenameInferenceService(config, options?.codexRunner)
+      new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl, options?.requestLogger),
+      new CodexRenameInferenceService(config, options?.codexRunner, options?.requestLogger)
     );
   }
   if (config.ai.backend === "openai-compatible") {
-    return new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl);
+    return new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl, options?.requestLogger);
   }
 
   return new NoneRenameInferenceService(config);

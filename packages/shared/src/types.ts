@@ -2,6 +2,8 @@ export type RenameMode = "heuristic" | "ai" | "hybrid";
 export type AiBackend = "none" | "codex" | "openai-compatible";
 export type ProviderSource = "explicit" | "inherit-codex" | "mixed";
 export type ProviderWireApi = "responses" | "chat_completions" | "auto";
+export type AiRequestTransport = "responses" | "chat_completions" | "codex-exec";
+export type AiRequestStatus = "running" | "succeeded" | "failed";
 export type RenameContextStrategy = "summary-signals" | "user-assistant-transcript";
 export type UiLanguage = "en-US" | "zh-CN";
 export type RenameContextSegmentSource =
@@ -383,6 +385,30 @@ export interface AutoRenamePreview {
   candidateName?: string;
   status: "skip" | "suggest" | "apply";
   reason: string;
+}
+
+export interface AiRequestLogRecord {
+  id: number;
+  threadId: string;
+  projectName?: string;
+  backend: Exclude<AiBackend, "none">;
+  transport: AiRequestTransport;
+  status: AiRequestStatus;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  baseUrl?: string;
+  model?: string;
+  promptChars?: number;
+  responseChars?: number;
+  error?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface AiRequestLogReport {
+  activeCount: number;
+  lastFinishedAt?: string;
+  items: AiRequestLogRecord[];
 }
 
 export interface OverviewReport {

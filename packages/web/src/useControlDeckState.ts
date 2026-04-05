@@ -2,6 +2,7 @@ import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState
 
 import {
   applySession,
+  fetchAiRequestLogs,
   fetchConfig,
   fetchAutoRenamePreview,
   fetchDoctor,
@@ -17,6 +18,7 @@ import {
   updateConfig
 } from "./api.js";
 import type {
+  AiRequestLogResponse,
   ApiEventsResponse,
   AutoRenamePreviewResponse,
   ConfigDocument,
@@ -141,6 +143,7 @@ export function useControlDeckState() {
   const [configView, setConfigView] = useState<ConfigView | null>(null);
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
   const [preview, setPreview] = useState<AutoRenamePreviewResponse | null>(null);
   const [search, setSearch] = useState(initialUiState.search);
   const [dirtyOnly, setDirtyOnly] = useState(initialUiState.dirtyOnly);
@@ -245,11 +248,12 @@ export function useControlDeckState() {
 
   const reloadSidePanels = async () => {
     const requestId = ++sidePanelsRequestIdRef.current;
-    const [providerPayload, configPayload, doctorPayload, overviewPayload] = await Promise.all([
+    const [providerPayload, configPayload, doctorPayload, overviewPayload, aiRequestLogPayload] = await Promise.all([
       fetchProviders(),
       fetchConfig(),
       fetchDoctor(),
-      fetchOverview()
+      fetchOverview(),
+      fetchAiRequestLogs()
     ]);
     if (requestId !== sidePanelsRequestIdRef.current) {
       return;
@@ -258,6 +262,7 @@ export function useControlDeckState() {
     setConfigView(configPayload);
     setDoctor(doctorPayload);
     setOverview(overviewPayload);
+    setAiRequestLogs(aiRequestLogPayload);
   };
 
   const reloadPreview = async (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => {
@@ -569,6 +574,7 @@ export function useControlDeckState() {
     configView,
     doctor,
     overview,
+    aiRequestLogs,
     preview,
     search,
     setSearch: (value: string) => {

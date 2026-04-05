@@ -262,6 +262,11 @@ export async function buildApiServer(options?: {
     });
   });
 
+  app.get("/api/v1/ai/request-logs", async (request) => {
+    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    return manager.getAiRequestLogReport(parseNumberQuery(query.limit));
+  });
+
   app.get("/api/v1/overview", async () => manager.overview());
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
