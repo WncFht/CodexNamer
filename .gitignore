@@ -8,3 +8,9 @@ coverage
 *.log
 tmp
 *.tsbuildinfo
+
+# Local ad hoc screenshots captured during interactive review.
+/QQ_*.png
+/image.png
+/Screenshot*.png
+/Screen Shot *.png
