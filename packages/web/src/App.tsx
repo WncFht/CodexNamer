@@ -55,6 +55,7 @@ export function App() {
   const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() =>
     readStoredNumber("csm:sessionPaneWidth", 390)
   );
+  const [sessionFocusMode, setSessionFocusMode] = React.useState(false);
   const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(() => state.tab === "settings");
   const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(() => state.tab === "maintenance");
   const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
@@ -103,6 +104,12 @@ export function App() {
       setMaintenancePanelLoaded(true);
     }
   }, [state.tab]);
+
+  React.useEffect(() => {
+    if (state.tab !== "sessions" || !state.selectedId) {
+      setSessionFocusMode(false);
+    }
+  }, [state.selectedId, state.tab]);
 
   React.useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -219,6 +226,7 @@ export function App() {
   return (
     <div
       id="app"
+      className={sessionFocusMode ? "session-focus-mode" : undefined}
       style={
         {
           "--sidebar-width": `${workspacePaneCollapsed ? 88 : workspacePaneWidth}px`,
@@ -360,6 +368,7 @@ export function App() {
               selectedWorkspaceLabel={selectedWorkspaceLabel}
               selectedId={state.selectedId}
               detail={state.detail}
+              focusMode={sessionFocusMode}
               sessionPaneCollapsed={sessionPaneCollapsed}
               sessionPaneWidth={sessionPaneWidth}
               loadingSessions={state.loadingSessions}
@@ -372,6 +381,8 @@ export function App() {
               onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
               onRefresh={() => void state.refreshSessions()}
               onSelectSession={(threadId) => state.setSelectedId(threadId)}
+              onEnterFocusMode={() => setSessionFocusMode(true)}
+              onExitFocusMode={() => setSessionFocusMode(false)}
               onToggleSessionPane={toggleSessionPane}
               onSessionPaneWidthChange={adjustSessionPaneWidth}
               onStartSessionResize={startSessionResize}

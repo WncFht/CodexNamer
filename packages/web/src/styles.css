@@ -91,6 +91,11 @@ pre {
   height: 100vh;
 }
 
+#app.session-focus-mode #sidebar,
+#app.session-focus-mode .splitter {
+  display: none;
+}
+
 #sidebar {
   width: var(--sidebar-width);
   min-width: 220px;
@@ -356,6 +361,15 @@ pre {
 
 .history-layout.session-pane-collapsed {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.history-layout.session-focus-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.history-layout.session-focus-mode .session-list-view,
+.history-layout.session-focus-mode .history-splitter {
+  display: none;
 }
 
 .session-list-view,
@@ -1950,27 +1964,34 @@ pre {
 
 .chat-title-wrap {
   display: flex;
-  justify-content: space-between;
   gap: 16px;
+  align-items: flex-start;
   width: 100%;
 }
 
 .chat-title-block {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .editable-title {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  max-width: 24ch;
   font-size: clamp(22px, 1.9vw, 30px);
   font-weight: 500;
   line-height: 1.12;
   letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .chat-meta-bar {
   margin-top: 8px;
+}
+
+.chat-back-btn {
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 .chip {
@@ -2358,6 +2379,16 @@ pre {
   text-align: center;
 }
 
+.history-empty p {
+  margin: 0;
+}
+
+.history-empty-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+
 .chat-loading {
   border-bottom: 1px solid var(--border);
 }
@@ -2594,6 +2625,10 @@ pre {
   .chat-title-wrap {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .chat-back-btn {
+    align-self: flex-start;
   }
 
   .header-actions,

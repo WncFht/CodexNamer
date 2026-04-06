@@ -8,13 +8,7 @@ import {
   sessionListTitle,
   toneForSession
 } from "./browser-utils.js";
-import {
-  autoRenameReasonLabel,
-  autoRenameStatusLabel,
-  sessionStatusLabel,
-  t,
-  type UiLanguage
-} from "./i18n.js";
+import { sessionStatusLabel, t, type UiLanguage } from "./i18n.js";
 import { TranscriptPanel } from "./TranscriptPanel.js";
 import type { SessionDetail, SessionSummary } from "./types.js";
 import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
@@ -28,6 +22,7 @@ export function SessionBrowser(props: {
   selectedWorkspaceLabel: string;
   selectedId?: string;
   detail: SessionDetail | null;
+  focusMode: boolean;
   sessionPaneCollapsed: boolean;
   sessionPaneWidth: number;
   loadingSessions: boolean;
@@ -40,6 +35,8 @@ export function SessionBrowser(props: {
   onToggleShowHiddenTranscript: (value: boolean) => void;
   onRefresh: () => void;
   onSelectSession: (threadId: string) => void;
+  onEnterFocusMode: () => void;
+  onExitFocusMode: () => void;
   onToggleSessionPane: () => void;
   onSessionPaneWidthChange: (delta: number) => void;
   onStartSessionResize: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -52,15 +49,9 @@ export function SessionBrowser(props: {
     () => groupSessionsByTime(props.sessions, props.uiLanguage),
     [props.sessions, props.uiLanguage]
   );
-  const [historyExpanded, setHistoryExpanded] = React.useState(false);
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
-  const inline = (zh: string, en: string) => (props.uiLanguage === "zh-CN" ? zh : en);
-  const latestRename = props.detail?.renameHistory?.[0];
-
-  React.useEffect(() => {
-    setHistoryExpanded(false);
-  }, [props.detail?.threadId]);
+  const sessionPaneToggleLabel = props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions");
 
   const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
@@ -88,7 +79,15 @@ export function SessionBrowser(props: {
   };
 
   return (
-    <section className={props.sessionPaneCollapsed ? "history-layout session-pane-collapsed" : "history-layout"}>
+    <section
+      className={
+        props.focusMode
+          ? "history-layout session-focus-mode"
+          : props.sessionPaneCollapsed
+            ? "history-layout session-pane-collapsed"
+            : "history-layout"
+      }
+    >
       <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"} id="session-list-pane">
         <header className="view-header session-list-header">
           <div>
@@ -96,6 +95,14 @@ export function SessionBrowser(props: {
             <h2>{props.selectedWorkspaceLabel}</h2>
           </div>
           <div className="header-actions">
+            <button
+              className="btn-sm"
+              onClick={props.onToggleSessionPane}
+              title={sessionPaneToggleLabel}
+              type="button"
+            >
+              {sessionPaneToggleLabel}
+            </button>
             <button className="btn-refresh" onClick={props.onRefresh} title={tt("refresh")} type="button">
               &#8635; {tt("refresh")}
             </button>
@@ -145,7 +152,7 @@ export function SessionBrowser(props: {
         </div>
       </section>
 
-      {!props.sessionPaneCollapsed ? (
+      {!props.sessionPaneCollapsed && !props.focusMode ? (
         <div
           className="history-splitter"
           onKeyDown={handleSessionSplitterKeyDown}
@@ -172,6 +179,11 @@ export function SessionBrowser(props: {
             <>
             <header className="view-header chat-header">
               <div className="chat-title-wrap">
+                {props.focusMode ? (
+                  <button className="btn-sm chat-back-btn" onClick={props.onExitFocusMode} type="button">
+                    ← {tt("back")}
+                  </button>
+                ) : null}
                 <div className="chat-title-block">
                   <p className="panel-kicker">{tt("selectedSession")}</p>
                   <h2 className="editable-title">{sessionDisplayTitle(props.detail)}</h2>
@@ -183,6 +195,16 @@ export function SessionBrowser(props: {
                   </div>
                 </div>
                 <div className="chat-header-right">
+                  {!props.focusMode ? (
+                    <>
+                      <button className="btn-sm" onClick={props.onEnterFocusMode} title={tt("focusSession")} type="button">
+                        {tt("focusSession")}
+                      </button>
+                      <button className="btn-sm" onClick={props.onToggleSessionPane} title={sessionPaneToggleLabel} type="button">
+                        {sessionPaneToggleLabel}
+                      </button>
+                    </>
+                  ) : null}
                   {props.detail.dirty ? <span className="chip danger">{tt("dirty")}</span> : <span className="chip success">{tt("clean")}</span>}
                   {props.detail.frozen ? <span className="chip warning">{tt("frozen")}</span> : null}
                   {props.detail.manualOverride ? <span className="chip manual">{tt("manual")}</span> : null}
@@ -226,115 +248,17 @@ export function SessionBrowser(props: {
               onToggleShowHiddenTranscript={props.onToggleShowHiddenTranscript}
               uiLanguage={props.uiLanguage}
             />
-
-            <div className="chat-footer-panels">
-              <section className="detail-panel naming-tray">
-                <div className="panel-topline history-tray-header">
-                  <div>
-                    <p className="panel-kicker">{inline("当前命名", "Current naming")}</p>
-                    <h3>{inline("正式标题与候选标题", "Official and candidate titles")}</h3>
-                  </div>
-                </div>
-
-                <div className="naming-stack">
-                  <article className="naming-row">
-                    <div className="naming-row-header">
-                      <span>{inline("正式标题", "Official title")}</span>
-                      <span className="chip success">{props.detail.officialName ? inline("已应用", "Applied") : inline("暂无", "None")}</span>
-                    </div>
-                    <strong className="naming-value">{props.detail.officialName ?? inline("还没有正式标题", "No official title yet")}</strong>
-                  </article>
-
-                  <article className="naming-row">
-                    <div className="naming-row-header">
-                      <span>{tt("candidateName")}</span>
-                      {props.detail.candidateName ? (
-                        <span className="chip warning">
-                          {props.detail.dirty ? inline("待应用", "Pending apply") : inline("候选保留", "Candidate kept")}
-                        </span>
-                      ) : (
-                        <span className="chip">{inline("暂无", "None")}</span>
-                      )}
-                    </div>
-                    <strong className="naming-value">{props.detail.candidateName ?? inline("还没有候选标题", "No candidate title yet")}</strong>
-                  </article>
-
-                  <dl className="signal-grid">
-                    <div>
-                      <dt>{tt("status")}</dt>
-                      <dd>{sessionStatusLabel(props.detail.statusEstimate, props.uiLanguage)}</dd>
-                    </div>
-                    <div>
-                      <dt>{inline("最后应用", "Last applied")}</dt>
-                      <dd>{props.detail.lastAppliedAt ? formatWhen(props.detail.lastAppliedAt, props.uiLanguage) : tt("nA")}</dd>
-                    </div>
-                  </dl>
-                </div>
-              </section>
-
-              <section className="detail-panel history-tray">
-                <div className="panel-topline history-tray-header">
-                  <div>
-                    <p className="panel-kicker">{tt("timeline")}</p>
-                    <h3>{tt("renameHistory")}</h3>
-                  </div>
-                  <button
-                    className="btn-refresh"
-                    onClick={() =>
-                      React.startTransition(() => {
-                        setHistoryExpanded((current) => !current);
-                      })
-                    }
-                    type="button"
-                  >
-                    {historyExpanded ? tt("hideRenameHistory") : tt("showRenameHistory")}
-                  </button>
-                </div>
-
-                {latestRename ? (
-                  <div className="history-summary-row">
-                  <div className="history-summary-copy">
-                      <strong>{latestRename.newName}</strong>
-                      <p>
-                        {latestRename.kind} / {latestRename.source} / {autoRenameStatusLabel(latestRename.status, props.uiLanguage)}
-                        {latestRename.reason ? ` / ${autoRenameReasonLabel(latestRename.reason, props.uiLanguage)}` : ""}
-                      </p>
-                    </div>
-                    <div className="history-summary-meta">
-                      <span>{formatWhen(latestRename.appliedAt, props.uiLanguage)}</span>
-                      <span>
-                        {(props.detail.renameHistory ?? []).length} {tt("renameCountSuffix")}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="history-empty compact">{tt("noRenameHistory")}</div>
-                )}
-
-                {historyExpanded && (props.detail.renameHistory ?? []).length > 0 ? (
-                  <AppViewTransition default="none" enter="fade-in" exit="fade-out">
-                    <div className="history-stack history-expanded-list">
-                      {(props.detail.renameHistory ?? []).slice(0, 10).map((entry, index) => (
-                        <article className="history-row" key={`${index}-${entry.appliedAt}-${entry.newName}`}>
-                          <div>
-                            <strong>{entry.newName}</strong>
-                            <p>
-                              {entry.kind} / {entry.source} / {autoRenameStatusLabel(entry.status, props.uiLanguage)}
-                              {entry.reason ? ` / ${autoRenameReasonLabel(entry.reason, props.uiLanguage)}` : ""}
-                            </p>
-                          </div>
-                          <span>{formatWhen(entry.appliedAt, props.uiLanguage)}</span>
-                        </article>
-                      ))}
-                    </div>
-                  </AppViewTransition>
-                ) : null}
-              </section>
-            </div>
             </>
           </AppViewTransition>
         ) : (
-          <div className="history-empty">{tt("selectSessionHint")}</div>
+          <div className="history-empty">
+            <p>{tt("selectSessionHint")}</p>
+            <div className="history-empty-actions">
+              <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
+                {tt("showSessions")}
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </section>
