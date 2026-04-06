@@ -141,7 +141,16 @@ export class LocalApiClient {
     return requestJson<AutoRenamePreviewResponse>(url.toString());
   }
 
-  getPromptPreview(threadId?: string): Promise<PromptPreviewResponse> {
+  getPromptPreview(threadId?: string, userConfig?: ConfigDocument): Promise<PromptPreviewResponse> {
+    if (userConfig) {
+      return requestJson<PromptPreviewResponse>(this.resolve("/api/v1/ai/prompt-preview"), {
+        method: "POST",
+        body: JSON.stringify({
+          threadId,
+          userConfig
+        })
+      });
+    }
     const url = new URL(this.resolve("/api/v1/ai/prompt-preview"));
     if (threadId) {
       url.searchParams.set("threadId", threadId);

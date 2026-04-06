@@ -143,7 +143,7 @@ export type ConfigDocument = {
   };
   rename?: {
     mode?: "heuristic" | "ai" | "hybrid";
-    autoApply?: "off" | "idle-finalize" | "suggest-only";
+    autoApply?: "disabled" | "idle-finalize";
     manualOverrideWins?: boolean;
     freezeManualName?: boolean;
   };
@@ -159,9 +159,17 @@ export type ConfigDocument = {
   naming?: {
     preset?: string;
     template?: string;
+    defaultStyle?: "brief" | "detailed";
     maxLength?: number;
     language?: string;
-    contextStrategy?: "summary-signals" | "user-assistant-transcript";
+    contextStrategy?:
+      | "summary-signals"
+      | "last-user-last-assistant"
+      | "user-assistant-transcript"
+      | "user-only-transcript"
+      | "assistant-only-transcript"
+      | "user-transcript-last-assistant"
+      | "paired-user-turns";
     contextMaxChars?: number;
   };
   ai?: {
@@ -170,6 +178,7 @@ export type ConfigDocument = {
     profile?: string;
     timeoutSeconds?: number;
     temperature?: number;
+    maxConcurrency?: number;
   };
   providerProfiles?: ProviderProfile[];
   maintenance?: {

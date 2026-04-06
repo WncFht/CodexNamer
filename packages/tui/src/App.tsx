@@ -13,10 +13,19 @@ import {
   type UiLanguage
 } from "./i18n.js";
 import { computeTerminalLayout, measureDisplayWidth, truncateDisplayText, wrapDisplayText } from "./layout.js";
+import {
+  buildSettingsDraft,
+  buildSettingsFields,
+  cycleSettingsFieldValue,
+  encodeSettingsDraft,
+  isSettingsDraftDirty,
+  type SettingKey,
+  type SettingsDraft,
+  updateSelectedProfile
+} from "./settings-model.js";
 import type {
   AutoRenamePreviewResponse,
   BatchApplyResponse,
-  ConfigDocument,
   ConfigView,
   PromptPreviewResponse,
   ProviderProfile,
@@ -31,53 +40,6 @@ type FocusPane = "sessions" | "transcript";
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
 type ScreenMode = "browser" | "settings";
 type BrowserViewMode = "split" | "detail" | "sessions";
-type SettingKey =
-  | "uiLanguage"
-  | "namingTemplate"
-  | "namingMaxLength"
-  | "namingLanguage"
-  | "namingContextStrategy"
-  | "namingContextMaxChars"
-  | "renameMode"
-  | "renameAutoApply"
-  | "candidateIdleSeconds"
-  | "finalizeIdleSeconds"
-  | "renameCooldownSeconds"
-  | "aiBackend"
-  | "aiProviderSource"
-  | "aiProfile"
-  | "aiTimeoutSeconds"
-  | "aiTemperature"
-  | "providerBaseUrl"
-  | "providerModel"
-  | "providerApiKey"
-  | "providerWireApi";
-
-type SettingsDraft = {
-  uiLanguage: UiLanguage;
-  namingTemplate: string;
-  namingMaxLength: string;
-  namingLanguage: string;
-  namingContextStrategy: string;
-  namingContextMaxChars: string;
-  renameMode: string;
-  renameAutoApply: string;
-  candidateIdleSeconds: string;
-  finalizeIdleSeconds: string;
-  renameCooldownSeconds: string;
-  aiBackend: string;
-  aiProviderSource: string;
-  aiProfile: string;
-  aiTimeoutSeconds: string;
-  aiTemperature: string;
-  providerProfiles: ProviderProfile[];
-  selectedProfileId: string;
-};
-
-type RenameMode = "heuristic" | "ai" | "hybrid";
-type RenameAutoApply = "off" | "idle-finalize" | "suggest-only";
-type AiBackend = "none" | "codex" | "openai-compatible";
-type ProviderSource = "inherit-codex" | "explicit";
 
 const TRANSCRIPT_PAGE_SIZE = 18;
 const THEME = {
@@ -211,147 +173,10 @@ function roleColor(role: SessionTranscriptEntry["role"]): "cyan" | "green" | "ye
   return THEME.muted as never;
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-function asNumberString(value: unknown, fallback = ""): string {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : fallback;
-}
-
-function normalizeProfile(raw: unknown): ProviderProfile {
-  const record = asRecord(raw);
-  return {
-    profileId: asString(record.profileId, "default"),
-    backendKind: (asString(record.backendKind || record.backend_kind, "openai-compatible") as ProviderProfile["backendKind"]) ?? "openai-compatible",
-    displayName: asString(record.displayName || record.display_name),
-    providerSource: (asString(record.providerSource || record.provider_source, "explicit") as ProviderProfile["providerSource"]) ?? "explicit",
-    providerRef: asString(record.providerRef || record.provider_ref),
-    baseUrl: asString(record.baseUrl || record.base_url),
-    model: asString(record.model),
-    apiKey: asString(record.apiKey || record.api_key),
-    apiKeyRef: asString(record.apiKeyRef || record.api_key_ref),
-    headers: (record.headers as Record<string, string> | undefined) ?? {},
-    wireApi: (asString(record.wireApi || record.wire_api, "auto") as ProviderProfile["wireApi"]) ?? "auto",
-    enabled: typeof record.enabled === "boolean" ? record.enabled : true,
-    isDefault: typeof record.isDefault === "boolean" ? record.isDefault : typeof record.is_default === "boolean" ? Boolean(record.is_default) : false
-  };
-}
-
-function buildSettingsDraft(configView: ConfigView): SettingsDraft {
-  const effective = asRecord(configView.effectiveConfig);
-  const general = asRecord(effective.general);
-  const naming = asRecord(effective.naming);
-  const rename = asRecord(effective.rename);
-  const watch = asRecord(effective.watch);
-  const ai = asRecord(effective.ai);
-  const profiles = Array.isArray(effective.providerProfiles) ? effective.providerProfiles.map(normalizeProfile) : [];
-  const selectedProfileId = asString(ai.profile, profiles.find((item) => item.isDefault)?.profileId ?? profiles[0]?.profileId ?? "default");
-  const selectedProfile = profiles.find((profile) => profile.profileId === selectedProfileId) ?? profiles[0];
-
-  return {
-    uiLanguage: general.uiLanguage === "zh-CN" ? "zh-CN" : "en-US",
-    namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
-    namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
-    namingLanguage: asString(naming.language, "zh-CN"),
-    namingContextStrategy: asString(naming.contextStrategy || naming.context_strategy, "summary-signals"),
-    namingContextMaxChars: asNumberString(naming.contextMaxChars || naming.context_max_chars, "8000"),
-    renameMode: asString(rename.mode, "hybrid"),
-    renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
-    candidateIdleSeconds: asNumberString(watch.candidateIdleSeconds || watch.candidate_idle_seconds, "120"),
-    finalizeIdleSeconds: asNumberString(watch.finalizeIdleSeconds || watch.finalize_idle_seconds, "600"),
-    renameCooldownSeconds: asNumberString(watch.renameCooldownSeconds || watch.rename_cooldown_seconds, "900"),
-    aiBackend: asString(ai.backend, "codex"),
-    aiProviderSource: asString(ai.providerSource || ai.provider_source, "inherit-codex"),
-    aiProfile: asString(ai.profile, selectedProfileId),
-    aiTimeoutSeconds: asNumberString(ai.timeoutSeconds || ai.timeout_seconds, "45"),
-    aiTemperature: asNumberString(ai.temperature, "0.2"),
-    providerProfiles: profiles,
-    selectedProfileId: selectedProfile?.profileId ?? selectedProfileId
-  };
-}
-
-function parseNumber(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function stripEmpty(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function updateSelectedProfile(
-  profiles: ProviderProfile[],
-  profileId: string,
-  patch: Partial<ProviderProfile>
-): ProviderProfile[] {
-  return profiles.map((profile) => (profile.profileId === profileId ? { ...profile, ...patch } : profile));
-}
-
 function fitDisplayLine(value: string | undefined, width: number, fallback = "n/a"): string {
   const truncated = truncateDisplayText(value, width, fallback);
   const padding = Math.max(0, width - measureDisplayWidth(truncated));
   return `${truncated}${" ".repeat(padding)}`;
-}
-
-function encodeSettingsDraft(draft: SettingsDraft): ConfigDocument {
-  return {
-    general: {
-      uiLanguage: draft.uiLanguage
-    },
-    rename: {
-      mode: draft.renameMode as RenameMode,
-      autoApply: draft.renameAutoApply as RenameAutoApply
-    },
-    watch: {
-      candidateIdleSeconds: parseNumber(draft.candidateIdleSeconds),
-      finalizeIdleSeconds: parseNumber(draft.finalizeIdleSeconds),
-      renameCooldownSeconds: parseNumber(draft.renameCooldownSeconds)
-    },
-    naming: {
-      template: stripEmpty(draft.namingTemplate),
-      maxLength: parseNumber(draft.namingMaxLength),
-      language: stripEmpty(draft.namingLanguage),
-      contextStrategy: stripEmpty(draft.namingContextStrategy) as "summary-signals" | "user-assistant-transcript" | undefined,
-      contextMaxChars: parseNumber(draft.namingContextMaxChars)
-    },
-    ai: {
-      backend: draft.aiBackend as AiBackend,
-      providerSource: draft.aiProviderSource as ProviderSource,
-      profile: stripEmpty(draft.aiProfile),
-      timeoutSeconds: parseNumber(draft.aiTimeoutSeconds),
-      temperature: parseNumber(draft.aiTemperature)
-    },
-    providerProfiles: draft.providerProfiles.map((profile) => ({
-      profileId: profile.profileId,
-      backendKind: profile.backendKind,
-      displayName: stripEmpty(profile.displayName ?? ""),
-      providerSource: profile.providerSource,
-      providerRef: stripEmpty(profile.providerRef ?? ""),
-      baseUrl: stripEmpty(profile.baseUrl ?? ""),
-      model: stripEmpty(profile.model ?? ""),
-      apiKey: stripEmpty(profile.apiKey ?? ""),
-      apiKeyRef: stripEmpty(profile.apiKeyRef ?? ""),
-      headers: profile.headers,
-      wireApi: profile.wireApi,
-      enabled: profile.enabled,
-      isDefault: profile.isDefault
-    }))
-  };
-}
-
-function cycle<T extends string>(current: T, values: readonly T[]): T {
-  const index = values.indexOf(current);
-  return values[(index + 1) % values.length] as T;
 }
 
 function SessionRow(props: {
@@ -501,7 +326,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [expandedTranscriptScroll, setExpandedTranscriptScroll] = useState(0);
   const [configView, setConfigView] = useState<ConfigView | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
-  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsBaseline, setSettingsBaseline] = useState<ReturnType<typeof encodeSettingsDraft> | null>(null);
   const [settingsIndex, setSettingsIndex] = useState(0);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
   const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
@@ -530,37 +355,30 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const selectedProfile = settingsDraft?.providerProfiles.find(
     (profile) => profile.profileId === settingsDraft.selectedProfileId
   );
+  const settingsDraftConfig = useMemo(() => (settingsDraft ? encodeSettingsDraft(settingsDraft) : null), [settingsDraft]);
+  const settingsDirty = useMemo(() => {
+    if (!settingsDraft || !settingsBaseline) {
+      return false;
+    }
+    return isSettingsDraftDirty(settingsDraft, settingsBaseline);
+  }, [settingsBaseline, settingsDraft]);
   const uiLanguage = normalizeUiLanguage(configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
   const previewSuggestCount = preview.filter((item) => item.status === "suggest").length;
   const previewApplyCount = preview.filter((item) => item.status === "apply").length;
   const previewSkipCount = preview.filter((item) => item.status === "skip").length;
 
-  const settingsFields = useMemo(() => {
-    const profile = selectedProfile;
-    return [
-      { key: "uiLanguage", label: inLanguage(uiLanguage, "界面 / 语言", "UI / Language"), value: settingsDraft?.uiLanguage ?? "" },
-      { key: "namingTemplate", label: inLanguage(uiLanguage, "命名 / 模板", "Naming / Template"), value: settingsDraft?.namingTemplate ?? "" },
-      { key: "namingMaxLength", label: inLanguage(uiLanguage, "命名 / 最大长度", "Naming / Max length"), value: settingsDraft?.namingMaxLength ?? "" },
-      { key: "namingLanguage", label: inLanguage(uiLanguage, "命名 / 语言", "Naming / Language"), value: settingsDraft?.namingLanguage ?? "" },
-      { key: "namingContextStrategy", label: inLanguage(uiLanguage, "命名 / 上下文策略", "Naming / Context strategy"), value: settingsDraft?.namingContextStrategy ?? "" },
-      { key: "namingContextMaxChars", label: inLanguage(uiLanguage, "命名 / 上下文长度上限", "Naming / Context max chars"), value: settingsDraft?.namingContextMaxChars ?? "" },
-      { key: "renameMode", label: inLanguage(uiLanguage, "重命名 / 模式", "Rename / Mode"), value: settingsDraft?.renameMode ?? "" },
-      { key: "renameAutoApply", label: inLanguage(uiLanguage, "重命名 / 自动应用", "Rename / Auto apply"), value: settingsDraft?.renameAutoApply ?? "" },
-      { key: "candidateIdleSeconds", label: inLanguage(uiLanguage, "节奏 / 候选空闲秒数", "Cadence / Candidate idle sec"), value: settingsDraft?.candidateIdleSeconds ?? "" },
-      { key: "finalizeIdleSeconds", label: inLanguage(uiLanguage, "节奏 / 终稿空闲秒数", "Cadence / Finalize idle sec"), value: settingsDraft?.finalizeIdleSeconds ?? "" },
-      { key: "renameCooldownSeconds", label: inLanguage(uiLanguage, "节奏 / 冷却秒数", "Cadence / Cooldown sec"), value: settingsDraft?.renameCooldownSeconds ?? "" },
-      { key: "aiBackend", label: "AI / Backend", value: settingsDraft?.aiBackend ?? "" },
-      { key: "aiProviderSource", label: inLanguage(uiLanguage, "AI / Provider 来源", "AI / Provider source"), value: settingsDraft?.aiProviderSource ?? "" },
-      { key: "aiProfile", label: "AI / Profile", value: settingsDraft?.aiProfile ?? "" },
-      { key: "aiTimeoutSeconds", label: inLanguage(uiLanguage, "AI / 超时", "AI / Timeout"), value: settingsDraft?.aiTimeoutSeconds ?? "" },
-      { key: "aiTemperature", label: inLanguage(uiLanguage, "AI / 温度", "AI / Temperature"), value: settingsDraft?.aiTemperature ?? "" },
-      { key: "providerBaseUrl", label: inLanguage(uiLanguage, `Provider / Base URL (${profile?.profileId ?? tt("nA")})`, `Provider / baseUrl (${profile?.profileId ?? tt("nA")})`), value: profile?.baseUrl ?? "" },
-      { key: "providerModel", label: inLanguage(uiLanguage, "Provider / 模型", "Provider / model"), value: profile?.model ?? "" },
-      { key: "providerApiKey", label: "Provider / API key", value: profile?.apiKey ?? "" },
-      { key: "providerWireApi", label: "Provider / Wire API", value: profile?.wireApi ?? "" }
-    ] as Array<{ key: SettingKey; label: string; value: string }>;
-  }, [selectedProfile, settingsDraft, tt, uiLanguage]);
+  const settingsFields = useMemo(
+    () =>
+      buildSettingsFields({
+        draft: settingsDraft,
+        selectedProfile,
+        uiLanguage,
+        tt,
+        inline: (zh, en) => inLanguage(uiLanguage, zh, en)
+      }),
+    [selectedProfile, settingsDraft, tt, uiLanguage]
+  );
 
   const activeSetting = settingsFields[settingsIndex];
 
@@ -570,6 +388,19 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       process.exit(0);
     }, 20);
     timer.unref?.();
+  };
+
+  const syncSettingsFromConfig = (payload: ConfigView, options?: { preserveDirty?: boolean }) => {
+    const nextDraft = buildSettingsDraft(payload);
+    const nextBaseline = encodeSettingsDraft(nextDraft);
+    setConfigView(payload);
+    setSettingsBaseline(nextBaseline);
+    setSettingsDraft((current) => {
+      if (!options?.preserveDirty || !current) {
+        return nextDraft;
+      }
+      return isSettingsDraftDirty(current, nextBaseline) ? current : nextDraft;
+    });
   };
 
   const reloadSessions = async (nextSelectedId?: string) => {
@@ -653,19 +484,19 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const reloadConfig = async () => {
     try {
       const payload = await client.getConfig();
-      setConfigView(payload);
-      if (!settingsDirty) {
-        setSettingsDraft(buildSettingsDraft(payload));
-      }
+      syncSettingsFromConfig(payload, { preserveDirty: true });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
     }
   };
 
-  const reloadPromptPreview = async (threadId?: string, options?: { silent?: boolean }) => {
+  const reloadPromptPreview = async (
+    threadId?: string,
+    options?: { silent?: boolean; userConfig?: ReturnType<typeof encodeSettingsDraft> }
+  ) => {
     setPromptPreviewRefreshing(true);
     try {
-      const payload = await client.getPromptPreview(threadId);
+      const payload = await client.getPromptPreview(threadId, options?.userConfig);
       setPromptPreview(payload);
       if (!options?.silent) {
         setMessage(
@@ -762,8 +593,6 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (!settingsDraft) {
       return;
     }
-
-    setSettingsDirty(true);
     if (key === "providerBaseUrl" || key === "providerModel" || key === "providerApiKey" || key === "providerWireApi") {
       const patch: Partial<ProviderProfile> =
         key === "providerBaseUrl"
@@ -790,44 +619,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (!settingsDraft) {
       return;
     }
-
-    setSettingsDirty(true);
-    if (key === "uiLanguage") {
-      setSettingsDraft({ ...settingsDraft, uiLanguage: cycle(settingsDraft.uiLanguage, ["en-US", "zh-CN"] as const) });
-      return;
-    }
-    if (key === "renameMode") {
-      setSettingsDraft({ ...settingsDraft, renameMode: cycle(settingsDraft.renameMode, ["heuristic", "hybrid", "ai"] as const) });
-      return;
-    }
-    if (key === "namingContextStrategy") {
-      setSettingsDraft({
-        ...settingsDraft,
-        namingContextStrategy: cycle(settingsDraft.namingContextStrategy, ["summary-signals", "user-assistant-transcript"] as const)
-      });
-      return;
-    }
-    if (key === "renameAutoApply") {
-      setSettingsDraft({ ...settingsDraft, renameAutoApply: cycle(settingsDraft.renameAutoApply, ["off", "suggest-only", "idle-finalize"] as const) });
-      return;
-    }
-    if (key === "aiBackend") {
-      setSettingsDraft({ ...settingsDraft, aiBackend: cycle(settingsDraft.aiBackend, ["codex", "openai-compatible", "none"] as const) });
-      return;
-    }
-    if (key === "aiProviderSource") {
-      setSettingsDraft({ ...settingsDraft, aiProviderSource: cycle(settingsDraft.aiProviderSource, ["inherit-codex", "explicit"] as const) });
-      return;
-    }
-    if (key === "providerWireApi" && selectedProfile) {
-      setSettingsDraft({
-        ...settingsDraft,
-        providerProfiles: updateSelectedProfile(settingsDraft.providerProfiles, settingsDraft.selectedProfileId, {
-          wireApi: cycle(selectedProfile.wireApi ?? "auto", ["auto", "responses", "chat_completions"] as const)
-        })
-      });
-      return;
-    }
+    setSettingsDraft(cycleSettingsFieldValue(settingsDraft, key, selectedProfile));
   };
 
   const saveSettings = async () => {
@@ -838,11 +630,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     setError(null);
     setMessage(inLanguage(uiLanguage, "正在保存设置...", "Saving settings..."));
     try {
-      const payload = await client.updateConfig(encodeSettingsDraft(settingsDraft));
-      setConfigView(payload.config);
-      setSettingsDraft(buildSettingsDraft(payload.config));
-      setSettingsDirty(false);
-      await reloadPromptPreview(selected?.threadId, { silent: true });
+      const payload = await client.updateConfig(settingsDraftConfig ?? encodeSettingsDraft(settingsDraft));
+      syncSettingsFromConfig(payload.config);
+      await reloadPromptPreview(selected?.threadId, { silent: true, userConfig: settingsDraftConfig ?? undefined });
       setMessage(
         payload.restartRequired
           ? inLanguage(uiLanguage, "设置已保存（需要重启）。", "Saved settings (restart required).")
@@ -871,6 +661,21 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   useEffect(() => {
     void reloadPromptPreview(selected?.threadId, { silent: true });
   }, [selected?.threadId]);
+
+  useEffect(() => {
+    if (screenMode !== "settings" || !settingsDraft) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      void reloadPromptPreview(selected?.threadId, {
+        silent: true,
+        userConfig: settingsDraftConfig ?? undefined
+      });
+    }, 180);
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [screenMode, selected?.threadId, settingsDraftConfig, settingsDraft]);
 
   useEffect(() => {
     setExpandedTranscript(false);
@@ -945,11 +750,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         return;
       }
       if (input === "p") {
-        void reloadPromptPreview(selected?.threadId);
+        void reloadPromptPreview(selected?.threadId, {
+          userConfig: settingsDraftConfig ?? undefined
+        });
         return;
       }
       if (input === "R") {
-        setSettingsDirty(false);
+        if (configView) {
+          syncSettingsFromConfig(configView);
+        }
         void reloadConfig();
         void reloadPromptPreview(selected?.threadId, { silent: true });
         return;
@@ -1229,9 +1038,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     () => wrapDisplayText(detailTitle, layout.detailInnerWidth).slice(0, 2),
     [detailTitle, layout.detailInnerWidth]
   );
-  const resolvedProviderSummary = asRecord(configView?.effectiveConfig).resolvedProvider
-    ? JSON.stringify(asRecord(asRecord(configView?.effectiveConfig).resolvedProvider))
-    : tt("nA");
+  const resolvedProviderSummary = (() => {
+    const effective = (configView?.effectiveConfig as Record<string, unknown> | undefined) ?? {};
+    const resolved = effective.resolvedProvider;
+    return resolved && typeof resolved === "object" ? JSON.stringify(resolved) : tt("nA");
+  })();
   const settingsPromptLineBudget = Math.max(3, layout.topSectionHeight - 11);
   const settingsPromptLines = useMemo(() => {
     const promptText =
@@ -1502,7 +1313,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         </Box>
         <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
-            `${inLanguage(uiLanguage, "线程", "thread")}: ${promptPreview?.threadId ?? tt("nA")} | ${inLanguage(uiLanguage, "策略", "strategy")}: ${promptPreview?.renameContext.strategy ?? tt("nA")}`,
+            `${inLanguage(uiLanguage, "线程", "thread")}: ${promptPreview?.threadId ?? tt("nA")} | ${inLanguage(uiLanguage, "请求策略", "requested")}: ${promptPreview?.renameContext.requestedStrategy ?? tt("nA")}`,
+            layout.detailInnerWidth
+          )}
+        </Text>
+        <Text color={THEME.muted} wrap="truncate-end">
+          {fitDisplayLine(
+            `${inLanguage(uiLanguage, "解析策略", "resolved")}: ${promptPreview?.renameContext.strategy ?? tt("nA")} | ${inLanguage(uiLanguage, "回退", "fallback")}: ${promptPreview?.renameContext.fallbackReason ?? tt("nA")}`,
             layout.detailInnerWidth
           )}
         </Text>

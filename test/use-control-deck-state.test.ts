@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   liveRefreshResourcesForTab,
   panelResourcesForTab
-} from "../packages/web/src/useControlDeckState.js";
+} from "../packages/web/src/control-deck-model.js";
 
 describe("useControlDeckState resource planning", () => {
   it("loads only settings-specific resources for the settings tab", () => {
