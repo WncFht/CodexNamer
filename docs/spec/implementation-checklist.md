@@ -1,5 +1,7 @@
 # 实现 Checklist
 
+> 状态说明：这是一份历史过程清单，保留的是开发时阶段性判断，不保证逐项反映当前实现。当前代码能力请优先参考 [仓库总览](./repo-overview.md) 与测试。
+
 ## 0. 代码前准备
 
 - [x] 产品范围与非目标明确
@@ -36,7 +38,7 @@
 - [x] 实现 heuristic summarizer
 - [x] 实现 template renderer
 - [x] 实现 length limiter
-- [ ] 实现 duplicate suppression
+- [x] 实现 duplicate suppression
 - [x] 定义 AI suggest 接口
 
 ## 5. 调度与自动化
@@ -44,7 +46,7 @@
 - [x] 实现 watcher
 - [x] 实现 periodic sweep
 - [x] 实现 candidate generation
-- [ ] 实现 finalize apply
+- [x] 实现 finalize apply
 - [x] 实现 manual override 检测
 - [x] 实现 freeze 逻辑
 
@@ -66,12 +68,12 @@
 
 ## 7. WebUI
 
-- [ ] Session 列表页
-- [ ] Session 详情页
-- [ ] Batch rename 页
-- [ ] Rules 页
-- [ ] Providers 页
-- [ ] Maintenance 页
+- [x] Session 列表页
+- [x] Session 详情页
+- [x] Batch rename / rename ops 页
+- [x] Settings / Rules / Naming policy
+- [x] Provider diagnostics
+- [x] Maintenance / Runtime 页
 
 ## 8. AI provider
 

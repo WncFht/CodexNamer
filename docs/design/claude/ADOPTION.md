@@ -1,37 +1,37 @@
-# Claude Design MD Adoption
+# Claude Design MD 接入说明
 
-This project vendors the public `design-md/claude` reference from:
+本项目内置了公开的 `design-md/claude` 参考资料，来源于：
 
 - `https://github.com/VoltAgent/awesome-design-md/tree/main/design-md/claude`
 
-The source files are copied into this directory:
+源文件已复制到当前目录：
 
-- [README.md](/home/fanghaotian/Desktop/src/codex-session-manager/docs/design/claude/README.md)
-- [DESIGN.md](/home/fanghaotian/Desktop/src/codex-session-manager/docs/design/claude/DESIGN.md)
-- [preview.html](/home/fanghaotian/Desktop/src/codex-session-manager/docs/design/claude/preview.html)
-- [preview-dark.html](/home/fanghaotian/Desktop/src/codex-session-manager/docs/design/claude/preview-dark.html)
+- [README.md](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/README.md)
+- [DESIGN.md](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/DESIGN.md)
+- [preview.html](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/preview.html)
+- [preview-dark.html](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/preview-dark.html)
 
-## What We Adopt
+## 我们采纳的部分
 
-- Parchment canvas as the default page background
-- Serif headlines with warm editorial spacing
-- Terracotta accent for primary actions and selected states
-- Warm neutral borders, surfaces, and metadata tones
-- Ring-shadow based depth instead of cold tech drop shadows
-- Large rounded cards for sessions, transcript entries, and settings panels
-- Dark left rail plus light reading surface for chapter-like contrast
+- 以羊皮纸感画布作为默认页面背景
+- 使用带温度的衬线标题与更有编辑感的节奏留白
+- 用陶土色作为主操作和高优先级选中态
+- 用暖色中性边框、表面色和元信息色替代冷灰
+- 用 ring-shadow 表达层次，而不是典型科技风投影
+- 为 session 卡片、transcript 条目和 settings 面板使用更大的圆角
+- 用深色左侧导航栏搭配浅色阅读面，制造章节感对比
 
-## Current Mapping
+## 当前项目中的映射
 
-- App shell: dark navigation rail + parchment content surface
-- Session cards: ivory cards with warm ring shadows and serif titles
-- Detail header: large serif title with subdued metadata line
-- Transcript: ivory editorial cards with warm semantic role pills
-- Controls: warm sand buttons, terracotta primary emphasis, white search/input fields
-- Settings: editorial form layout instead of developer-console styling
+- 应用外壳：深色导航 rail + 羊皮纸色内容面板
+- Session 卡片：象牙白卡片、暖色 ring shadow、衬线标题
+- 详情头部：更大的衬线标题 + 克制的元信息行
+- Transcript：象牙白编辑式卡片 + 暖色语义角色标签
+- 控件：暖沙色按钮、陶土色主强调、白色搜索框和输入框
+- Settings：偏编辑页面的表单布局，而不是开发者控制台风格
 
-## Deliberate Deviations
+## 有意保留的偏离
 
-- We keep transcript tool/system filters and maintenance JSON blocks because this is an operational product, not a marketing page.
-- We use Georgia/system fallbacks instead of Anthropic proprietary fonts.
-- We keep explicit split panes and data-dense session lists, but style them with Claude-like surfaces and pacing.
+- 我们保留 transcript 的 tool/system 过滤和 maintenance JSON 区块，因为这是运维型产品，不是营销页面。
+- 字体使用 `Georgia` 和系统字体回退，而不是 Anthropic 专有字体。
+- 我们保留明确的分栏布局和高密度 session 列表，但用更接近 Claude 的表面风格与节奏去处理。

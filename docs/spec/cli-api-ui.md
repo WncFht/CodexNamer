@@ -1,5 +1,7 @@
 # CLI / API / UI 设计
 
+> 状态说明：这份文档保留了较早期的语义草案，其中部分命令名、页面拆分和批量操作已经被当前实现调整。阅读时请优先结合 [仓库总览](./repo-overview.md)、[WebUI / TUI / Local API 详细设计](./web-tui-local-api-design.md) 和实际代码。
+
 ## 目标
 
 - 所有操作先定义语义，再决定界面表现
@@ -119,9 +121,7 @@
 ### daemon
 
 ```bash
-codex-session daemon start
-codex-session daemon stop
-codex-session daemon status
+codex-session-daemon --once
 ```
 
 ### 查询
@@ -130,7 +130,6 @@ codex-session daemon status
 codex-session list
 codex-session list --dirty
 codex-session show --id <thread-id>
-codex-session show --last
 ```
 
 ### 单个 rename
@@ -146,10 +145,14 @@ codex-session unfreeze --id <thread-id>
 ### 批量 rename
 
 ```bash
-codex-session batch suggest --dirty
 codex-session batch apply --dirty
-codex-session batch apply --ids id1,id2,id3
+codex-session batch apply --dirty --preview
 ```
+
+说明：
+
+- CLI 里单独的 `batch suggest` 当前没有独立命令入口。
+- `batch apply` 当前只支持 dirty 批处理，不支持显式 `--ids` 列表。
 
 ### 维护
 
@@ -162,9 +165,11 @@ codex-session provider test
 
 ### 界面
 
+当前开发入口是：
+
 ```bash
-codex-session web
-codex-session tui
+npm run web
+npm run tui
 ```
 
 ## WebUI 信息架构

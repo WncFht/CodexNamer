@@ -171,18 +171,20 @@
 - 继续保持 compact 为手动维护命令
 - 在 WebUI / CLI 上明确风险
 
-### 3.6 WebUI / TUI 缺失导致 pipeline 的“可操作性”还不完整
+### 3.6 WebUI / TUI 已经落地，但旧状态描述和当前实现脱节
 
-领域层已经可用，本地 API 也已有基础实现，但用户态入口仍然偏 CLI。
+领域层、本地 API、WebUI、TUI 现在都已经有可运行实现，真正的问题已经从“界面缺失”变成了“文档和信息架构滞后”。
 
 影响：
 
-- batch rename、history、provider/profile 配置虽然能做，但还不够顺手
+- 新读者可能误以为当前仍然只有 CLI
+- 一些老文档还在描述多页式 IA，而当前实现已经更偏统一控制面板
+- API、WebUI、TUI 的扩展能力没有完全同步回规格文档
 
 建议：
 
-- 先扩展 Local API 的剩余契约
-- 再做 WebUI 的 `Sessions / Session Detail / Batch / Providers`
+- 继续把当前实现回写到规格文档
+- 保留历史设计稿，但明确标注其历史性质
 
 ## 4. 建议的下一阶段顺序
 
@@ -190,15 +192,15 @@
 2. `doctor` 合并 provider 诊断
 3. auto-apply 真正闭环
 4. 持久化“实质更新信号”
-5. WebUI 最小可用版
-6. TUI
+5. 统一旧规格文档与当前 UI / API 契约
+6. 继续优化 WebUI / TUI 的默认阅读路径
 
 ## 5. 结论
 
 目前最关键的结论有两条：
 
-- Web / TUI / API 设计书已经够用了，当前不是设计不足，而是 Local API 已起步、WebUI/TUI 尚未接上。
+- Web / TUI / API 的实现已经接上，当前主要问题不再是“有没有入口”，而是“旧文档是否准确描述了当前入口和行为”。
 - 现有 pipeline 最大的真实缺口不在 rename 核心，而在：
-  - auto-apply 还没闭环
   - “实质更新”阈值还没真正进入调度判断
-  - WebUI / TUI 还没接上
+  - 文档与实现之间还有残留时差
+  - UI 的信息架构和默认浏览路径仍需继续优化

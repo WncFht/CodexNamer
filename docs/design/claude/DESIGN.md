@@ -1,312 +1,374 @@
-# Design System: Claude (Anthropic)
+# 设计系统：Claude（Anthropic）
 
-## 1. Visual Theme & Atmosphere
+> 说明：这是对公开 Claude 站点设计语言的中文整理版，用来给本仓库的前端实现和设计审查提供统一参考。它不是官方设计系统，也不要求像素级复刻。
 
-Claude's interface is a literary salon reimagined as a product page — warm, unhurried, and quietly intellectual. The entire experience is built on a parchment-toned canvas (`#f5f4ed`) that deliberately evokes the feeling of high-quality paper rather than a digital surface. Where most AI product pages lean into cold, futuristic aesthetics, Claude's design radiates human warmth, as if the AI itself has good taste in interior design.
+## 1. 视觉主题与气质
 
-The signature move is the custom Anthropic Serif typeface — a medium-weight serif with generous proportions that gives every headline the gravitas of a book title. Combined with organic, hand-drawn-feeling illustrations in terracotta (`#c96442`), black, and muted green, the visual language says "thoughtful companion" rather than "powerful tool." The serif headlines breathe at tight-but-comfortable line-heights (1.10–1.30), creating a cadence that feels more like reading an essay than scanning a product page.
+Claude 的界面像是把“文学沙龙”重新翻译成产品页面：温暖、不着急、安静地显得聪明。整个体验建立在羊皮纸色画布 `#f5f4ed` 上，它刻意让人联想到高质量纸张，而不是冷冰冰的数字屏幕。和很多 AI 产品常见的未来感、金属感不同，Claude 更像一个有审美的阅读空间。
 
-What makes Claude's design truly distinctive is its warm neutral palette. Every gray has a yellow-brown undertone (`#5e5d59`, `#87867f`, `#4d4c48`) — there are no cool blue-grays anywhere. Borders are cream-tinted (`#f0eee6`, `#e8e6dc`), shadows use warm transparent blacks, and even the darkest surfaces (`#141413`, `#30302e`) carry a barely perceptible olive warmth. This chromatic consistency creates a space that feels lived-in and trustworthy.
+它最标志性的手法，是中等字重、比例舒展的衬线标题字体。配合陶土色 `#c96442`、近黑色与柔和绿色的手绘感插图，整体语言更像“有思考的陪伴者”，而不是“强力工具”。标题的行高偏紧但不过度压缩，通常在 `1.10–1.30` 之间，阅读节奏更像读一篇文章，而不是扫一块控制台。
 
-**Key Characteristics:**
-- Warm parchment canvas (`#f5f4ed`) evoking premium paper, not screens
-- Custom Anthropic type family: Serif for headlines, Sans for UI, Mono for code
-- Terracotta brand accent (`#c96442`) — warm, earthy, deliberately un-tech
-- Exclusively warm-toned neutrals — every gray has a yellow-brown undertone
-- Organic, editorial illustrations replacing typical tech iconography
-- Ring-based shadow system (`0px 0px 0px 1px`) creating border-like depth without visible borders
-- Magazine-like pacing with generous section spacing and serif-driven hierarchy
+另一个关键点是它彻底暖化的中性色体系。灰色全部带黄棕底调，例如 `#5e5d59`、`#87867f`、`#4d4c48`；边框偏奶油色，阴影是暖透明黑，连最深的表面 `#141413`、`#30302e` 也带一点橄榄色温度。色相一致性让整个空间显得可靠、安定、有人味。
 
-## 2. Color Palette & Roles
+**关键特征：**
 
-### Primary
-- **Anthropic Near Black** (`#141413`): The primary text color and dark-theme surface — not pure black but a warm, almost olive-tinted dark that's gentler on the eyes. The warmest "black" in any major tech brand.
-- **Terracotta Brand** (`#c96442`): The core brand color — a burnt orange-brown used for primary CTA buttons, brand moments, and the signature accent. Deliberately earthy and un-tech.
-- **Coral Accent** (`#d97757`): A lighter, warmer variant of the brand color used for text accents, links on dark surfaces, and secondary emphasis.
+- 羊皮纸色背景 `#f5f4ed`，强调纸张感而不是屏幕感
+- 标题用衬线、UI 用无衬线、代码用等宽字体
+- 主强调色是陶土色 `#c96442`，刻意避免科技蓝紫
+- 所有中性色都偏暖，不使用冷蓝灰
+- 插图偏手绘、编辑式，而不是科技图标库风格
+- 层次主要通过 ring-shadow，而不是重投影
+- 整体节奏像杂志页面，强调章节感与呼吸感
 
-### Secondary & Accent
-- **Error Crimson** (`#b53333`): A deep, warm red for error states — serious without being alarming.
-- **Focus Blue** (`#3898ec`): Standard blue for input focus rings — the only cool color in the entire system, used purely for accessibility.
+## 2. 色板与角色分工
 
-### Surface & Background
-- **Parchment** (`#f5f4ed`): The primary page background — a warm cream with a yellow-green tint that feels like aged paper. The emotional foundation of the entire design.
-- **Ivory** (`#faf9f5`): The lightest surface — used for cards and elevated containers on the Parchment background. Barely distinguishable but creates subtle layering.
-- **Pure White** (`#ffffff`): Reserved for specific button surfaces and maximum-contrast elements.
-- **Warm Sand** (`#e8e6dc`): Button backgrounds and prominent interactive surfaces — a noticeably warm light gray.
-- **Dark Surface** (`#30302e`): Dark-theme containers, nav borders, and elevated dark elements — warm charcoal.
-- **Deep Dark** (`#141413`): Dark-theme page background and primary dark surface.
+### 主色
 
-### Neutrals & Text
-- **Charcoal Warm** (`#4d4c48`): Button text on light warm surfaces — the go-to dark-on-light text.
-- **Olive Gray** (`#5e5d59`): Secondary body text — a distinctly warm medium-dark gray.
-- **Stone Gray** (`#87867f`): Tertiary text, footnotes, and de-emphasized metadata.
-- **Dark Warm** (`#3d3d3a`): Dark text links and emphasized secondary text.
-- **Warm Silver** (`#b0aea5`): Text on dark surfaces — a warm, parchment-tinted light gray.
+- **Anthropic Near Black** `#141413`
+  - 主文字色，也是深色主题的核心背景
+  - 不是纯黑，而是带温度的深色
+- **Terracotta Brand** `#c96442`
+  - 核心品牌色
+  - 用于主 CTA、品牌高信号节点和关键强调
+- **Coral Accent** `#d97757`
+  - 更浅、更暖的强调变体
+  - 常用于次级强调和深色背景上的文字点缀
 
-### Semantic & Accent
-- **Border Cream** (`#f0eee6`): Standard light-theme border — barely visible warm cream, creating the gentlest possible containment.
-- **Border Warm** (`#e8e6dc`): Prominent borders, section dividers, and emphasized containment on light surfaces.
-- **Border Dark** (`#30302e`): Standard border on dark surfaces — maintains the warm tone.
-- **Ring Warm** (`#d1cfc5`): Shadow ring color for button hover/focus states.
-- **Ring Subtle** (`#dedc01`): Secondary ring variant for lighter interactive surfaces.
-- **Ring Deep** (`#c2c0b6`): Deeper ring for active/pressed states.
+### 次色与强调
 
-### Gradient System
-- Claude's design is **gradient-free** in the traditional sense. Depth and visual richness come from the interplay of warm surface tones, organic illustrations, and light/dark section alternation. The warm palette itself creates a "gradient" effect as the eye moves through cream → sand → stone → charcoal → black sections.
+- **Error Crimson** `#b53333`
+  - 暖调深红，用于错误态
+- **Focus Blue** `#3898ec`
+  - 聚焦环专用蓝色
+  - 它几乎是整套系统里唯一明显偏冷的颜色，仅用于可访问性
 
-## 3. Typography Rules
+### 表面与背景
 
-### Font Family
-- **Headline**: `Anthropic Serif`, with fallback: `Georgia`
-- **Body / UI**: `Anthropic Sans`, with fallback: `Arial`
-- **Code**: `Anthropic Mono`, with fallback: `Arial`
+- **Parchment** `#f5f4ed`
+  - 主页面背景
+  - 暖奶油色，是整个系统的情绪基线
+- **Ivory** `#faf9f5`
+  - 最浅层容器背景
+  - 用于卡片与抬升容器
+- **Pure White** `#ffffff`
+  - 保留给少量强对比元素或特定按钮表面
+- **Warm Sand** `#e8e6dc`
+  - 按钮背景、交互表面
+- **Dark Surface** `#30302e`
+  - 深色容器、导航和深色强调区
+- **Deep Dark** `#141413`
+  - 深色页面底色
 
-*Note: These are custom typefaces. For external implementations, Georgia serves as the serif substitute and system-ui/Inter as the sans substitute.*
+### 中性色与文字
 
-### Hierarchy
+- **Charcoal Warm** `#4d4c48`
+  - 暖深灰，适合浅底深字
+- **Olive Gray** `#5e5d59`
+  - 次级正文色
+- **Stone Gray** `#87867f`
+  - 三级文字、脚注、弱元信息
+- **Dark Warm** `#3d3d3a`
+  - 次级强调文字
+- **Warm Silver** `#b0aea5`
+  - 深色表面上的文字色
 
-| Role | Font | Size | Weight | Line Height | Letter Spacing | Notes |
-|------|------|------|--------|-------------|----------------|-------|
-| Display / Hero | Anthropic Serif | 64px (4rem) | 500 | 1.10 (tight) | normal | Maximum impact, book-title presence |
-| Section Heading | Anthropic Serif | 52px (3.25rem) | 500 | 1.20 (tight) | normal | Feature section anchors |
-| Sub-heading Large | Anthropic Serif | 36–36.8px (~2.3rem) | 500 | 1.30 | normal | Secondary section markers |
-| Sub-heading | Anthropic Serif | 32px (2rem) | 500 | 1.10 (tight) | normal | Card titles, feature names |
-| Sub-heading Small | Anthropic Serif | 25–25.6px (~1.6rem) | 500 | 1.20 | normal | Smaller section titles |
-| Feature Title | Anthropic Serif | 20.8px (1.3rem) | 500 | 1.20 | normal | Small feature headings |
-| Body Serif | Anthropic Serif | 17px (1.06rem) | 400 | 1.60 (relaxed) | normal | Serif body text (editorial passages) |
-| Body Large | Anthropic Sans | 20px (1.25rem) | 400 | 1.60 (relaxed) | normal | Intro paragraphs |
-| Body / Nav | Anthropic Sans | 17px (1.06rem) | 400–500 | 1.00–1.60 | normal | Navigation links, UI text |
-| Body Standard | Anthropic Sans | 16px (1rem) | 400–500 | 1.25–1.60 | normal | Standard body, button text |
-| Body Small | Anthropic Sans | 15px (0.94rem) | 400–500 | 1.00–1.60 | normal | Compact body text |
-| Caption | Anthropic Sans | 14px (0.88rem) | 400 | 1.43 | normal | Metadata, descriptions |
-| Label | Anthropic Sans | 12px (0.75rem) | 400–500 | 1.25–1.60 | 0.12px | Badges, small labels |
-| Overline | Anthropic Sans | 10px (0.63rem) | 400 | 1.60 | 0.5px | Uppercase overline labels |
-| Micro | Anthropic Sans | 9.6px (0.6rem) | 400 | 1.60 | 0.096px | Smallest text |
-| Code | Anthropic Mono | 15px (0.94rem) | 400 | 1.60 | -0.32px | Inline code, terminal |
+### 语义与强调
 
-### Principles
-- **Serif for authority, sans for utility**: Anthropic Serif carries all headline content with medium weight (500), giving every heading the gravitas of a published title. Anthropic Sans handles all functional UI text — buttons, labels, navigation — with quiet efficiency.
-- **Single weight for serifs**: All Anthropic Serif headings use weight 500 — no bold, no light. This creates a consistent "voice" across all headline sizes, as if the same author wrote every heading.
-- **Relaxed body line-height**: Most body text uses 1.60 line-height — significantly more generous than typical tech sites (1.4–1.5). This creates a reading experience closer to a book than a dashboard.
-- **Tight-but-not-compressed headings**: Line-heights of 1.10–1.30 for headings are tight but never claustrophobic. The serif letterforms need breathing room that sans-serif fonts don't.
-- **Micro letter-spacing on labels**: Small sans text (12px and below) uses deliberate letter-spacing (0.12px–0.5px) to maintain readability at tiny sizes.
+- **Border Cream** `#f0eee6`
+  - 浅色主题标准边框
+- **Border Warm** `#e8e6dc`
+  - 更显眼的分隔与容器边框
+- **Border Dark** `#30302e`
+  - 深色表面边框
+- **Ring Warm** `#d1cfc5`
+  - hover / focus 的 ring shadow 颜色
+- **Ring Subtle** `#dedc01`
+  - 更轻的 ring 变体
+- **Ring Deep** `#c2c0b6`
+  - 更深的 active / pressed ring
 
-## 4. Component Stylings
+### 渐变观
 
-### Buttons
+Claude 基本不是靠传统渐变做视觉层次。它的丰富度来自：
 
-**Warm Sand (Secondary)**
-- Background: Warm Sand (`#e8e6dc`)
-- Text: Charcoal Warm (`#4d4c48`)
-- Padding: 0px 12px 0px 8px (asymmetric — icon-first layout)
-- Radius: comfortably rounded (8px)
-- Shadow: ring-based (`#e8e6dc 0px 0px 0px 0px, #d1cfc5 0px 0px 0px 1px`)
-- The workhorse button — warm, unassuming, clearly interactive
+- 暖色表面之间的递进
+- 浅色与深色章节的交替
+- 插图与版式本身的节奏
+
+也就是说，它的“渐变感”其实来自页面整体编排，而不是 CSS 渐变本身。
+
+## 3. 排版规则
+
+### 字体族
+
+- **标题**：`Anthropic Serif`，外部实现可回退到 `Georgia`
+- **正文 / UI**：`Anthropic Sans`，外部实现可回退到系统无衬线字体
+- **代码**：`Anthropic Mono`，外部实现可回退到常规等宽字体
+
+### 层级
+
+| 角色 | 字体 | 尺寸 | 字重 | 行高 | 字距 | 说明 |
+|------|------|------|------|------|------|------|
+| Display / Hero | Serif | 64px | 500 | 1.10 | normal | 最强标题，像书名 |
+| Section Heading | Serif | 52px | 500 | 1.20 | normal | 章节标题 |
+| Sub-heading Large | Serif | 36–36.8px | 500 | 1.30 | normal | 次级章节 |
+| Sub-heading | Serif | 32px | 500 | 1.10 | normal | 卡片或区块标题 |
+| Sub-heading Small | Serif | 25–25.6px | 500 | 1.20 | normal | 小型章节标题 |
+| Feature Title | Serif | 20.8px | 500 | 1.20 | normal | 功能标题 |
+| Body Serif | Serif | 17px | 400 | 1.60 | normal | 编辑型正文 |
+| Body Large | Sans | 20px | 400 | 1.60 | normal | 导语 |
+| Body / Nav | Sans | 17px | 400–500 | 1.00–1.60 | normal | 导航与 UI |
+| Body Standard | Sans | 16px | 400–500 | 1.25–1.60 | normal | 常规正文 |
+| Body Small | Sans | 15px | 400–500 | 1.00–1.60 | normal | 紧凑文本 |
+| Caption | Sans | 14px | 400 | 1.43 | normal | 元信息 |
+| Label | Sans | 12px | 400–500 | 1.25–1.60 | 0.12px | 标签和徽章 |
+| Overline | Sans | 10px | 400 | 1.60 | 0.5px | 全大写提示 |
+| Micro | Sans | 9.6px | 400 | 1.60 | 0.096px | 最小文字 |
+| Code | Mono | 15px | 400 | 1.60 | -0.32px | 代码与命令 |
+
+### 排版原则
+
+- **衬线负责权威，无衬线负责工具性**
+  - 标题必须有出版物般的重量感
+  - 按钮、导航、标签保持克制
+- **衬线字重不要乱变**
+  - Claude 风格里衬线标题几乎统一在 `500`
+- **正文行高要慷慨**
+  - 常见正文行高在 `1.60`
+  - 让阅读更像读页面而不是看控制台
+- **标题紧凑但不压迫**
+  - 通常 `1.10–1.30`
+- **小字号要用微字距**
+  - 特别是 label / overline / micro
+
+## 4. 组件风格
+
+### 按钮
+
+**Warm Sand（次按钮）**
+
+- 背景：`#e8e6dc`
+- 文字：`#4d4c48`
+- 圆角：`8px`
+- 阴影：ring shadow
+- 气质：主力按钮，温和、稳妥、不抢戏
 
 **White Surface**
-- Background: Pure White (`#ffffff`)
-- Text: Anthropic Near Black (`#141413`)
-- Padding: 8px 16px 8px 12px
-- Radius: generously rounded (12px)
-- Hover: shifts to secondary background color
-- Clean, elevated button for light surfaces
+
+- 背景：`#ffffff`
+- 文字：`#141413`
+- 圆角：`12px`
+- hover：轻微转向次级背景
+- 气质：轻盈、干净
 
 **Dark Charcoal**
-- Background: Dark Surface (`#30302e`)
-- Text: Ivory (`#faf9f5`)
-- Padding: 0px 12px 0px 8px
-- Radius: comfortably rounded (8px)
-- Shadow: ring-based (`#30302e 0px 0px 0px 0px, ring 0px 0px 0px 1px`)
-- The inverted variant for dark-on-light emphasis
+
+- 背景：`#30302e`
+- 文字：`#faf9f5`
+- 圆角：`8px`
+- 阴影：暖色 ring
 
 **Brand Terracotta**
-- Background: Terracotta Brand (`#c96442`)
-- Text: Ivory (`#faf9f5`)
-- Radius: 8–12px
-- Shadow: ring-based (`#c96442 0px 0px 0px 0px, #c96442 0px 0px 0px 1px`)
-- The primary CTA — the only button with chromatic color
+
+- 背景：`#c96442`
+- 文字：`#faf9f5`
+- 圆角：`8–12px`
+- 这是主 CTA，也是最少量使用的强色按钮
 
 **Dark Primary**
-- Background: Anthropic Near Black (`#141413`)
-- Text: Warm Silver (`#b0aea5`)
-- Padding: 9.6px 16.8px
-- Radius: generously rounded (12px)
-- Border: thin solid Dark Surface (`1px solid #30302e`)
-- Used on dark theme surfaces
 
-### Cards & Containers
-- Background: Ivory (`#faf9f5`) or Pure White (`#ffffff`) on light surfaces; Dark Surface (`#30302e`) on dark
-- Border: thin solid Border Cream (`1px solid #f0eee6`) on light; `1px solid #30302e` on dark
-- Radius: comfortably rounded (8px) for standard cards; generously rounded (16px) for featured; very rounded (32px) for hero containers and embedded media
-- Shadow: whisper-soft (`rgba(0,0,0,0.05) 0px 4px 24px`) for elevated content
-- Ring shadow: `0px 0px 0px 1px` patterns for interactive card states
-- Section borders: `1px 0px 0px` (top-only) for list item separators
+- 背景：`#141413`
+- 文字：`#b0aea5`
+- 圆角：`12px`
+- 细边框：`1px solid #30302e`
 
-### Inputs & Forms
-- Text: Anthropic Near Black (`#141413`)
-- Padding: 1.6px 12px (very compact vertical)
-- Border: standard warm borders
-- Focus: ring with Focus Blue (`#3898ec`) border-color — the only cool color moment
-- Radius: generously rounded (12px)
+### 卡片与容器
 
-### Navigation
-- Sticky top nav with warm background
-- Logo: Claude wordmark in Anthropic Near Black
-- Links: mix of Near Black (`#141413`), Olive Gray (`#5e5d59`), and Dark Warm (`#3d3d3a`)
-- Nav border: `1px solid #30302e` (dark) or `1px solid #f0eee6` (light)
-- CTA: Terracotta Brand button or White Surface button
-- Hover: text shifts to foreground-primary, no decoration
+- 浅色卡片通常用 `#faf9f5` 或 `#ffffff`
+- 深色卡片通常用 `#30302e`
+- 浅色边框：`1px solid #f0eee6`
+- 深色边框：`1px solid #30302e`
+- 标准卡片圆角约 `8px`
+- 重点容器可到 `16px` 或 `32px`
+- 提升主要依赖极轻投影和 ring shadow
 
-### Image Treatment
-- Product screenshots showing the Claude chat interface
-- Generous border-radius on media (16–32px)
-- Embedded video players with rounded corners
-- Dark UI screenshots provide contrast against warm light canvas
-- Organic, hand-drawn illustrations for conceptual sections
+### 输入框与表单
 
-### Distinctive Components
+- 文字：`#141413`
+- 边框：暖色边框
+- 聚焦：蓝色 focus ring
+- 圆角：`12px`
 
-**Model Comparison Cards**
-- Opus 4.5, Sonnet 4.5, Haiku 4.5 presented in a clean card grid
-- Each model gets a bordered card with name, description, and capability badges
-- Border Warm (`#e8e6dc`) separation between items
+### 导航
 
-**Organic Illustrations**
-- Hand-drawn-feeling vector illustrations in terracotta, black, and muted green
-- Abstract, conceptual rather than literal product diagrams
-- The primary visual personality — no other AI company uses this style
+- 顶部导航或左侧导航都应该是“安静的”
+- 文字颜色混用近黑、橄榄灰和暖深灰
+- CTA 可以是陶土色或白色按钮
+- hover 不靠重装饰，而是轻微提升前景对比
 
-**Dark/Light Section Alternation**
-- The page alternates between Parchment light and Near Black dark sections
-- Creates a reading rhythm like chapters in a book
-- Each section feels like a distinct environment
+### 图片处理
 
-## 5. Layout Principles
+- 截图通常放在大圆角容器里
+- 深色截图在浅底上形成对比
+- 插图应偏手绘、有机、概念化
 
-### Spacing System
-- Base unit: 8px
-- Scale: 3px, 4px, 6px, 8px, 10px, 12px, 16px, 20px, 24px, 30px
-- Button padding: asymmetric (0px 12px 0px 8px) or balanced (8px 16px)
-- Card internal padding: approximately 24–32px
-- Section vertical spacing: generous (estimated 80–120px between major sections)
+### 特色组件
 
-### Grid & Container
-- Max container width: approximately 1200px, centered
-- Hero: centered with editorial layout
-- Feature sections: single-column or 2–3 column card grids
-- Model comparison: clean 3-column grid
-- Full-width dark sections breaking the container for emphasis
+**模型对比卡**
 
-### Whitespace Philosophy
-- **Editorial pacing**: Each section breathes like a magazine spread — generous top/bottom margins create natural reading pauses.
-- **Serif-driven rhythm**: The serif headings establish a literary cadence that demands more whitespace than sans-serif designs.
-- **Content island approach**: Sections alternate between light and dark environments, creating distinct "rooms" for each message.
+- 清爽的卡片网格
+- 每张卡只表达模型名、摘要和能力标签
 
-### Border Radius Scale
-- Sharp (4px): Minimal inline elements
-- Subtly rounded (6–7.5px): Small buttons, secondary interactive elements
-- Comfortably rounded (8–8.5px): Standard buttons, cards, containers
-- Generously rounded (12px): Primary buttons, input fields, nav elements
-- Very rounded (16px): Featured containers, video players, tab lists
-- Highly rounded (24px): Tag-like elements, highlighted containers
-- Maximum rounded (32px): Hero containers, embedded media, large cards
+**有机插图**
 
-## 6. Depth & Elevation
+- 这是 Claude 最有辨识度的部分之一
+- 不是图标库，也不是工程框图
 
-| Level | Treatment | Use |
-|-------|-----------|-----|
-| Flat (Level 0) | No shadow, no border | Parchment background, inline text |
-| Contained (Level 1) | `1px solid #f0eee6` (light) or `1px solid #30302e` (dark) | Standard cards, sections |
-| Ring (Level 2) | `0px 0px 0px 1px` ring shadows using warm grays | Interactive cards, buttons, hover states |
-| Whisper (Level 3) | `rgba(0,0,0,0.05) 0px 4px 24px` | Elevated feature cards, product screenshots |
-| Inset (Level 4) | `inset 0px 0px 0px 1px` at 15% opacity | Active/pressed button states |
+**深浅章节交替**
 
-**Shadow Philosophy**: Claude communicates depth through **warm-toned ring shadows** rather than traditional drop shadows. The signature `0px 0px 0px 1px` pattern creates a border-like halo that's softer than an actual border — it's a shadow pretending to be a border, or a border that's technically a shadow. When drop shadows do appear, they're extremely soft (0.05 opacity, 24px blur) — barely visible lifts that suggest floating rather than casting.
+- 页面像书的章节一样，在浅暖与深暖之间切换
+- 每个大区块都有自己的环境感
 
-### Decorative Depth
-- **Light/Dark alternation**: The most dramatic depth effect comes from alternating between Parchment (`#f5f4ed`) and Near Black (`#141413`) sections — entire sections shift elevation by changing the ambient light level.
-- **Warm ring halos**: Button and card interactions use ring shadows that match the warm palette — never cool-toned or generic gray.
+## 5. 布局原则
 
-## 7. Do's and Don'ts
+### 间距系统
 
-### Do
-- Use Parchment (`#f5f4ed`) as the primary light background — the warm cream tone IS the Claude personality
-- Use Anthropic Serif at weight 500 for all headlines — the single-weight consistency is intentional
-- Use Terracotta Brand (`#c96442`) only for primary CTAs and the highest-signal brand moments
-- Keep all neutrals warm-toned — every gray should have a yellow-brown undertone
-- Use ring shadows (`0px 0px 0px 1px`) for interactive element states instead of drop shadows
-- Maintain the editorial serif/sans hierarchy — serif for content headlines, sans for UI
-- Use generous body line-height (1.60) for a literary reading experience
-- Alternate between light and dark sections to create chapter-like page rhythm
-- Apply generous border-radius (12–32px) for a soft, approachable feel
+- 基础单位：`8px`
+- 常用尺度：`3, 4, 6, 8, 10, 12, 16, 20, 24, 30`
+- 卡片内边距通常在 `24–32px`
+- 大章节上下留白约 `80–120px`
 
-### Don't
-- Don't use cool blue-grays anywhere — the palette is exclusively warm-toned
-- Don't use bold (700+) weight on Anthropic Serif — weight 500 is the ceiling for serifs
-- Don't introduce saturated colors beyond Terracotta — the palette is deliberately muted
-- Don't use sharp corners (< 6px radius) on buttons or cards — softness is core to the identity
-- Don't apply heavy drop shadows — depth comes from ring shadows and background color shifts
-- Don't use pure white (`#ffffff`) as a page background — Parchment (`#f5f4ed`) or Ivory (`#faf9f5`) are always warmer
-- Don't use geometric/tech-style illustrations — Claude's illustrations are organic and hand-drawn-feeling
-- Don't reduce body line-height below 1.40 — the generous spacing supports the editorial personality
-- Don't use monospace fonts for non-code content — Anthropic Mono is strictly for code
-- Don't mix in sans-serif for headlines — the serif/sans split is the typographic identity
+### 网格与容器
 
-## 8. Responsive Behavior
+- 最大容器宽度约 `1200px`
+- 大标题区域通常居中
+- 功能区常见单列或 `2–3` 列卡片网格
+- 重点深色章节可以突破容器宽度，制造段落转换
 
-### Breakpoints
-| Name | Width | Key Changes |
-|------|-------|-------------|
-| Small Mobile | <479px | Minimum layout, stacked everything, compact typography |
-| Mobile | 479–640px | Single column, hamburger nav, reduced heading sizes |
-| Large Mobile | 640–767px | Slightly wider content area |
-| Tablet | 768–991px | 2-column grids begin, condensed nav |
-| Desktop | 992px+ | Full multi-column layout, expanded nav, maximum hero typography (64px) |
+### 留白哲学
 
-### Touch Targets
-- Buttons use generous padding (8–16px vertical minimum)
-- Navigation links adequately spaced for thumb navigation
-- Card surfaces serve as large touch targets
-- Minimum recommended: 44x44px
+- **编辑式节奏**
+  - 每个章节都需要呼吸空间
+- **衬线驱动节奏**
+  - 衬线标题天然需要更多留白
+- **内容岛屿**
+  - 每个区块像一个独立阅读房间，而不是一个连续大面板
 
-### Collapsing Strategy
-- **Navigation**: Full horizontal nav collapses to hamburger on mobile
-- **Feature sections**: Multi-column → stacked single column
-- **Hero text**: 64px → 36px → ~25px progressive scaling
-- **Model cards**: 3-column → stacked vertical
-- **Section padding**: Reduces proportionally but maintains editorial rhythm
-- **Illustrations**: Scale proportionally, maintain aspect ratios
+### 圆角尺度
 
-### Image Behavior
-- Product screenshots scale proportionally within rounded containers
-- Illustrations maintain quality at all sizes
-- Video embeds maintain 16:9 aspect ratio with rounded corners
-- No art direction changes between breakpoints
+- 4px：极少量细小元素
+- 6–7.5px：小型交互件
+- 8–8.5px：标准卡片和按钮
+- 12px：主按钮、输入框、导航元素
+- 16px：重点容器、媒体播放器
+- 24px：标签型突出块
+- 32px：Hero 容器、大卡片、嵌入式媒体
 
-## 9. Agent Prompt Guide
+## 6. 深度与层次
 
-### Quick Color Reference
-- Brand CTA: "Terracotta Brand (#c96442)"
-- Page Background: "Parchment (#f5f4ed)"
-- Card Surface: "Ivory (#faf9f5)"
-- Primary Text: "Anthropic Near Black (#141413)"
-- Secondary Text: "Olive Gray (#5e5d59)"
-- Tertiary Text: "Stone Gray (#87867f)"
-- Borders (light): "Border Cream (#f0eee6)"
-- Dark Surface: "Dark Surface (#30302e)"
+| 层级 | 处理方式 | 典型用途 |
+|------|----------|----------|
+| Level 0 | 无阴影、无边框 | 背景与内联文字 |
+| Level 1 | 轻边框 | 标准卡片、普通分区 |
+| Level 2 | 暖色 ring shadow | 按钮、交互卡片、hover |
+| Level 3 | 极轻投影 `rgba(0,0,0,0.05) 0px 4px 24px` | 抬升卡、截图 |
+| Level 4 | inset ring | active / pressed 态 |
 
-### Example Component Prompts
-- "Create a hero section on Parchment (#f5f4ed) with a headline at 64px Anthropic Serif weight 500, line-height 1.10. Use Anthropic Near Black (#141413) text. Add a subtitle in Olive Gray (#5e5d59) at 20px Anthropic Sans with 1.60 line-height. Place a Terracotta Brand (#c96442) CTA button with Ivory text, 12px radius."
-- "Design a feature card on Ivory (#faf9f5) with a 1px solid Border Cream (#f0eee6) border and comfortably rounded corners (8px). Title in Anthropic Serif at 25px weight 500, description in Olive Gray (#5e5d59) at 16px Anthropic Sans. Add a whisper shadow (rgba(0,0,0,0.05) 0px 4px 24px)."
-- "Build a dark section on Anthropic Near Black (#141413) with Ivory (#faf9f5) headline text in Anthropic Serif at 52px weight 500. Use Warm Silver (#b0aea5) for body text. Borders in Dark Surface (#30302e)."
-- "Create a button in Warm Sand (#e8e6dc) with Charcoal Warm (#4d4c48) text, 8px radius, and a ring shadow (0px 0px 0px 1px #d1cfc5). Padding: 0px 12px 0px 8px."
-- "Design a model comparison grid with three cards on Ivory surfaces. Each card gets a Border Warm (#e8e6dc) top border, model name in Anthropic Serif at 25px, and description in Olive Gray at 15px Anthropic Sans."
+**核心观点：**
 
-### Iteration Guide
-1. Focus on ONE component at a time
-2. Reference specific color names — "use Olive Gray (#5e5d59)" not "make it gray"
-3. Always specify warm-toned variants — no cool grays
-4. Describe serif vs sans usage explicitly — "Anthropic Serif for the heading, Anthropic Sans for the label"
-5. For shadows, use "ring shadow (0px 0px 0px 1px)" or "whisper shadow" — never generic "drop shadow"
-6. Specify the warm background — "on Parchment (#f5f4ed)" or "on Near Black (#141413)"
-7. Keep illustrations organic and conceptual — describe "hand-drawn-feeling" style
+Claude 的深度主要通过暖色 ring shadow 来传达，而不是传统重投影。它更像“阴影假装成边框”，或者“边框用阴影形式出现”。如果必须使用投影，也应该极轻，像悬浮感，而不是厚重落影。
+
+### 装饰性深度
+
+- 最大的层次切换其实来自浅色章节和深色章节之间的交替
+- ring 的颜色必须跟整体暖色体系一致，不能突然掉进冷灰
+
+## 7. Do / Don't
+
+### 建议这样做
+
+- 用 `Parchment #f5f4ed` 作为主浅色背景
+- 标题统一用衬线字重 `500`
+- 只在主 CTA 和最高信号节点使用 `Terracotta #c96442`
+- 所有中性色保持暖调
+- 用 ring shadow 表达交互态
+- 保持“衬线标题 + 无衬线工具文本”的分工
+- 正文使用宽松行高
+- 用深浅章节交替制造章节节奏
+- 使用比较大的圆角，保持柔和可亲
+
+### 不要这样做
+
+- 不要使用冷蓝灰
+- 不要让衬线标题上到 `700+`
+- 不要引入高饱和科技色
+- 不要让按钮和卡片出现很尖锐的角
+- 不要依赖厚重投影
+- 不要用纯白当整页背景
+- 不要用几何科技风插图替代有机插图
+- 不要把正文行高压到 `1.40` 以下
+- 不要让等宽字体侵入非代码内容
+- 不要在标题里混入无衬线
+
+## 8. 响应式行为
+
+### 断点
+
+| 名称 | 宽度 | 关键变化 |
+|------|------|----------|
+| 小手机 | `<479px` | 极简布局，全部纵向堆叠 |
+| 手机 | `479–640px` | 单列布局，标题缩小，导航折叠 |
+| 大手机 | `640–767px` | 内容宽度略放开 |
+| 平板 | `768–991px` | 开始出现双列 |
+| 桌面 | `992px+` | 完整多列与最大标题尺寸 |
+
+### 触控目标
+
+- 按钮至少提供足够的上下 padding
+- 卡片整体可作为触控面
+- 最低建议点击区域：`44x44px`
+
+### 折叠策略
+
+- 导航：横向导航折叠成汉堡菜单
+- 功能区：多列逐步变为单列
+- Hero 标题：`64px -> 36px -> 25px` 左右
+- 模型卡：三列变纵向堆叠
+- 插图与媒体：按比例缩放，不做复杂裁切策略
+
+### 图片行为
+
+- 截图保持比例缩放
+- 插图需要在所有尺寸下维持识别度
+- 视频嵌入保持 `16:9`
+- 响应式不依赖断点下重做图像叙事
+
+## 9. 给代理或实现者的提示词指南
+
+### 快速颜色参考
+
+- 品牌 CTA：`Terracotta Brand (#c96442)`
+- 页面背景：`Parchment (#f5f4ed)`
+- 卡片表面：`Ivory (#faf9f5)`
+- 主文本：`Anthropic Near Black (#141413)`
+- 次文本：`Olive Gray (#5e5d59)`
+- 弱文本：`Stone Gray (#87867f)`
+- 浅色边框：`Border Cream (#f0eee6)`
+- 深色表面：`Dark Surface (#30302e)`
+
+### 示例提示词
+
+- “在 `Parchment (#f5f4ed)` 上做一个 hero section，标题使用 64px 的衬线字、字重 500、行高 1.10，正文使用 `Olive Gray (#5e5d59)` 的 20px 无衬线文字，按钮使用 `Terracotta Brand (#c96442)`。”
+- “设计一张 `Ivory (#faf9f5)` 卡片，边框为 `1px solid Border Cream (#f0eee6)`，圆角 8px，标题用 25px 衬线体，描述用 16px 无衬线，投影使用极轻的 whisper shadow。”
+- “做一个 `Anthropic Near Black (#141413)` 的深色章节，标题用 52px 衬线，正文用 `Warm Silver (#b0aea5)`，边框采用 `Dark Surface (#30302e)`。”
+- “生成一个 `Warm Sand (#e8e6dc)` 的按钮，文字颜色为 `Charcoal Warm (#4d4c48)`，圆角 8px，并带 `0px 0px 0px 1px` 的暖色 ring shadow。”
+
+### 迭代建议
+
+1. 一次只优化一个组件
+2. 提示词里直接写具体颜色名和色值
+3. 显式要求“暖色中性”，不要留给模型自己猜
+4. 明确说明哪一层用衬线，哪一层用无衬线
+5. 说明阴影应为 ring shadow 或 whisper shadow，而不是泛泛地说 drop shadow
+6. 明确背景环境，例如“放在 `Parchment` 上”或“放在 `Near Black` 上”
+7. 插图风格要写清楚：有机、手绘感、概念化

@@ -1,24 +1,23 @@
-# Claude Inspired Design System
+# Claude 风格设计参考
 
-[DESIGN.md](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/claude/DESIGN.md) extracted from the public [claude](https://claude.ai/) website. This is not the official design system. Colors, fonts, and spacing may not be 100% accurate. But it's a good starting point for building something similar.
+[DESIGN.md](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/claude/DESIGN.md) 提取自公开的 [claude](https://claude.ai/) 网站界面。它不是官方设计系统，颜色、字体与间距不保证百分之百精确，但足够作为接近 Claude 风格的起点。
 
-## Files
+## 文件说明
 
-| File | Description |
-|------|-------------|
-| `DESIGN.md` | Complete design system documentation (9 sections) |
-| `preview.html` | Interactive design token catalog (light) |
-| `preview-dark.html` | Interactive design token catalog (dark) |
+| 文件 | 说明 |
+|------|------|
+| `DESIGN.md` | 完整设计说明，覆盖 9 个主题章节 |
+| `preview.html` | 浅色版设计 token 与组件预览 |
+| `preview-dark.html` | 深色版设计 token 与组件预览 |
 
+这个目录的用途，是给 AI 代理或前端实现者一个稳定的参考基线，让生成的 UI 更接近 Claude 的视觉语言。
 
-Use [DESIGN.md](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/claude/DESIGN.md) to use as a reference for AI agents (Claude, Cursor, Stitch) to generate UI that looks like the Claude design language.
+## 预览
 
-## Preview
+下面是基于 `DESIGN.md` 做的示例落地页，集中展示了颜色、字体、按钮、卡片、间距与层次效果。
 
-A sample landing page built with DESIGN.md. It shows the actual colors, typography, buttons, cards, spacing, and elevation, all in one page.
-
-### Dark Mode
+### 深色预览
 ![Claude Design System — Dark Mode](https://pub-2e4ecbcbc9b24e7b93f1a6ab5b2bc71f.r2.dev/designs/claude/preview-dark-screenshot.png)
 
-### Light Mode
+### 浅色预览
 ![Claude Design System — Light Mode](https://pub-2e4ecbcbc9b24e7b93f1a6ab5b2bc71f.r2.dev/designs/claude/preview-screenshot.png)

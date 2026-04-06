@@ -20,10 +20,15 @@
 
 ## 2. TUI 是否在 v1 内完成
 
-当前建议：
+当前现状：
 
-- v1 优先 WebUI
-- TUI 放 v1.1
+- TUI 已经在仓库中实现并可运行。
+
+当前更合理的问题是：
+
+- 是否要继续把 TUI 保持为高密度运维视图
+- 是否要拆成更明确的 `Browser / Transcript / Rename / Settings` 模式
+- 是否要和 WebUI 的默认阅读路径进一步对齐
 
 ## 3. project name 如何定义
 

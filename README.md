@@ -97,6 +97,9 @@ Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 ## 文档导航
 
+- [文档总览](./docs/README.md)
+- [仓库总览](./docs/spec/repo-overview.md)
+
 - [系统设计](./docs/spec/system-design.md)
 - [产品范围](./docs/spec/product-scope.md)
 - [数据模型](./docs/spec/data-model.md)
@@ -114,6 +117,13 @@ Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 - [参考项目对照](./docs/research/reference-review.md)
 - [ADR 0001: 写回层选择](./docs/adr/0001-writeback-via-session-index.md)
 - [ADR 0002: 非 wrapper 架构](./docs/adr/0002-no-wrapper-architecture.md)
+
+说明：
+
+- `README.md` 负责项目入口与快速上手。
+- `docs/README.md` 负责整套文档的阅读路径。
+- `docs/spec/repo-overview.md` 负责描述当前代码仓库的真实结构与实现边界。
+- `implementation-roadmap.md` 与 `implementation-checklist.md` 主要用于保留历史规划，不应单独当作当前实现真相源。
 
 ## 设计原则
 
