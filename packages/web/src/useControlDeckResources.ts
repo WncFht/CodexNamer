@@ -347,7 +347,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   }, [deferredSearch, options.dirtyOnly, options.selectedWorkspaceId]);
 
   useEffect(() => {
-    void loadResources(["preview"], { urgentPreview: true }).catch(() => undefined);
+    void loadResources(["preview"]).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -358,7 +358,6 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
     void loadResources(resources, {
       threadId: latestUiStateRef.current.selectedId,
-      urgentPreview: options.tab === "maintenance",
       urgentPromptPreview: options.tab === "settings"
     }).catch((error) => {
       reportFailure(error);
@@ -390,12 +389,16 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   }, [configView?.effectiveConfig, options.selectedId, options.tab]);
 
   useEffect(() => {
+    if (options.tab !== "sessions") {
+      setLoadingDetail(false);
+      return;
+    }
     if (!options.selectedId) {
       setDetail(null);
       return;
     }
     void reloadDetail(options.selectedId);
-  }, [options.selectedId]);
+  }, [options.selectedId, options.tab]);
 
   useEffect(() => {
     let active = true;
@@ -490,8 +493,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       }),
     refreshMaintenance: () =>
       loadResources(panelResourcesForTab("maintenance"), {
-        threadId: latestUiStateRef.current.selectedId,
-        urgentPreview: true
+        threadId: latestUiStateRef.current.selectedId
       }),
     loadResources,
     mergeCurrentTabResources: (...groups: readonly DataResource[][]) =>

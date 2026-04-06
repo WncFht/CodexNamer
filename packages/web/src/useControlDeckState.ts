@@ -82,6 +82,10 @@ export function useControlDeckState() {
   }, [dirtyOnly, search, selectedId, selectedWorkspaceId, showHiddenTranscript, tab]);
 
   useEffect(() => {
+    setError(null);
+  }, [tab]);
+
+  useEffect(() => {
     const handlePopState = () => {
       const nextState = readUiStateFromUrl();
       setTab(nextState.tab);

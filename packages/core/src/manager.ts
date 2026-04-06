@@ -478,9 +478,23 @@ export class CodexSessionManager {
   async suggest(threadId: string, options?: { style?: NamingStyle }): Promise<RenameSuggestion> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
-    return this.resolveSuggestionForDetail(detail, {
+    const suggestion = await this.resolveSuggestionForDetail(detail, {
       style: options?.style
     });
+    this.db.recordRename({
+      threadId,
+      newName: suggestion.name,
+      source: suggestion.source,
+      kind: suggestion.source === "manual" ? "manual" : "auto",
+      status: "preview_only",
+      style: suggestion.style,
+      operator: this.operator,
+      appliedAt: suggestion.generatedAt,
+      appliedRevision: detail.revision,
+      manualOverride: false,
+      autoApply: false
+    });
+    return suggestion;
   }
 
   async apply(
@@ -1238,7 +1252,9 @@ export class CodexSessionManager {
   }
 
   private filterVisibleRenameHistory(history: RenameHistoryRecord[]): RenameHistoryRecord[] {
-    return history.filter((entry) => this.isAcceptedOfficialRenameSource(entry.source));
+    return history.filter(
+      (entry) => entry.status === "preview_only" || this.isAcceptedOfficialRenameSource(entry.source)
+    );
   }
 
   private buildWorkspaceSummaries(sessions: SessionSummary[]): WorkspaceSummary[] {

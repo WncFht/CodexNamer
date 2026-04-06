@@ -83,4 +83,31 @@ describe("history and state commands", () => {
     expect(skipped).toHaveLength(1);
     expect(skipped[0]?.reason).toBe("unchanged");
   });
+
+  it("records explicit suggestions as preview-only rename history", async () => {
+    const workspace = await createTempWorkspace();
+    const threadId = "thread-history-suggest";
+    await writeRolloutFixture({
+      codexHome: workspace.codexHome,
+      threadId,
+      userMessage: "给这个会话建议一个标题",
+      lastAgentMessage: "我先给出一个候选标题"
+    });
+    await fs.writeFile(path.join(workspace.codexHome, "session_index.jsonl"), "", "utf8");
+
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir
+    });
+    managers.push(manager);
+
+    const suggestion = await manager.suggest(threadId);
+    const history = await manager.getRenameHistory(threadId);
+
+    expect(history[0]).toMatchObject({
+      newName: suggestion.name,
+      status: "preview_only",
+      source: suggestion.source
+    });
+  });
 });

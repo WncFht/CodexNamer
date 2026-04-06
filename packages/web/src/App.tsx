@@ -439,6 +439,7 @@ export function App() {
                 <RenameOpsPanel
                   aiRequestLogs={state.aiRequestLogs}
                   doctor={state.doctor}
+                  onRefreshRuntime={() => state.refreshMaintenance()}
                   onRefreshPreview={(options) => state.refreshPreview(options)}
                   overview={state.overview}
                   preview={state.preview}

@@ -17,6 +17,62 @@ const SESSION_PANE_MIN_WIDTH = 320;
 const SESSION_PANE_MAX_WIDTH = 560;
 const PANE_KEYBOARD_STEP = 24;
 
+function renameHistoryStatusLabel(status: string, language: UiLanguage): string {
+  if (language === "zh-CN") {
+    switch (status) {
+      case "applied":
+        return "已应用";
+      case "skipped":
+        return "已跳过";
+      case "failed":
+        return "失败";
+      case "preview_only":
+        return "建议";
+      default:
+        return status;
+    }
+  }
+
+  switch (status) {
+    case "applied":
+      return "applied";
+    case "skipped":
+      return "skipped";
+    case "failed":
+      return "failed";
+    case "preview_only":
+      return "suggested";
+    default:
+      return status;
+  }
+}
+
+function renameHistorySourceLabel(source: string, language: UiLanguage): string {
+  if (language === "zh-CN") {
+    switch (source) {
+      case "ai":
+        return "AI";
+      case "manual":
+        return "手动";
+      case "heuristic":
+        return "启发式";
+      default:
+        return source;
+    }
+  }
+
+  switch (source) {
+    case "ai":
+      return "AI";
+    case "manual":
+      return "manual";
+    case "heuristic":
+      return "heuristic";
+    default:
+      return source;
+  }
+}
+
 export function SessionBrowser(props: {
   sessions: SessionSummary[];
   selectedWorkspaceLabel: string;
@@ -45,6 +101,7 @@ export function SessionBrowser(props: {
   onToggleFreeze: () => void | Promise<void>;
   onToggleManualOverride: () => void | Promise<void>;
 }) {
+  const [namingDrawerOpen, setNamingDrawerOpen] = React.useState(false);
   const groupedSessions = React.useMemo(
     () => groupSessionsByTime(props.sessions, props.uiLanguage),
     [props.sessions, props.uiLanguage]
@@ -52,6 +109,7 @@ export function SessionBrowser(props: {
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
   const sessionPaneToggleLabel = props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions");
+  const renameHistory = props.detail?.renameHistory ?? [];
 
   const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
@@ -195,6 +253,14 @@ export function SessionBrowser(props: {
                   </div>
                 </div>
                 <div className="chat-header-right">
+                  <button
+                    className={namingDrawerOpen ? "btn-sm active" : "btn-sm"}
+                    onClick={() => setNamingDrawerOpen((value) => !value)}
+                    title={namingDrawerOpen ? tt("closeNamingActivity") : tt("openNamingActivity")}
+                    type="button"
+                  >
+                    {tt("namingActivity")}
+                  </button>
                   {!props.focusMode ? (
                     <>
                       <button className="btn-sm" onClick={props.onEnterFocusMode} title={tt("focusSession")} type="button">
@@ -240,14 +306,94 @@ export function SessionBrowser(props: {
               <div className="error-banner notice-banner error">{props.error}</div>
             ) : null}
 
-            {props.loadingDetail ? <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div> : null}
+            <div className={namingDrawerOpen ? "chat-content-shell naming-drawer-open" : "chat-content-shell"}>
+              <div className="chat-primary-stack">
+                {props.loadingDetail ? <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div> : null}
 
-            <TranscriptPanel
-              detail={props.detail}
-              showHiddenTranscript={props.showHiddenTranscript}
-              onToggleShowHiddenTranscript={props.onToggleShowHiddenTranscript}
-              uiLanguage={props.uiLanguage}
-            />
+                <TranscriptPanel
+                  detail={props.detail}
+                  showHiddenTranscript={props.showHiddenTranscript}
+                  onToggleShowHiddenTranscript={props.onToggleShowHiddenTranscript}
+                  uiLanguage={props.uiLanguage}
+                />
+              </div>
+
+              {namingDrawerOpen ? (
+                <aside className="naming-drawer detail-panel" role="complementary">
+                  <div className="naming-drawer-header">
+                    <div>
+                      <p className="panel-kicker">{tt("namingActivity")}</p>
+                      <h3>{tt("renameHistory")}</h3>
+                    </div>
+                    <button className="btn-sm" onClick={() => setNamingDrawerOpen(false)} type="button">
+                      {tt("closeNamingActivity")}
+                    </button>
+                  </div>
+
+                  <div className="naming-drawer-body">
+                    <section className="naming-drawer-section">
+                      <p className="panel-kicker">{tt("currentNaming")}</p>
+                      <div className="naming-stack">
+                        <article className="naming-row">
+                          <div className="naming-row-header">
+                            <span>{tt("officialTitle")}</span>
+                            <span>{formatWhen(props.detail.lastAppliedAt, props.uiLanguage)}</span>
+                          </div>
+                          <strong className="naming-value">
+                            {props.detail.officialName ?? tt("noOfficialTitle")}
+                          </strong>
+                        </article>
+                        <article className="naming-row">
+                          <div className="naming-row-header">
+                            <span>{tt("candidateName")}</span>
+                            <span>{formatWhen(props.detail.updatedAt, props.uiLanguage)}</span>
+                          </div>
+                          <strong className="naming-value">
+                            {props.detail.candidateName ?? tt("noSuggestedTitle")}
+                          </strong>
+                        </article>
+                      </div>
+                    </section>
+
+                    <section className="naming-drawer-section">
+                      <div className="panel-topline">
+                        <div>
+                          <p className="panel-kicker">{tt("timeline")}</p>
+                          <h3>{tt("renameHistory")}</h3>
+                        </div>
+                        <span className="chip manual">
+                          {renameHistory.length} {tt("renameCountSuffix")}
+                        </span>
+                      </div>
+                      <div className="naming-drawer-history">
+                        {renameHistory.length === 0 ? (
+                          <div className="history-empty compact">{tt("noRenameHistory")}</div>
+                        ) : null}
+                        {renameHistory.map((entry, index) => (
+                          <article
+                            className="naming-entry"
+                            key={`${entry.appliedAt}-${entry.newName}-${entry.status}-${index}`}
+                          >
+                            <div className="naming-entry-main">
+                              <strong>{entry.newName}</strong>
+                              {entry.oldName ? <p>{entry.oldName} → {entry.newName}</p> : null}
+                              <div className="naming-entry-meta">
+                                <span>{renameHistorySourceLabel(entry.source, props.uiLanguage)}</span>
+                                <span>{renameHistoryStatusLabel(entry.status, props.uiLanguage)}</span>
+                                {entry.reason ? <span>{entry.reason}</span> : null}
+                              </div>
+                            </div>
+                            <span className="naming-entry-time">
+                              {formatWhen(entry.appliedAt, props.uiLanguage)}
+                            </span>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+                </aside>
+              ) : null}
+            </div>
             </>
           </AppViewTransition>
         ) : (
