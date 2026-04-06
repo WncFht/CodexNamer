@@ -378,14 +378,21 @@ export function useControlDeckState() {
     }
   };
 
-  const reloadPromptPreview = async (options?: { threadId?: string; urgent?: boolean }) => {
+  const reloadPromptPreview = async (options?: {
+    threadId?: string;
+    urgent?: boolean;
+    userConfig?: ConfigDocument;
+  }) => {
     if (options?.urgent) {
       promptPreviewUrgentPendingRef.current += 1;
       setPromptPreviewRefreshing(true);
     }
     const requestId = ++promptPreviewRequestIdRef.current;
     try {
-      const payload = await fetchPromptPreview(options?.threadId ?? latestUiStateRef.current.selectedId);
+      const payload = await fetchPromptPreview(
+        options?.threadId ?? latestUiStateRef.current.selectedId,
+        options?.userConfig
+      );
       if (requestId !== promptPreviewRequestIdRef.current) {
         return;
       }
@@ -801,7 +808,12 @@ export function useControlDeckState() {
     selectedSummary,
     refreshSessions: reloadSessions,
     refreshPreview: reloadPreview,
-    refreshPromptPreview: () => reloadPromptPreview({ threadId: latestUiStateRef.current.selectedId, urgent: true }),
+    refreshPromptPreview: (userConfig?: ConfigDocument, options?: { urgent?: boolean }) =>
+      reloadPromptPreview({
+        threadId: latestUiStateRef.current.selectedId,
+        urgent: options?.urgent ?? true,
+        userConfig
+      }),
     refreshSettings: () =>
       loadResources(panelResourcesForTab("settings"), {
         threadId: latestUiStateRef.current.selectedId,

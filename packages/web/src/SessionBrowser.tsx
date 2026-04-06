@@ -55,6 +55,7 @@ export function SessionBrowser(props: {
   const [historyExpanded, setHistoryExpanded] = React.useState(false);
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
+  const inline = (zh: string, en: string) => (props.uiLanguage === "zh-CN" ? zh : en);
   const latestRename = props.detail?.renameHistory?.[0];
 
   React.useEffect(() => {
@@ -226,7 +227,51 @@ export function SessionBrowser(props: {
               uiLanguage={props.uiLanguage}
             />
 
-            <div className="chat-footer-panels single-panel">
+            <div className="chat-footer-panels">
+              <section className="detail-panel naming-tray">
+                <div className="panel-topline history-tray-header">
+                  <div>
+                    <p className="panel-kicker">{inline("当前命名", "Current naming")}</p>
+                    <h3>{inline("正式标题与候选标题", "Official and candidate titles")}</h3>
+                  </div>
+                </div>
+
+                <div className="naming-stack">
+                  <article className="naming-row">
+                    <div className="naming-row-header">
+                      <span>{inline("正式标题", "Official title")}</span>
+                      <span className="chip success">{props.detail.officialName ? inline("已应用", "Applied") : inline("暂无", "None")}</span>
+                    </div>
+                    <strong className="naming-value">{props.detail.officialName ?? inline("还没有正式标题", "No official title yet")}</strong>
+                  </article>
+
+                  <article className="naming-row">
+                    <div className="naming-row-header">
+                      <span>{tt("candidateName")}</span>
+                      {props.detail.candidateName ? (
+                        <span className="chip warning">
+                          {props.detail.dirty ? inline("待应用", "Pending apply") : inline("候选保留", "Candidate kept")}
+                        </span>
+                      ) : (
+                        <span className="chip">{inline("暂无", "None")}</span>
+                      )}
+                    </div>
+                    <strong className="naming-value">{props.detail.candidateName ?? inline("还没有候选标题", "No candidate title yet")}</strong>
+                  </article>
+
+                  <dl className="signal-grid">
+                    <div>
+                      <dt>{tt("status")}</dt>
+                      <dd>{sessionStatusLabel(props.detail.statusEstimate, props.uiLanguage)}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("最后应用", "Last applied")}</dt>
+                      <dd>{props.detail.lastAppliedAt ? formatWhen(props.detail.lastAppliedAt, props.uiLanguage) : tt("nA")}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </section>
+
               <section className="detail-panel history-tray">
                 <div className="panel-topline history-tray-header">
                   <div>

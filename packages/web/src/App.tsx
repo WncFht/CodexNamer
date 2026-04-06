@@ -404,7 +404,10 @@ export function App() {
                   saving={state.savingConfig}
                   promptPreview={state.promptPreview}
                   promptPreviewRefreshing={state.promptPreviewRefreshing}
-                  onRefreshPromptPreview={() => void state.refreshPromptPreview()}
+                  selectedThreadId={state.selectedId}
+                  onRefreshPromptPreview={(userConfig, options) =>
+                    void state.refreshPromptPreview(userConfig, options)
+                  }
                   onReplayRenames={(params) => state.replayRenamesSince(params)}
                 />
               </AppViewTransition>

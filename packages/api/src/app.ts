@@ -266,6 +266,14 @@ export async function buildApiServer(options?: {
     });
   });
 
+  app.post("/api/v1/ai/prompt-preview", async (request) => {
+    const body = (request.body as { threadId?: string; userConfig?: ConfigDocument } | undefined) ?? {};
+    return manager.buildPromptPreview({
+      threadId: typeof body.threadId === "string" ? body.threadId : undefined,
+      userConfig: body.userConfig
+    });
+  });
+
   app.get("/api/v1/ai/request-logs", async (request) => {
     const query = (request.query as Record<string, unknown> | undefined) ?? {};
     return manager.getAiRequestLogReport(parseNumberQuery(query.limit));

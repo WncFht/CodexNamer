@@ -37,7 +37,7 @@ import {
 } from "./session-index.js";
 import { buildRenameContext } from "./rename-context.js";
 import { estimateSessionStatus, evaluateAutoRename } from "./auto-rename.js";
-import { toUtcIso } from "./util.js";
+import { deepMerge, toUtcIso } from "./util.js";
 
 function redactSecret(value?: string): string | undefined {
   return value ? "[redacted]" : undefined;
@@ -203,12 +203,13 @@ export class CodexSessionManager {
   private resolveEffectiveNamingStyle(
     detail?: Pick<SessionDetail, "preferredNamingStyle">,
     renameState?: { preferredStyle?: NamingStyle },
-    explicitStyle?: NamingStyle
+    explicitStyle?: NamingStyle,
+    config: EffectiveConfig = this.config
   ): NamingStyle {
-    return explicitStyle ?? detail?.preferredNamingStyle ?? renameState?.preferredStyle ?? this.config.naming.defaultStyle;
+    return explicitStyle ?? detail?.preferredNamingStyle ?? renameState?.preferredStyle ?? config.naming.defaultStyle;
   }
 
-  private buildSyntheticPromptSession(): MaterializedSession {
+  private buildSyntheticPromptSession(config: EffectiveConfig = this.config): MaterializedSession {
     return {
       threadId: "provider-test",
       rolloutPath: "<synthetic>",
@@ -216,14 +217,21 @@ export class CodexSessionManager {
       projectName: path.basename(process.cwd()),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      modelProvider: this.config.inheritedCodex.modelProvider,
-      model: this.config.inheritedCodex.model,
+      modelProvider: config.inheritedCodex.modelProvider,
+      model: config.inheritedCodex.model,
       firstUserMessage: "为当前会话生成一个简短、清晰的中文标题。",
       lastUserMessage: "请测试当前 AI rename backend 是否可用。",
       lastAgentMessage: "这是 provider test 的 synthetic session。",
       taskCompleteCount: 1,
       tokenTotal: 128
     };
+  }
+
+  private resolvePreviewConfig(userConfig?: ConfigDocument): EffectiveConfig {
+    if (!userConfig) {
+      return this.config;
+    }
+    return deepMerge(this.config, userConfig as Partial<EffectiveConfig>);
   }
 
   async scan(): Promise<ScanReport> {
@@ -360,7 +368,8 @@ export class CodexSessionManager {
 
   private async materializeSessionForSuggestion(
     detail: SessionDetail,
-    style?: NamingStyle
+    style?: NamingStyle,
+    config: EffectiveConfig = this.config
   ): Promise<MaterializedSession> {
     const transcriptStrategies = new Set([
       "user-assistant-transcript",
@@ -370,14 +379,14 @@ export class CodexSessionManager {
       "paired-user-turns"
     ]);
     const transcript =
-      transcriptStrategies.has(this.config.naming.contextStrategy)
+      transcriptStrategies.has(config.naming.contextStrategy)
         ? detail.transcript ?? (await readSessionTranscript(detail.rolloutPath))
         : undefined;
 
     return {
       ...detail,
-      namingStyle: this.resolveEffectiveNamingStyle(detail, undefined, style),
-      renameContext: buildRenameContext(detail, this.config, {
+      namingStyle: this.resolveEffectiveNamingStyle(detail, undefined, style, config),
+      renameContext: buildRenameContext(detail, config, {
         transcript
       })
     };
@@ -805,27 +814,28 @@ export class CodexSessionManager {
     };
   }
 
-  async buildPromptPreview(options?: { threadId?: string }): Promise<PromptPreview> {
+  async buildPromptPreview(options?: { threadId?: string; userConfig?: ConfigDocument }): Promise<PromptPreview> {
+    const previewConfig = this.resolvePreviewConfig(options?.userConfig);
     let session: MaterializedSession;
     if (options?.threadId) {
       await this.scan();
       const detail = this.requireSessionDetail(options.threadId);
-      session = await this.materializeSessionForSuggestion(detail);
+      session = await this.materializeSessionForSuggestion(detail, undefined, previewConfig);
     } else {
-      const syntheticSession = this.buildSyntheticPromptSession();
+      const syntheticSession = this.buildSyntheticPromptSession(previewConfig);
       session = {
         ...syntheticSession,
-        renameContext: buildRenameContext(syntheticSession, this.config)
+        renameContext: buildRenameContext(syntheticSession, previewConfig)
       };
     }
 
     return {
       threadId: session.threadId,
       synthetic: !options?.threadId,
-      prompt: buildRenamePrompt(session, this.config),
+      prompt: buildRenamePrompt(session, previewConfig),
       renameContext:
         session.renameContext ??
-        buildRenameContext(session, this.config)
+        buildRenameContext(session, previewConfig)
     };
   }
 

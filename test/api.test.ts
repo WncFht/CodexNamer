@@ -230,6 +230,26 @@ describe("local api", () => {
     expect(promptPreview.json().threadId).toBe("019d-api-filter-1");
     expect(promptPreview.json().prompt).toContain("实现 web 页面");
     expect(promptPreview.json().renameContext.strategy).toBeDefined();
+
+    const overriddenPromptPreview = await app.inject({
+      method: "POST",
+      url: "/api/v1/ai/prompt-preview",
+      payload: {
+        threadId: "019d-api-filter-1",
+        userConfig: {
+          general: {
+            uiLanguage: "zh-CN"
+          },
+          naming: {
+            contextStrategy: "paired-user-turns"
+          }
+        }
+      }
+    });
+    expect(overriddenPromptPreview.statusCode).toBe(200);
+    expect(overriddenPromptPreview.json().renameContext.requestedStrategy).toBe("paired-user-turns");
+    expect(overriddenPromptPreview.json().renameContext.strategy).toBe("paired-user-turns");
+    expect(overriddenPromptPreview.json().prompt).toContain("你要为 Codex Session Manager 生成一个用于会话列表的命名建议");
   });
 
   it("returns paginated session transcript details", async () => {

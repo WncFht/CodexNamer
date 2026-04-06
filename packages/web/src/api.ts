@@ -197,7 +197,19 @@ export async function fetchAutoRenamePreview(params?: {
   return requestJson<AutoRenamePreviewResponse>(url.toString());
 }
 
-export async function fetchPromptPreview(threadId?: string): Promise<PromptPreviewResponse> {
+export async function fetchPromptPreview(
+  threadId?: string,
+  userConfig?: ConfigDocument
+): Promise<PromptPreviewResponse> {
+  if (userConfig) {
+    return requestJson<PromptPreviewResponse>("/api/v1/ai/prompt-preview", {
+      method: "POST",
+      body: JSON.stringify({
+        threadId,
+        userConfig
+      })
+    });
+  }
   const url = new URL("/api/v1/ai/prompt-preview", window.location.origin);
   if (threadId) {
     url.searchParams.set("threadId", threadId);

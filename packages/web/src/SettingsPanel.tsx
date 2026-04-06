@@ -902,7 +902,11 @@ function NamingSection(props: {
   text: TextTools;
   promptPreview: PromptPreviewResponse | null;
   promptPreviewRefreshing: boolean;
-  onRefreshPromptPreview: () => void | Promise<void>;
+  draftConfig: ConfigDocument;
+  onRefreshPromptPreview: (
+    userConfig?: ConfigDocument,
+    options?: { urgent?: boolean }
+  ) => void | Promise<void>;
   onReplayRenames: (params: {
     since: string;
     basis: "session-updated-at" | "last-applied-at";
@@ -1120,22 +1124,13 @@ function NamingSection(props: {
               options={contextStrategyOptions}
               value={props.draft.namingContextStrategy as RenameContextStrategy}
             />
-            <label className="settings-field">
-              <span>{props.text.tt("contextMaxChars")}</span>
-              <input
-                onChange={(event) => {
-                  props.updateDraftField("namingContextMaxChars", event.target.value);
-                }}
-                value={props.draft.namingContextMaxChars}
-              />
-            </label>
           </div>
           <div className="settings-inline-note">
             <strong>{props.text.inline("区别与 Prompt 语言", "Difference and prompt language")}</strong>
             <p>
               {props.text.inline(
-                "摘要型策略更稳、更便宜；transcript 型策略更具体。Prompt 指令语言跟随界面语言，最终标题输出语言由上面的 `language` 控制。",
-                "Summary-based strategies are steadier and cheaper; transcript-based strategies are more specific. Prompt instruction language follows the UI language, while `language` above controls the final title language."
+                "摘要型策略更稳；transcript 与 paired 策略更具体。Prompt 指令语言跟随界面语言，最终标题输出语言由上面的 `language` 控制。",
+                "Summary strategies are steadier; transcript and paired strategies are more specific. Prompt instruction language follows the UI language, while `language` above controls the final title language."
               )}
             </p>
           </div>
@@ -1485,7 +1480,11 @@ function NamingSection(props: {
                 )}
               </p>
             </div>
-            <button className="btn-sm" onClick={() => void props.onRefreshPromptPreview()} type="button">
+            <button
+              className="btn-sm"
+              onClick={() => void props.onRefreshPromptPreview(props.draftConfig, { urgent: true })}
+              type="button"
+            >
               {props.promptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
             </button>
           </div>
@@ -1505,16 +1504,16 @@ function NamingSection(props: {
               <dd>{props.promptPreview?.threadId ?? props.text.tt("nA")}</dd>
             </div>
             <div>
-              <dt>{props.text.inline("上下文策略", "Context strategy")}</dt>
+              <dt>{props.text.inline("请求策略", "Requested strategy")}</dt>
+              <dd>{props.promptPreview?.renameContext.requestedStrategy ?? props.text.tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("实际策略", "Resolved strategy")}</dt>
               <dd>{props.promptPreview?.renameContext.strategy ?? props.text.tt("nA")}</dd>
             </div>
             <div>
-              <dt>{props.text.inline("上下文字符数", "Context chars")}</dt>
-              <dd>
-                {props.promptPreview
-                  ? `${props.promptPreview.renameContext.selectedChars}/${props.promptPreview.renameContext.maxChars}`
-                  : props.text.tt("nA")}
-              </dd>
+              <dt>{props.text.inline("回退原因", "Fallback reason")}</dt>
+              <dd>{props.promptPreview?.renameContext.fallbackReason ?? props.text.tt("nA")}</dd>
             </div>
           </dl>
           <pre className="settings-json settings-json-large">
@@ -1575,6 +1574,7 @@ function AiProviderSection(props: {
 }) {
   const effective = asRecord(props.configView.effectiveConfig);
   const inheritedCodex = asRecord(effective.inheritedCodex);
+  const resolvedProvider = asRecord(props.providers?.resolvedProvider);
   const selectedProfile = useMemo(
     () => props.draft.providerProfiles.find((profile) => profile.profileId === props.draft.selectedProfileId),
     [props.draft]
@@ -1601,22 +1601,37 @@ function AiProviderSection(props: {
         ? [selectedProfile?.wireApi, props.providers?.resolvedProvider?.transport, inheritedCodex.wireApi]
         : [props.providers?.resolvedProvider?.transport, inheritedCodex.wireApi, selectedProfile?.wireApi])
     ) ?? props.text.tt("nA");
+  const resolvedRequestedBackend = firstNonEmptyString(resolvedProvider.requestedBackend, props.draft.aiBackend) ?? props.text.tt("nA");
+  const resolvedConfiguredBackend = firstNonEmptyString(resolvedProvider.configuredBackend, props.draft.aiBackend) ?? props.text.tt("nA");
+  const resolvedTransport = firstNonEmptyString(resolvedProvider.preferredTransport, resolvedProvider.transport) ?? props.text.tt("nA");
+  const resolvedCredential = Boolean(resolvedProvider.hasCredential)
+    ? firstNonEmptyString(resolvedProvider.credentialSource, resolvedProvider.credentialKind) ?? props.text.inline("已配置", "Configured")
+    : props.text.inline("未配置", "Missing");
+  const directHttpLabel = Boolean(resolvedProvider.canDirectHttp)
+    ? props.text.inline("可直接 HTTP", "Direct HTTP ready")
+    : props.text.inline("需要回退", "Needs fallback");
+  const fallbackLabel = Boolean(resolvedProvider.codexFallbackEnabled)
+    ? props.text.inline("允许 codex exec 回退", "codex exec fallback enabled")
+    : props.text.inline("不启用回退", "No codex fallback");
+  const requestPath = [props.draft.aiBackend, props.draft.aiProviderSource, selectedProfileLabel, resolvedTransport].filter(Boolean);
+  const timeoutOptions = Array.from(new Set([props.draft.aiTimeoutSeconds, "15", "30", "45", "60", "90"])).filter(Boolean);
+  const temperatureOptions = Array.from(new Set([props.draft.aiTemperature, "0", "0.2", "0.4", "0.7", "1"])).filter(Boolean);
 
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("provider")}
-      title={props.text.inline("选择命名请求走哪条 AI 链路", "Choose which AI path powers naming")}
+      title={props.text.inline("把命名请求走向讲清楚", "Make the naming request path easy to inspect")}
       copy={props.text.inline(
-        "先决定 backend、来源和并发数，再检查当前实际命中的 provider。只有需要精调时，才展开 profile 细节。",
-        "Set backend, source, and concurrency first, then inspect the provider actually in effect. Open the profile editor only when you need finer control."
+        "先决定默认路由，再看当前实际命中的 provider、凭证和回退路径。只有需要精调时，才编辑显式 profile。",
+        "Set the default route first, then inspect the provider, credentials, and fallback path actually in effect. Edit explicit profiles only when you need fine-grained control."
       )}
     >
-      <div className="settings-stage-grid">
-        <article className="settings-surface-card">
+      <div className="settings-stage-grid settings-stage-grid-wide">
+        <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.tt("ai")}</p>
-              <h4>{props.text.inline("路由与并发", "Routing and concurrency")}</h4>
+              <h4>{props.text.inline("默认路由与执行参数", "Default route and execution parameters")}</h4>
             </div>
           </div>
           <div className="settings-two-up">
@@ -1694,35 +1709,76 @@ function AiProviderSection(props: {
                 ))}
               </select>
             </label>
-            <label className="settings-field">
-              <span>{props.text.tt("timeoutSeconds")}</span>
-              <input
-                onChange={(event) => {
-                  props.updateDraftField("aiTimeoutSeconds", event.target.value);
-                }}
-                value={props.draft.aiTimeoutSeconds}
-              />
-            </label>
-            <label className="settings-field">
-              <span>{props.text.tt("temperature")}</span>
-              <input
-                onChange={(event) => {
-                  props.updateDraftField("aiTemperature", event.target.value);
-                }}
-                value={props.draft.aiTemperature}
-              />
-            </label>
+            <SelectField
+              label={props.text.tt("timeoutSeconds")}
+              onChange={(value) => {
+                props.updateDraftField("aiTimeoutSeconds", value);
+              }}
+              options={timeoutOptions.map((value) => ({ value, label: value }))}
+              value={props.draft.aiTimeoutSeconds}
+            />
+            <SelectField
+              label={props.text.tt("temperature")}
+              onChange={(value) => {
+                props.updateDraftField("aiTemperature", value);
+              }}
+              options={temperatureOptions.map((value) => ({ value, label: value }))}
+              value={props.draft.aiTemperature}
+            />
+          </div>
+          <div className="settings-provider-flow">
+            {requestPath.map((step, index) => (
+              <div className="settings-provider-step" key={`${index}-${step}`}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
           </div>
         </article>
 
         <article className="settings-surface-card">
           <div className="settings-card-header">
             <div>
-              <p className="panel-kicker">{props.text.inline("Resolved", "Resolved")}</p>
-              <h4>{props.text.inline("当前正在生效的 provider", "The provider currently in effect")}</h4>
+              <p className="panel-kicker">{props.text.inline("Resolved route", "Resolved route")}</p>
+              <h4>{props.text.inline("当前请求会怎么走", "How requests will actually flow")}</h4>
             </div>
           </div>
-          <dl className="settings-runtime-grid">
+          <dl className="settings-runtime-grid compact">
+            <div>
+              <dt>{props.text.inline("请求 backend", "Requested backend")}</dt>
+              <dd>{resolvedRequestedBackend}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("配置 backend", "Configured backend")}</dt>
+              <dd>{resolvedConfiguredBackend}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("传输方式", "Transport")}</dt>
+              <dd>{resolvedTransport}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("凭证", "Credential")}</dt>
+              <dd>{resolvedCredential}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("HTTP 直连", "Direct HTTP")}</dt>
+              <dd>{directHttpLabel}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("回退", "Fallback")}</dt>
+              <dd>{fallbackLabel}</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="settings-surface-card">
+          <div className="settings-card-header">
+            <div>
+              <p className="panel-kicker">{props.text.inline("Resolved target", "Resolved target")}</p>
+              <h4>{props.text.inline("当前会打到哪个 provider", "Which provider is in effect right now")}</h4>
+            </div>
+          </div>
+          <dl className="settings-runtime-grid compact">
             <div>
               <dt>{props.text.tt("selectedProfile")}</dt>
               <dd>{selectedProfileLabel}</dd>
@@ -1739,14 +1795,26 @@ function AiProviderSection(props: {
               <dt>{props.text.tt("wireApi")}</dt>
               <dd>{selectedWireApi}</dd>
             </div>
+            <div>
+              <dt>{props.text.tt("providerRef")}</dt>
+              <dd>{String(resolvedProvider.providerRef ?? selectedProfile?.providerRef ?? props.text.tt("nA"))}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("requires auth", "Requires auth")}</dt>
+              <dd>{Boolean(resolvedProvider.requiresOpenaiAuth) ? props.text.inline("是", "Yes") : props.text.inline("否", "No")}</dd>
+            </div>
           </dl>
+          <details className="settings-disclosure">
+            <summary>{props.text.tt("inspectResolvedProvider")}</summary>
+            <pre className="settings-json">{JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}</pre>
+          </details>
         </article>
 
         <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Profile editor", "Profile editor")}</p>
-              <h4>{props.text.inline("显式 profile 细节", "Explicit profile details")}</h4>
+              <h4>{props.text.inline("显式 profile 编辑器", "Explicit profile editor")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
                   "这里只编辑显式 profile。本区不决定当前是否启用它，真正启用入口在上面的 `provider source`。",
@@ -1758,174 +1826,206 @@ function AiProviderSection(props: {
 
           {selectedProfile ? (
             <>
-              <div className="settings-two-up">
-                <label className="settings-field">
-                  <span>{props.text.tt("displayName")}</span>
-                  <input
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          displayName: event.target.value
-                        })
-                      }));
-                    }}
-                    value={selectedProfile.displayName ?? ""}
-                  />
-                </label>
-                <SelectField<NonNullable<ProviderProfile["backendKind"]>>
-                  label={props.text.tt("backendKind")}
-                  onChange={(value) => {
-                    props.updateDraftState((current) => ({
-                      ...current,
-                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                        backendKind: value
-                      })
-                    }));
-                  }}
-                  options={[
-                    { value: "openai-compatible", label: "openai-compatible" },
-                    { value: "codex", label: "codex" },
-                    { value: "none", label: "none" }
-                  ]}
-                  value={selectedProfile.backendKind ?? "openai-compatible"}
-                />
-                <SelectField<NonNullable<ProviderProfile["providerSource"]>>
-                  label={props.text.tt("profileSource")}
-                  onChange={(value) => {
-                    props.updateDraftState((current) => ({
-                      ...current,
-                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                        providerSource: value
-                      })
-                    }));
-                  }}
-                  options={[
-                    { value: "explicit", label: "explicit" },
-                    { value: "inherit-codex", label: "inherit-codex" }
-                  ]}
-                  value={selectedProfile.providerSource ?? "explicit"}
-                />
-                <label className="settings-field">
-                  <span>{props.text.tt("providerRef")}</span>
-                  <input
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          providerRef: event.target.value
-                        })
-                      }));
-                    }}
-                    value={selectedProfile.providerRef ?? ""}
-                  />
-                </label>
-                <label className="settings-field">
-                  <span>{props.text.tt("baseUrl")}</span>
-                  <input
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          baseUrl: event.target.value
-                        })
-                      }));
-                    }}
-                    value={selectedProfile.baseUrl ?? ""}
-                  />
-                </label>
-                <label className="settings-field">
-                  <span>{props.text.tt("model")}</span>
-                  <input
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          model: event.target.value
-                        })
-                      }));
-                    }}
-                    value={selectedProfile.model ?? ""}
-                  />
-                </label>
-                <SelectField<NonNullable<ProviderProfile["wireApi"]>>
-                  label={props.text.tt("wireApi")}
-                  onChange={(value) => {
-                    props.updateDraftState((current) => ({
-                      ...current,
-                      providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                        wireApi: value
-                      })
-                    }));
-                  }}
-                  options={[
-                    { value: "auto", label: "auto" },
-                    { value: "responses", label: "responses" },
-                    { value: "chat_completions", label: "chat_completions" }
-                  ]}
-                  value={selectedProfile.wireApi ?? "auto"}
-                />
-                <label className="settings-field">
-                  <span>{props.text.tt("apiKey")}</span>
-                  <input
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          apiKey: event.target.value
-                        })
-                      }));
-                    }}
-                    value={selectedProfile.apiKey ?? ""}
-                  />
-                </label>
-                <label className="settings-field">
-                  <span>{props.text.tt("apiKeyRef")}</span>
-                  <input
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          apiKeyRef: event.target.value
-                        })
-                      }));
-                    }}
-                    value={selectedProfile.apiKeyRef ?? ""}
-                  />
-                </label>
-              </div>
-              <div className="settings-checks">
-                <label className="toggle">
-                  <input
-                    checked={selectedProfile.enabled ?? true}
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                          enabled: event.target.checked
-                        })
-                      }));
-                    }}
-                    type="checkbox"
-                  />
-                  {props.text.tt("enabled")}
-                </label>
-                <label className="toggle">
-                  <input
-                    checked={selectedProfile.isDefault ?? false}
-                    onChange={(event) => {
-                      props.updateDraftState((current) => ({
-                        ...current,
-                        providerProfiles: current.providerProfiles.map((profile) => ({
-                          ...profile,
-                          isDefault: profile.profileId === current.selectedProfileId ? event.target.checked : false
-                        }))
-                      }));
-                    }}
-                    type="checkbox"
-                  />
-                  {props.text.tt("defaultProfile")}
-                </label>
+              <div className="settings-provider-groups">
+                <section className="settings-provider-group">
+                  <div className="settings-card-header">
+                    <div>
+                      <p className="panel-kicker">{props.text.inline("Identity", "Identity")}</p>
+                      <h4>{props.text.inline("身份与来源", "Identity and source")}</h4>
+                    </div>
+                  </div>
+                  <div className="settings-two-up">
+                    <label className="settings-field">
+                      <span>{props.text.tt("displayName")}</span>
+                      <input
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              displayName: event.target.value
+                            })
+                          }));
+                        }}
+                        value={selectedProfile.displayName ?? ""}
+                      />
+                    </label>
+                    <SelectField<NonNullable<ProviderProfile["backendKind"]>>
+                      label={props.text.tt("backendKind")}
+                      onChange={(value) => {
+                        props.updateDraftState((current) => ({
+                          ...current,
+                          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                            backendKind: value
+                          })
+                        }));
+                      }}
+                      options={[
+                        { value: "openai-compatible", label: "openai-compatible" },
+                        { value: "codex", label: "codex" },
+                        { value: "none", label: "none" }
+                      ]}
+                      value={selectedProfile.backendKind ?? "openai-compatible"}
+                    />
+                    <SelectField<NonNullable<ProviderProfile["providerSource"]>>
+                      label={props.text.tt("profileSource")}
+                      onChange={(value) => {
+                        props.updateDraftState((current) => ({
+                          ...current,
+                          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                            providerSource: value
+                          })
+                        }));
+                      }}
+                      options={[
+                        { value: "explicit", label: "explicit" },
+                        { value: "inherit-codex", label: "inherit-codex" }
+                      ]}
+                      value={selectedProfile.providerSource ?? "explicit"}
+                    />
+                    <label className="settings-field">
+                      <span>{props.text.tt("providerRef")}</span>
+                      <input
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              providerRef: event.target.value
+                            })
+                          }));
+                        }}
+                        value={selectedProfile.providerRef ?? ""}
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="settings-provider-group">
+                  <div className="settings-card-header">
+                    <div>
+                      <p className="panel-kicker">{props.text.inline("Endpoint", "Endpoint")}</p>
+                      <h4>{props.text.inline("接口与模型", "Endpoint and model")}</h4>
+                    </div>
+                  </div>
+                  <div className="settings-two-up">
+                    <label className="settings-field">
+                      <span>{props.text.tt("baseUrl")}</span>
+                      <input
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              baseUrl: event.target.value
+                            })
+                          }));
+                        }}
+                        value={selectedProfile.baseUrl ?? ""}
+                      />
+                    </label>
+                    <label className="settings-field">
+                      <span>{props.text.tt("model")}</span>
+                      <input
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              model: event.target.value
+                            })
+                          }));
+                        }}
+                        value={selectedProfile.model ?? ""}
+                      />
+                    </label>
+                    <SelectField<NonNullable<ProviderProfile["wireApi"]>>
+                      label={props.text.tt("wireApi")}
+                      onChange={(value) => {
+                        props.updateDraftState((current) => ({
+                          ...current,
+                          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                            wireApi: value
+                          })
+                        }));
+                      }}
+                      options={[
+                        { value: "auto", label: "auto" },
+                        { value: "responses", label: "responses" },
+                        { value: "chat_completions", label: "chat_completions" }
+                      ]}
+                      value={selectedProfile.wireApi ?? "auto"}
+                    />
+                  </div>
+                </section>
+
+                <section className="settings-provider-group">
+                  <div className="settings-card-header">
+                    <div>
+                      <p className="panel-kicker">{props.text.inline("Credentials", "Credentials")}</p>
+                      <h4>{props.text.inline("鉴权与启停", "Authentication and toggles")}</h4>
+                    </div>
+                  </div>
+                  <div className="settings-two-up">
+                    <label className="settings-field">
+                      <span>{props.text.tt("apiKey")}</span>
+                      <input
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              apiKey: event.target.value
+                            })
+                          }));
+                        }}
+                        value={selectedProfile.apiKey ?? ""}
+                      />
+                    </label>
+                    <label className="settings-field">
+                      <span>{props.text.tt("apiKeyRef")}</span>
+                      <input
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              apiKeyRef: event.target.value
+                            })
+                          }));
+                        }}
+                        value={selectedProfile.apiKeyRef ?? ""}
+                      />
+                    </label>
+                  </div>
+                  <div className="settings-checks">
+                    <label className="toggle">
+                      <input
+                        checked={selectedProfile.enabled ?? true}
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                              enabled: event.target.checked
+                            })
+                          }));
+                        }}
+                        type="checkbox"
+                      />
+                      {props.text.tt("enabled")}
+                    </label>
+                    <label className="toggle">
+                      <input
+                        checked={selectedProfile.isDefault ?? false}
+                        onChange={(event) => {
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            providerProfiles: current.providerProfiles.map((profile) => ({
+                              ...profile,
+                              isDefault: profile.profileId === current.selectedProfileId ? event.target.checked : false
+                            }))
+                          }));
+                        }}
+                        type="checkbox"
+                      />
+                      {props.text.tt("defaultProfile")}
+                    </label>
+                  </div>
+                </section>
               </div>
             </>
           ) : (
@@ -2288,9 +2388,13 @@ export function SettingsPanel(props: {
   providers: ProviderResponse | null;
   promptPreview: PromptPreviewResponse | null;
   promptPreviewRefreshing: boolean;
+  selectedThreadId?: string;
   saving: boolean;
   onReload: () => void | Promise<void>;
-  onRefreshPromptPreview: () => void | Promise<void>;
+  onRefreshPromptPreview: (
+    userConfig?: ConfigDocument,
+    options?: { urgent?: boolean }
+  ) => void | Promise<void>;
   onReplayRenames: (params: {
     since: string;
     basis: "session-updated-at" | "last-applied-at";
@@ -2302,11 +2406,32 @@ export function SettingsPanel(props: {
   const uiLanguage = draft?.uiLanguage ?? normalizeUiLanguage(props.configView);
   const tt: Translate = (key) => t(uiLanguage, key);
   const inline: InlineText = (zh, en) => (uiLanguage === "zh-CN" ? zh : en);
+  const previewDraft = useMemo(() => (draft ? encodeDraft(draft) : null), [draft]);
+  const previewDraftKey = useMemo(() => (previewDraft ? encodedConfigKey(previewDraft) : ""), [previewDraft]);
+  const refreshPromptPreviewRef = useRef(props.onRefreshPromptPreview);
   const text = {
     tt,
     inline,
     uiLanguage
   } satisfies TextTools;
+
+  useEffect(() => {
+    refreshPromptPreviewRef.current = props.onRefreshPromptPreview;
+  }, [props.onRefreshPromptPreview]);
+
+  useEffect(() => {
+    if (!previewDraft) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      void refreshPromptPreviewRef.current(previewDraft, {
+        urgent: false
+      });
+    }, 180);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [previewDraft, previewDraftKey, props.selectedThreadId]);
 
   if (!props.configView || !draft) {
     return (
@@ -2333,6 +2458,7 @@ export function SettingsPanel(props: {
         return (
           <NamingSection
             draft={loadedDraft}
+            draftConfig={previewDraft ?? encodeDraft(loadedDraft)}
             onRefreshPromptPreview={props.onRefreshPromptPreview}
             onReplayRenames={props.onReplayRenames}
             promptPreview={props.promptPreview}
