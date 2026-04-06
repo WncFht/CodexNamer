@@ -213,14 +213,14 @@ pre {
 
 .sidebar-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
   padding: 12px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-btn {
-  flex: 1 1 calc(50% - 6px);
+  width: 100%;
   padding: 9px 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);

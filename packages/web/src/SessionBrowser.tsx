@@ -11,7 +11,6 @@ import {
 import {
   autoRenameReasonLabel,
   autoRenameStatusLabel,
-  namingStyleLabel,
   sessionStatusLabel,
   t,
   type UiLanguage
@@ -35,13 +34,9 @@ export function SessionBrowser(props: {
   loadingDetail: boolean;
   actioning: boolean;
   actionLabel: string | null;
-  search: string;
-  dirtyOnly: boolean;
   showHiddenTranscript: boolean;
   error: string | null;
   uiLanguage: UiLanguage;
-  onSearchChange: (value: string) => void;
-  onDirtyOnlyChange: (value: boolean) => void;
   onToggleShowHiddenTranscript: (value: boolean) => void;
   onRefresh: () => void;
   onSelectSession: (threadId: string) => void;
@@ -50,7 +45,6 @@ export function SessionBrowser(props: {
   onStartSessionResize: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSuggest: () => void | Promise<void>;
   onApply: () => void | Promise<void>;
-  onSetNamingStyle: (style: "brief" | "detailed" | "default") => void | Promise<void>;
   onToggleFreeze: () => void | Promise<void>;
   onToggleManualOverride: () => void | Promise<void>;
 }) {
@@ -186,39 +180,6 @@ export function SessionBrowser(props: {
                     <span>{props.detail.model ?? tt("unknownModel")}</span>
                     <span>{props.detail.tokenTotal} {props.uiLanguage === "zh-CN" ? "tokens" : "tokens"}</span>
                   </div>
-                  <div className="session-style-bar">
-                    <div className="session-style-copy">
-                      <span>{tt("activeNamingStyle")}: {props.detail.effectiveNamingStyle ? namingStyleLabel(props.detail.effectiveNamingStyle, props.uiLanguage) : tt("detailed")}</span>
-                      <span>{tt("officialNamingStyle")}: {props.detail.officialNamingStyle ? namingStyleLabel(props.detail.officialNamingStyle, props.uiLanguage) : tt("nA")}</span>
-                    </div>
-                    <div className="session-style-picker" role="group" aria-label={tt("activeNamingStyle")}>
-                      <button
-                        className={props.detail.preferredNamingStyle ? "session-style-option" : "session-style-option active"}
-                        disabled={props.actioning}
-                        onClick={() => props.onSetNamingStyle("default")}
-                        type="button"
-                      >
-                        {tt("followDefault")}
-                        {props.detail.defaultNamingStyle ? ` (${namingStyleLabel(props.detail.defaultNamingStyle, props.uiLanguage)})` : ""}
-                      </button>
-                      <button
-                        className={props.detail.effectiveNamingStyle === "detailed" && props.detail.preferredNamingStyle === "detailed" ? "session-style-option active" : "session-style-option"}
-                        disabled={props.actioning}
-                        onClick={() => props.onSetNamingStyle("detailed")}
-                        type="button"
-                      >
-                        {tt("detailed")}
-                      </button>
-                      <button
-                        className={props.detail.effectiveNamingStyle === "brief" && props.detail.preferredNamingStyle === "brief" ? "session-style-option active" : "session-style-option"}
-                        disabled={props.actioning}
-                        onClick={() => props.onSetNamingStyle("brief")}
-                        type="button"
-                      >
-                        {tt("brief")}
-                      </button>
-                    </div>
-                  </div>
                 </div>
                 <div className="chat-header-right">
                   {props.detail.dirty ? <span className="chip danger">{tt("dirty")}</span> : <span className="chip success">{tt("clean")}</span>}
@@ -287,10 +248,10 @@ export function SessionBrowser(props: {
 
                 {latestRename ? (
                   <div className="history-summary-row">
-                    <div className="history-summary-copy">
+                  <div className="history-summary-copy">
                       <strong>{latestRename.newName}</strong>
                       <p>
-                        {latestRename.kind} / {latestRename.source} / {namingStyleLabel(latestRename.style, props.uiLanguage)} / {autoRenameStatusLabel(latestRename.status, props.uiLanguage)}
+                        {latestRename.kind} / {latestRename.source} / {autoRenameStatusLabel(latestRename.status, props.uiLanguage)}
                         {latestRename.reason ? ` / ${autoRenameReasonLabel(latestRename.reason, props.uiLanguage)}` : ""}
                       </p>
                     </div>
@@ -313,7 +274,7 @@ export function SessionBrowser(props: {
                           <div>
                             <strong>{entry.newName}</strong>
                             <p>
-                              {entry.kind} / {entry.source} / {namingStyleLabel(entry.style, props.uiLanguage)} / {autoRenameStatusLabel(entry.status, props.uiLanguage)}
+                              {entry.kind} / {entry.source} / {autoRenameStatusLabel(entry.status, props.uiLanguage)}
                               {entry.reason ? ` / ${autoRenameReasonLabel(entry.reason, props.uiLanguage)}` : ""}
                             </p>
                           </div>

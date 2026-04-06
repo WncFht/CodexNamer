@@ -62,6 +62,7 @@ export function App() {
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
   const previewApplyCount = state.preview?.items.filter((item) => item.status === "apply").length ?? 0;
   const previewSuggestCount = state.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
+  const totalWorkspaceSessionCount = state.workspaces.reduce((sum, workspace) => sum + workspace.sessionCount, 0);
   const selectedWorkspace =
     state.selectedWorkspaceId === ALL_WORKSPACES_ID
       ? undefined
@@ -286,6 +287,7 @@ export function App() {
                 type="button"
               >
                 <span className="name">{tt("allWorkspaces")}</span>
+                <span className="count">{totalWorkspaceSessionCount}</span>
               </button>
               {state.workspaces.map((workspace) => (
                 <button
@@ -295,6 +297,7 @@ export function App() {
                   type="button"
                 >
                   <span className="name">{workspace.workspaceLabel}</span>
+                  <span className="count">{workspace.sessionCount}</span>
                 </button>
               ))}
             </div>
@@ -363,13 +366,9 @@ export function App() {
               loadingDetail={state.loadingDetail}
               actioning={state.actioning}
               actionLabel={state.actionLabel}
-              search={state.search}
-              dirtyOnly={state.dirtyOnly}
               showHiddenTranscript={state.showHiddenTranscript}
               error={state.error}
               uiLanguage={uiLanguage}
-              onSearchChange={state.setSearch}
-              onDirtyOnlyChange={state.setDirtyOnly}
               onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
               onRefresh={() => void state.refreshSessions()}
               onSelectSession={(threadId) => state.setSelectedId(threadId)}
@@ -378,7 +377,6 @@ export function App() {
               onStartSessionResize={startSessionResize}
               onSuggest={() => state.actions.suggest()}
               onApply={() => state.actions.apply()}
-              onSetNamingStyle={(style) => state.actions.setNamingStyle(style)}
               onToggleFreeze={() => state.actions.toggleFreeze()}
               onToggleManualOverride={() => state.actions.toggleManualOverride()}
             />
