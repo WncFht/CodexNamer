@@ -446,6 +446,10 @@ AI prompt 现在会同时带上：
 - `contextTruncated`
 - `contextChars`
 - `contextFallbackReason`
+- `namingCompositionMode`
+- `namingComponents`
+- `componentSeparator`
+- `Structured naming tags`
 - `Rename context` 正文
 
 这意味着 AI 命名已经真正区分：
@@ -465,6 +469,48 @@ AI prompt 现在会同时带上：
   - 避免无必要的第二子句
 - 需要同时抓住“子系统 + 动作 / 问题 / 审查焦点”
 - 如果会话里有两个高度相关的目标，可以保留一个短 secondary fragment
+
+如果当前配置启用了 `prompt-override`，prompt 还会额外带上：
+
+- `Custom naming override`
+- 用户给出的整段覆写指令
+
+语义是：
+
+- `structured`
+  - AI 需要尊重组件顺序来拼标题
+  - tag 只在“命中且组件里包含 `tag`”时出现
+- `prompt-override`
+  - 结构化组件仍会保留在 prompt 里
+  - 但 `custom_prompt` 会被声明为最高优先级命名约束
+
+### 7.2.1 `brief / detailed` 与 `summary-signals / user-assistant-transcript` 的区别
+
+这四个选项分成两层，不要混淆：
+
+- `brief / detailed`
+  - 这是“标题风格层”
+  - 它决定 summary 要写得多具体、是否补 secondary focus、长度预算偏紧还是偏宽
+- `summary-signals / user-assistant-transcript`
+  - 这是“上下文取材层”
+  - 它决定 prompt 和 heuristic 到底读哪一份会话内容
+
+当前 prompt 里的具体差异是：
+
+- `namingStyle = detailed`
+  - prompt 明确要求“可更充分使用长度预算”
+  - prompt 允许保留一个 concrete secondary focus
+  - heuristic 会尝试额外补一个“聚焦 xxx”
+- `namingStyle = brief`
+  - prompt 明确要求“更短、更适合列表扫读”
+  - heuristic 只保留主结构，不补 secondary focus
+- `requestedContextStrategy = summary-signals`
+  - prompt 里主要是 `firstUserMessage / lastUserMessage / lastAgentMessage`
+  - renameContext 正文会更短、更稳
+- `requestedContextStrategy = user-assistant-transcript`
+  - prompt 会明确看到 transcript 版 `Rename context`
+  - 会固定保留首个用户目标，再加入最近 user/assistant 消息
+  - 更适合产出具体标题，但更容易受噪声影响
 
 这也意味着，旧的 heuristic 官方名如果需要升级，会在后续调度里被重新送回 AI，而不是继续当作最终标题保留。
 

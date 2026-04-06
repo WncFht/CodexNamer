@@ -1104,6 +1104,16 @@ export class StateDatabase {
     const dirtySessionCount = sessions.filter(
       (item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId)
     ).length;
+    const acceptedOfficialNames = sessions
+      .filter((item) => Boolean(item.officialName) && !nonAcceptedNamedThreadIds.has(item.threadId))
+      .map((item) => item.officialName ?? "");
+    const averageTitleLength =
+      acceptedOfficialNames.length > 0
+        ? Math.round(
+            acceptedOfficialNames.reduce((sum, name) => sum + name.trim().length, 0) /
+              acceptedOfficialNames.length
+          )
+        : 0;
 
     return {
       sessions: {
@@ -1137,6 +1147,7 @@ export class StateDatabase {
         averageTokensPerSession: sessions.length > 0 ? Math.round(totalTokens / sessions.length) : 0,
         averageTokensPerDirtySession:
           dirtySessionCount > 0 ? Math.round(dirtyTokens / dirtySessionCount) : 0,
+        averageTitleLength,
         topWorkspacesByTokens: Array.from(topWorkspaceMap.values())
           .sort((left, right) => {
             if (right.tokens !== left.tokens) {

@@ -793,6 +793,93 @@ pre {
   grid-column: 1 / -1;
 }
 
+.settings-composer-block {
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
+  display: grid;
+  gap: 12px;
+}
+
+.settings-composer-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.settings-composer-header h4 {
+  margin: 2px 0 6px;
+  font-size: 16px;
+}
+
+.settings-component-stack,
+.settings-tag-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-component-card,
+.settings-tag-card {
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--ring-sm);
+}
+
+.settings-component-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.settings-component-card strong,
+.settings-tag-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.settings-component-card p,
+.settings-tag-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-component-actions,
+.settings-component-adders {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-tag-chip {
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 78%, white 22%);
+  color: var(--text);
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-tag-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-tag-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .settings-checks {
   display: flex;
   gap: 14px;

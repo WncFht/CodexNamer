@@ -160,6 +160,7 @@ export type OverviewResponse = {
     appliedTokens: number;
     averageTokensPerSession: number;
     averageTokensPerDirtySession: number;
+    averageTitleLength: number;
     topWorkspacesByTokens: Array<{
       workspaceId: string;
       workspaceLabel: string;
@@ -249,6 +250,16 @@ export type ConfigDocument = {
     defaultStyle?: "brief" | "detailed";
     contextStrategy?: "summary-signals" | "user-assistant-transcript";
     contextMaxChars?: number;
+    compositionMode?: "structured" | "prompt-override";
+    components?: Array<"tag" | "kind" | "scope" | "summary" | "project">;
+    componentSeparator?: string;
+    tags?: Array<{
+      id: string;
+      label?: string;
+      description?: string;
+      promptHint?: string;
+    }>;
+    customPrompt?: string;
   };
   ai?: {
     backend?: "none" | "codex" | "openai-compatible";

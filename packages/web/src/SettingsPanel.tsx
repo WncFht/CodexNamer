@@ -13,6 +13,16 @@ type SettingsDraft = {
   namingMaxLength: string;
   namingContextStrategy: string;
   namingContextMaxChars: string;
+  namingCompositionMode: "structured" | "prompt-override";
+  namingComponents: Array<"tag" | "kind" | "scope" | "summary" | "project">;
+  namingComponentSeparator: string;
+  namingTags: Array<{
+    id: string;
+    label: string;
+    description: string;
+    promptHint: string;
+  }>;
+  namingCustomPrompt: string;
   renameAutoApply: string;
   manualOverrideWins: boolean;
   freezeManualName: boolean;
@@ -38,6 +48,8 @@ type SettingsDraft = {
 type RenameAutoApply = "disabled" | "idle-finalize";
 type AiBackend = "none" | "codex" | "openai-compatible";
 type ProviderSource = "inherit-codex" | "explicit";
+type NamingCompositionMode = "structured" | "prompt-override";
+type NamingComponent = "tag" | "kind" | "scope" | "summary" | "project";
 type ChoiceOption<T extends string> = {
   value: T;
   label: string;
@@ -57,6 +69,44 @@ function asNumberString(value: unknown, fallback = ""): string {
 
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeNamingComponents(raw: unknown): NamingComponent[] {
+  if (!Array.isArray(raw)) {
+    return ["tag", "kind", "summary"];
+  }
+  const allowed: NamingComponent[] = ["tag", "kind", "scope", "summary", "project"];
+  const selected = raw.filter((value): value is NamingComponent => allowed.includes(value as NamingComponent));
+  return selected.length > 0 ? selected : ["tag", "kind", "summary"];
+}
+
+function normalizeNamingTags(raw: unknown): SettingsDraft["namingTags"] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+    .map((record) => ({
+      id: asString(record.id),
+      label: asString(record.label),
+      description: asString(record.description),
+      promptHint: asString(record.promptHint || record.prompt_hint)
+    }))
+    .filter((tag) => tag.id.trim().length > 0);
+}
+
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
+    return items;
+  }
+  const next = items.slice();
+  const [moved] = next.splice(from, 1);
+  if (moved === undefined) {
+    return items;
+  }
+  next.splice(to, 0, moved);
+  return next;
 }
 
 function normalizeProfile(raw: unknown): ProviderProfile {
@@ -104,6 +154,17 @@ function buildDraft(configView: ConfigView): SettingsDraft {
       naming.contextMaxChars || naming.context_max_chars,
       "8000"
     ),
+    namingCompositionMode: asString(
+      naming.compositionMode || naming.composition_mode,
+      "structured"
+    ) as NamingCompositionMode,
+    namingComponents: normalizeNamingComponents(naming.components),
+    namingComponentSeparator: asString(
+      naming.componentSeparator || naming.component_separator,
+      " · "
+    ),
+    namingTags: normalizeNamingTags(naming.tags),
+    namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
     manualOverrideWins: asBoolean(rename.manualOverrideWins || rename.manual_override_wins, true),
     freezeManualName: asBoolean(rename.freezeManualName || rename.freeze_manual_name, true),
@@ -183,7 +244,19 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
         | "summary-signals"
         | "user-assistant-transcript"
         | undefined,
-      contextMaxChars: parseNumber(draft.namingContextMaxChars)
+      contextMaxChars: parseNumber(draft.namingContextMaxChars),
+      compositionMode: draft.namingCompositionMode as NamingCompositionMode,
+      components: draft.namingComponents,
+      componentSeparator: draft.namingComponentSeparator,
+      tags: draft.namingTags
+        .map((tag) => ({
+          id: tag.id.trim(),
+          label: stripEmptyString(tag.label),
+          description: stripEmptyString(tag.description),
+          promptHint: stripEmptyString(tag.promptHint)
+        }))
+        .filter((tag) => tag.id.length > 0),
+      customPrompt: stripEmptyString(draft.namingCustomPrompt)
     },
     ai: {
       backend: draft.aiBackend as AiBackend,
@@ -369,7 +442,33 @@ export function SettingsPanel(props: {
     ) ?? tt("nA");
   const promptPreviewStatus =
     props.previewApplyCount > 0 ? "apply" : props.previewSuggestCount > 0 ? "suggest" : "skip";
-
+  const namingComponentOptions: Array<{ value: NamingComponent; label: string; copy: string }> = [
+    {
+      value: "tag",
+      label: inline("Tag", "Tag"),
+      copy: inline("分类标签，例如 #设置 / #Prompt", "Classification tag such as #settings / #prompt")
+    },
+    {
+      value: "kind",
+      label: inline("Kind", "Kind"),
+      copy: inline("任务类型，如 fix / design / review", "Task kind such as fix / design / review")
+    },
+    {
+      value: "scope",
+      label: inline("Scope", "Scope"),
+      copy: inline("主话题或子系统范围", "Primary topic or subsystem scope")
+    },
+    {
+      value: "summary",
+      label: inline("Summary", "Summary"),
+      copy: inline("核心标题正文", "Core title summary")
+    },
+    {
+      value: "project",
+      label: inline("Project", "Project"),
+      copy: inline("项目或 cwd 名称", "Project or cwd name")
+    }
+  ];
   if (!props.configView || !draft) {
     return (
       <section className="settings-layout">
@@ -377,6 +476,14 @@ export function SettingsPanel(props: {
       </section>
     );
   }
+
+  const selectedNamingComponents = draft.namingComponents;
+  const availableNamingComponents = namingComponentOptions.filter(
+    (option) => !selectedNamingComponents.includes(option.value)
+  );
+  const updateNamingComponents = (nextComponents: NamingComponent[]) => {
+    updateDraftField("namingComponents", nextComponents);
+  };
 
   return (
     <section className="settings-layout">
@@ -450,6 +557,13 @@ export function SettingsPanel(props: {
               </p>
             </article>
             <article className="metric-card">
+              <span className="metric-label">{inline("平均标题字数", "Average title length")}</span>
+              <strong>{formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}</strong>
+              <p>
+                {formatUiNumber(props.overview?.sessions.named, uiLanguage)} {inline("个正式标题参与统计", "official titles in sample")}
+              </p>
+            </article>
+            <article className="metric-card">
               <span className="metric-label">{tt("manualControls")}</span>
               <strong>{formatUiNumber(props.overview?.sessions.manualOverride, uiLanguage)}</strong>
               <p>
@@ -495,16 +609,6 @@ export function SettingsPanel(props: {
               value={draft.namingPreset}
               onChange={(event) => {
                 updateDraftField("namingPreset", event.target.value);
-              }}
-            />
-          </label>
-          <label className="settings-field settings-field-wide">
-            <span>{tt("template")}</span>
-            <textarea
-              rows={3}
-              value={draft.namingTemplate}
-              onChange={(event) => {
-                updateDraftField("namingTemplate", event.target.value);
               }}
             />
           </label>
@@ -581,6 +685,247 @@ export function SettingsPanel(props: {
               />
             </label>
           </div>
+          <div className="settings-two-up">
+            <ChoiceGroup
+              label={inline("Naming composition", "Naming composition")}
+              onChange={(value) => {
+                updateDraftField("namingCompositionMode", value as NamingCompositionMode);
+              }}
+              options={[
+                { value: "structured", label: inline("结构化组合", "Structured") },
+                { value: "prompt-override", label: inline("Prompt 覆写", "Prompt override") }
+              ]}
+              value={draft.namingCompositionMode}
+            />
+            <label className="settings-field">
+              <span>{inline("组件分隔符", "Component separator")}</span>
+              <input
+                value={draft.namingComponentSeparator}
+                onChange={(event) => {
+                  updateDraftField("namingComponentSeparator", event.target.value);
+                }}
+              />
+            </label>
+          </div>
+          <section className="settings-composer-block">
+            <div className="settings-composer-header">
+              <div>
+                <p className="panel-kicker">{inline("命名组件", "Naming components")}</p>
+                <h4>{inline("结构化拼装", "Structured composition")}</h4>
+                <p className="settings-copy">
+                  {inline(
+                    "按顺序决定最终标题如何拼接。切换风格只影响“summary”写得更详细还是更紧凑，组件顺序本身由这里控制。",
+                    "Control how the final title is assembled. Naming style only changes how detailed the summary is; component order is controlled here."
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="settings-component-stack">
+              {selectedNamingComponents.map((component, index) => {
+                const option = namingComponentOptions.find((item) => item.value === component);
+                if (!option) {
+                  return null;
+                }
+                return (
+                  <article className="settings-component-card" key={`${component}-${index}`}>
+                    <div>
+                      <strong>{option.label}</strong>
+                      <p>{option.copy}</p>
+                    </div>
+                    <div className="settings-component-actions">
+                      <button
+                        className="btn-refresh"
+                        disabled={index === 0}
+                        onClick={() => {
+                          updateNamingComponents(moveItem(selectedNamingComponents, index, index - 1));
+                        }}
+                        type="button"
+                      >
+                        {inline("左移", "Left")}
+                      </button>
+                      <button
+                        className="btn-refresh"
+                        disabled={index === selectedNamingComponents.length - 1}
+                        onClick={() => {
+                          updateNamingComponents(moveItem(selectedNamingComponents, index, index + 1));
+                        }}
+                        type="button"
+                      >
+                        {inline("右移", "Right")}
+                      </button>
+                      <button
+                        className="btn-refresh"
+                        disabled={selectedNamingComponents.length === 1}
+                        onClick={() => {
+                          updateNamingComponents(
+                            selectedNamingComponents.filter((_, componentIndex) => componentIndex !== index)
+                          );
+                        }}
+                        type="button"
+                      >
+                        {inline("移除", "Remove")}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="settings-component-adders">
+              {availableNamingComponents.map((option) => (
+                <button
+                  className="settings-tag-chip"
+                  key={option.value}
+                  onClick={() => {
+                    updateNamingComponents([...selectedNamingComponents, option.value]);
+                  }}
+                  type="button"
+                >
+                  + {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="settings-composer-block">
+            <div className="settings-composer-header">
+              <div>
+                <p className="panel-kicker">{inline("分类 tag", "Classification tags")}</p>
+                <h4>{inline("Tag 目录", "Tag catalog")}</h4>
+                <p className="settings-copy">
+                  {inline(
+                    "每个 tag 都是一个可命中的分类规则。命中后，只有当组件顺序里包含 Tag 时，最终标题才会带上它。",
+                    "Each tag acts as a classification rule. A matched tag only appears in the final title when the Tag component is included in the composition order."
+                  )}
+                </p>
+              </div>
+              <button
+                className="btn-refresh"
+                onClick={() => {
+                  updateDraftState((current) => ({
+                    ...current,
+                    namingTags: [
+                      ...current.namingTags,
+                      {
+                        id: "",
+                        label: "",
+                        description: "",
+                        promptHint: ""
+                      }
+                    ]
+                  }));
+                }}
+                type="button"
+              >
+                {inline("添加 Tag", "Add tag")}
+              </button>
+            </div>
+            <div className="settings-tag-list">
+              {draft.namingTags.length === 0 ? (
+                <p className="settings-copy">
+                  {inline("当前没有自定义 tag。你可以保留空目录，也可以补充自己的分类规则。", "No custom tags yet. Leave the catalog empty or add your own classification rules.")}
+                </p>
+              ) : null}
+              {draft.namingTags.map((tag, index) => (
+                <article className="settings-tag-card" key={`${tag.id || "tag"}-${index}`}>
+                  <div className="settings-tag-card-topline">
+                    <strong>{tag.id.trim() || inline("未命名 Tag", "Untitled tag")}</strong>
+                    <button
+                      className="btn-refresh"
+                      onClick={() => {
+                        updateDraftState((current) => ({
+                          ...current,
+                          namingTags: current.namingTags.filter((_, tagIndex) => tagIndex !== index)
+                        }));
+                      }}
+                      type="button"
+                    >
+                      {inline("删除", "Remove")}
+                    </button>
+                  </div>
+                  <div className="settings-two-up">
+                    <label className="settings-field">
+                      <span>{inline("Tag ID", "Tag ID")}</span>
+                      <input
+                        value={tag.id}
+                        onChange={(event) => {
+                          updateDraftState((current) => ({
+                            ...current,
+                            namingTags: current.namingTags.map((item, tagIndex) =>
+                              tagIndex === index ? { ...item, id: event.target.value } : item
+                            )
+                          }));
+                        }}
+                      />
+                    </label>
+                    <label className="settings-field">
+                      <span>{inline("显示标签", "Display label")}</span>
+                      <input
+                        value={tag.label}
+                        onChange={(event) => {
+                          updateDraftState((current) => ({
+                            ...current,
+                            namingTags: current.namingTags.map((item, tagIndex) =>
+                              tagIndex === index ? { ...item, label: event.target.value } : item
+                            )
+                          }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <label className="settings-field">
+                    <span>{inline("Tag 描述", "Tag description")}</span>
+                    <input
+                      value={tag.description}
+                      onChange={(event) => {
+                        updateDraftState((current) => ({
+                          ...current,
+                          namingTags: current.namingTags.map((item, tagIndex) =>
+                            tagIndex === index ? { ...item, description: event.target.value } : item
+                          )
+                        }));
+                      }}
+                    />
+                  </label>
+                  <label className="settings-field">
+                    <span>{inline("命中提示词", "Match hint")}</span>
+                    <input
+                      value={tag.promptHint}
+                      onChange={(event) => {
+                        updateDraftState((current) => ({
+                          ...current,
+                          namingTags: current.namingTags.map((item, tagIndex) =>
+                            tagIndex === index ? { ...item, promptHint: event.target.value } : item
+                          )
+                        }));
+                      }}
+                    />
+                  </label>
+                </article>
+              ))}
+            </div>
+          </section>
+          <label className="settings-field settings-field-wide">
+            <span>{inline("自定义 Prompt 覆写", "Custom prompt override")}</span>
+            <textarea
+              rows={4}
+              value={draft.namingCustomPrompt}
+              onChange={(event) => {
+                updateDraftField("namingCustomPrompt", event.target.value);
+              }}
+            />
+          </label>
+          <details className="settings-disclosure">
+            <summary>{inline("查看兼容层模板", "View legacy template")}</summary>
+            <label className="settings-field settings-field-wide">
+              <span>{tt("template")}</span>
+              <textarea
+                rows={3}
+                value={draft.namingTemplate}
+                onChange={(event) => {
+                  updateDraftField("namingTemplate", event.target.value);
+                }}
+              />
+            </label>
+          </details>
           <div className="settings-two-up">
             <ChoiceGroup
               label={tt("autoApply")}

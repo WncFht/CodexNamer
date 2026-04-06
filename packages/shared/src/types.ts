@@ -6,6 +6,8 @@ export type AiRequestTransport = "responses" | "chat_completions" | "codex-exec"
 export type AiRequestStatus = "running" | "succeeded" | "failed";
 export type RenameContextStrategy = "summary-signals" | "user-assistant-transcript";
 export type NamingStyle = "brief" | "detailed";
+export type NamingCompositionMode = "structured" | "prompt-override";
+export type NamingComponent = "tag" | "kind" | "scope" | "summary" | "project";
 export type UiLanguage = "en-US" | "zh-CN";
 export type RenameContextSegmentSource =
   | "summary_first_user"
@@ -43,6 +45,13 @@ export interface RenameContext {
   };
 }
 
+export interface NamingTagDefinition {
+  id: string;
+  label?: string;
+  description?: string;
+  promptHint?: string;
+}
+
 export interface WatchConfig {
   scanIntervalSeconds: number;
   candidateIdleSeconds: number;
@@ -61,6 +70,11 @@ export interface NamingConfig {
   defaultStyle: NamingStyle;
   contextStrategy: RenameContextStrategy;
   contextMaxChars: number;
+  compositionMode: NamingCompositionMode;
+  components: NamingComponent[];
+  componentSeparator: string;
+  tags: NamingTagDefinition[];
+  customPrompt?: string;
 }
 
 export interface RenameConfig {
@@ -464,6 +478,7 @@ export interface OverviewReport {
     appliedTokens: number;
     averageTokensPerSession: number;
     averageTokensPerDirtySession: number;
+    averageTitleLength: number;
     topWorkspacesByTokens: Array<{
       workspaceId: string;
       workspaceLabel: string;

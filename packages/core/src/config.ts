@@ -47,6 +47,91 @@ function getNumber(record: Record<string, unknown>, ...keys: string[]): number |
   return undefined;
 }
 
+function getStringArray(record: Record<string, unknown>, ...keys: string[]): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    const strings = value.filter((item): item is string => typeof item === "string");
+    if (strings.length > 0) {
+      return strings;
+    }
+  }
+  return undefined;
+}
+
+function normalizeNamingTags(value: unknown): EffectiveConfig["naming"]["tags"] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const tags = value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((record) => ({
+      id: getString(record, "id") ?? "",
+      label: getString(record, "label"),
+      description: getString(record, "description"),
+      promptHint: getString(record, "prompt_hint", "promptHint")
+    }))
+    .filter((tag) => tag.id.trim().length > 0);
+
+  return tags.length > 0 ? tags : undefined;
+}
+
+const DEFAULT_NAMING_TAGS: EffectiveConfig["naming"]["tags"] = [
+  {
+    id: "settings",
+    description: "配置、设置、保存、语言、provider 相关会话。",
+    promptHint: "setting settings config save language provider explicit inherit-codex ui"
+  },
+  {
+    id: "rename",
+    description: "命名规则、命名风格、标题结构相关会话。",
+    promptHint: "rename naming title brief detailed style summary scope"
+  },
+  {
+    id: "context",
+    description: "rename context、transcript、上下文策略相关会话。",
+    promptHint: "context transcript user assistant summary signals history"
+  },
+  {
+    id: "prompt",
+    description: "AI prompt、提示词、provider 请求构造相关会话。",
+    promptHint: "prompt instruction ai provider responses chat completions"
+  },
+  {
+    id: "provider",
+    description: "模型提供方、base URL、模型、鉴权配置相关会话。",
+    promptHint: "provider base url model api key auth wire api relay"
+  },
+  {
+    id: "daemon",
+    description: "后台 watcher、scan、auto-apply 相关会话。",
+    promptHint: "daemon watcher scan auto apply heartbeat background"
+  },
+  {
+    id: "history",
+    description: "命名历史、timeline、session detail 相关会话。",
+    promptHint: "history timeline detail rename history session detail"
+  },
+  {
+    id: "tests",
+    description: "测试、回归、构建验证相关会话。",
+    promptHint: "test testing regression build tsc vitest"
+  },
+  {
+    id: "docs",
+    description: "README、维护文档、说明同步相关会话。",
+    promptHint: "docs readme documentation spec"
+  },
+  {
+    id: "workspace",
+    description: "工作区、会话列表、布局与目录边界相关会话。",
+    promptHint: "workspace session list layout project cwd"
+  }
+];
+
 const DEFAULT_CONFIG: EffectiveConfig = {
   general: {
     codexHome: "~/.codex",
@@ -69,7 +154,12 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     language: "zh-CN",
     defaultStyle: "detailed",
     contextStrategy: "summary-signals",
-    contextMaxChars: 8_000
+    contextMaxChars: 8_000,
+    compositionMode: "structured",
+    components: ["tag", "kind", "summary"],
+    componentSeparator: " · ",
+    tags: DEFAULT_NAMING_TAGS,
+    customPrompt: undefined
   },
   ai: {
     backend: "codex",
@@ -232,7 +322,20 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
         "context_strategy",
         "contextStrategy"
       ) as EffectiveConfig["naming"]["contextStrategy"] | undefined,
-      contextMaxChars: getNumber(naming, "context_max_chars", "contextMaxChars")
+      contextMaxChars: getNumber(naming, "context_max_chars", "contextMaxChars"),
+      compositionMode: getString(
+        naming,
+        "composition_mode",
+        "compositionMode"
+      ) as EffectiveConfig["naming"]["compositionMode"] | undefined,
+      components: getStringArray(naming, "components") as EffectiveConfig["naming"]["components"] | undefined,
+      componentSeparator: getString(
+        naming,
+        "component_separator",
+        "componentSeparator"
+      ),
+      tags: normalizeNamingTags(naming.tags),
+      customPrompt: getString(naming, "custom_prompt", "customPrompt")
     },
     ai: {
       backend: getString(ai, "backend") as EffectiveConfig["ai"]["backend"] | undefined,
@@ -376,7 +479,19 @@ function serializeConfigDocument(document: ConfigDocument): string {
       language: document.naming?.language,
       default_style: document.naming?.defaultStyle,
       context_strategy: document.naming?.contextStrategy,
-      context_max_chars: document.naming?.contextMaxChars
+      context_max_chars: document.naming?.contextMaxChars,
+      composition_mode: document.naming?.compositionMode,
+      components: document.naming?.components,
+      component_separator: document.naming?.componentSeparator,
+      tags: document.naming?.tags?.map((tag) =>
+        stripEmptyRecord({
+          id: tag.id,
+          label: tag.label,
+          description: tag.description,
+          prompt_hint: tag.promptHint
+        })
+      ),
+      custom_prompt: document.naming?.customPrompt
     }),
     ai: stripEmptyRecord({
       backend: document.ai?.backend,

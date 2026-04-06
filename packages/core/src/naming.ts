@@ -1,6 +1,7 @@
 import type {
   EffectiveConfig,
   MaterializedSession,
+  NamingTagDefinition,
   NamingStyle,
   RenameSuggestion
 } from "@codex-session-manager/shared";
@@ -161,8 +162,49 @@ const TOPIC_RULES: TopicRule[] = [
   }
 ];
 
+const BUILTIN_TAG_LABELS: Record<
+  string,
+  {
+    zh: string;
+    en: string;
+  }
+> = {
+  settings: { zh: "设置", en: "settings" },
+  rename: { zh: "命名", en: "rename" },
+  context: { zh: "上下文", en: "context" },
+  prompt: { zh: "Prompt", en: "prompt" },
+  provider: { zh: "Provider", en: "provider" },
+  daemon: { zh: "Daemon", en: "daemon" },
+  history: { zh: "历史", en: "history" },
+  tests: { zh: "测试", en: "tests" },
+  docs: { zh: "文档", en: "docs" },
+  workspace: { zh: "工作区", en: "workspace" }
+};
+
 function prefersChinese(language: string): boolean {
   return /^zh\b/i.test(language);
+}
+
+export function resolveTagDisplayLabel(tag: NamingTagDefinition, language: string): string {
+  const explicit = normalizeTaskText(tag.label);
+  if (explicit) {
+    return explicit;
+  }
+
+  const builtin = BUILTIN_TAG_LABELS[tag.id];
+  if (builtin) {
+    return prefersChinese(language) ? builtin.zh : builtin.en;
+  }
+
+  return tag.id;
+}
+
+function extractTagKeywords(tag: NamingTagDefinition): string[] {
+  const combined = [tag.id, tag.label, tag.description, tag.promptHint]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  const matches = combined.match(/[\u4e00-\u9fff]{1,}|[A-Za-z0-9_-]{2,}/g) ?? [];
+  return Array.from(new Set(matches.map((value) => value.toLowerCase())));
 }
 
 export function resolveNamingStyle(
@@ -315,6 +357,68 @@ function detectTopics(session: MaterializedSession, language: string): Array<{ s
   }
 
   return Array.from(scores.values()).sort((left, right) => right.score - left.score);
+}
+
+function detectNamingTag(
+  session: MaterializedSession,
+  config: EffectiveConfig
+): NamingTagDefinition | undefined {
+  if (config.naming.tags.length === 0) {
+    return undefined;
+  }
+
+  const textSources = collectTaskTexts(session);
+  const topicMatches = detectTopics(session, config.naming.language);
+  const topicKeys = new Set<string>();
+  for (const topic of topicMatches) {
+    topicKeys.add(topic.scope.toLowerCase());
+    topicKeys.add(topic.label.toLowerCase());
+  }
+
+  let best:
+    | {
+        tag: NamingTagDefinition;
+        score: number;
+      }
+    | undefined;
+
+  for (const tag of config.naming.tags) {
+    const keywords = extractTagKeywords(tag);
+    if (keywords.length === 0) {
+      continue;
+    }
+
+    let score = 0;
+    for (const source of textSources) {
+      const haystack = source.text.toLowerCase();
+      for (const keyword of keywords) {
+        if (!haystack.includes(keyword)) {
+          continue;
+        }
+        score += source.weight + Math.min(keyword.length, 8);
+      }
+    }
+
+    if (topicKeys.has(tag.id.toLowerCase())) {
+      score += 12;
+    }
+    if (topicMatches.some((topic) => resolveTagDisplayLabel(tag, config.naming.language).toLowerCase() === topic.label.toLowerCase())) {
+      score += 10;
+    }
+
+    if (score <= 0) {
+      continue;
+    }
+
+    if (!best || score > best.score) {
+      best = {
+        tag,
+        score
+      };
+    }
+  }
+
+  return best?.tag;
 }
 
 function detectIssueSuffix(joined: string, language: string): string | undefined {
@@ -534,6 +638,43 @@ function renderTemplate(
   return output.replace(/\s+/g, " ").trim();
 }
 
+function renderStructuredName(
+  session: MaterializedSession,
+  config: EffectiveConfig,
+  fields: {
+    kind: string;
+    summary: string;
+    scope?: string;
+    tag?: NamingTagDefinition;
+  }
+): string {
+  const parts = config.naming.components
+    .map((component) => {
+      switch (component) {
+        case "tag":
+          return fields.tag ? `#${resolveTagDisplayLabel(fields.tag, config.naming.language)}` : undefined;
+        case "kind":
+          return fields.kind;
+        case "scope":
+          return fields.scope;
+        case "summary":
+          return fields.summary;
+        case "project":
+          return session.projectName ?? basenameSafe(session.cwd) ?? undefined;
+        default:
+          return undefined;
+      }
+    })
+    .filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+  const separator = config.naming.componentSeparator || " · ";
+  if (parts.length === 0) {
+    return renderTemplate(config.naming.template, session, fields);
+  }
+
+  return parts.join(separator).replace(/\s+/g, " ").trim();
+}
+
 export function suggestNameHeuristically(
   session: MaterializedSession,
   config: EffectiveConfig
@@ -559,8 +700,14 @@ export function suggestNameHeuristically(
       : materialized.projectName && materialized.projectName !== "fanghaotian"
         ? materialized.projectName
         : undefined;
+  const tag = detectNamingTag(materialized, config);
 
-  let name = renderTemplate(config.naming.template, materialized, { kind, summary, scope });
+  let name = renderStructuredName(materialized, config, {
+    kind,
+    summary,
+    scope,
+    tag
+  });
   if (name.length > config.naming.maxLength) {
     name = name.slice(0, config.naming.maxLength).trim();
   }

@@ -16,7 +16,7 @@ import type {
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
-import { resolveNamingStyle, suggestNameHeuristically } from "./naming.js";
+import { resolveNamingStyle, resolveTagDisplayLabel, suggestNameHeuristically } from "./naming.js";
 import { buildRenameContext } from "./rename-context.js";
 import { stripControl, toUtcIso } from "./util.js";
 
@@ -172,6 +172,26 @@ function normalizePromptField(value: string | undefined, maxLength: number): str
 export function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
   const style = resolveNamingStyle(session, config);
+  const componentSummary = config.naming.components.join(", ") || "(none)";
+  const structuredGuidance =
+    "Structured naming mode is active. Build the final name by following the configured component order exactly, skipping only components that have no meaningful value.";
+  const promptOverrideDetails = config.naming.customPrompt?.trim()
+    ? [
+        "Custom prompt override is active. Treat the override below as the highest-priority naming policy, while still obeying the JSON-only response contract and max length.",
+        "Custom naming override:",
+        config.naming.customPrompt.trim()
+      ]
+    : [
+        "Prompt override mode is active, but no custom override text was configured. Fall back to the structured component policy."
+      ];
+  const tagLines = config.naming.tags.map((tag) => {
+    const label = resolveTagDisplayLabel(tag, config.naming.language);
+    const descriptor =
+      normalizePromptField(tag.description, 120) ||
+      normalizePromptField(tag.promptHint, 120) ||
+      "";
+    return descriptor ? `- ${tag.id} => ${label} | ${descriptor}` : `- ${tag.id} => ${label}`;
+  });
   const styleGuidance =
     style === "detailed"
       ? "Preferred naming style: detailed. Use more of the available length budget, and include one concrete secondary focus when it materially distinguishes the session."
@@ -187,6 +207,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     "Prefer a short but specific summary suitable for a session list.",
     "Make the rename concrete: capture the main subsystem plus the actual action, issue, or review focus.",
     "If the session has two tightly related goals, use one short secondary fragment rather than a generic umbrella noun.",
+    config.naming.compositionMode === "structured" ? structuredGuidance : promptOverrideDetails[0],
     "Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.",
     "",
     "Session context:",
@@ -201,6 +222,9 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
     `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
     `namingStyle: ${style}`,
+    `namingCompositionMode: ${config.naming.compositionMode}`,
+    `namingComponents: ${componentSummary}`,
+    `componentSeparator: ${JSON.stringify(config.naming.componentSeparator)}`,
     `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
     `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
     `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
@@ -210,7 +234,11 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     "Rename context:",
     normalizePromptField(renameContext.text, renameContext.maxChars),
     "",
-    "Name template preference:",
+    "Structured naming tags:",
+    ...(tagLines.length > 0 ? tagLines : ["(none)"]),
+    "",
+    ...(config.naming.compositionMode === "prompt-override" ? [...promptOverrideDetails.slice(1), ""] : []),
+    "Legacy template reference:",
     config.naming.template
   ];
 

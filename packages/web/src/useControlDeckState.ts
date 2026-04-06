@@ -453,13 +453,17 @@ export function useControlDeckState() {
     };
   }, []);
 
-  const refreshCurrentSelection = (threadId = latestUiStateRef.current.selectedId) => {
+  const refreshVisibleState = (
+    threadId = latestUiStateRef.current.selectedId,
+    options?: {
+      promptPreview?: boolean;
+    }
+  ) => {
     void reloadSessions();
     void reloadSidePanels().catch(() => undefined);
     void reloadPreview({ includeCandidateNames: false }).catch(() => undefined);
-    void reloadPromptPreview({ threadId }).catch(() => undefined);
-    if (threadId) {
-      void reloadDetail(threadId);
+    if (options?.promptPreview) {
+      void reloadPromptPreview({ threadId }).catch(() => undefined);
     }
   };
 
@@ -469,7 +473,7 @@ export function useControlDeckState() {
     }
 
     const timer = window.setInterval(() => {
-      refreshCurrentSelection();
+      refreshVisibleState();
     }, 3_000);
 
     return () => {
@@ -486,7 +490,7 @@ export function useControlDeckState() {
             return;
           }
 
-          refreshCurrentSelection();
+          refreshVisibleState();
         })
         .catch(() => {
           void reloadSessions();
@@ -499,7 +503,7 @@ export function useControlDeckState() {
   }, []);
 
   const refreshAfterAction = (threadId: string) => {
-    refreshCurrentSelection(threadId);
+    refreshVisibleState(threadId);
   };
 
   const runAction = async <T>(options: {

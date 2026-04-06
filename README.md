@@ -65,11 +65,20 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 - 单会话可以单独切换“跟随默认 / 详细 / 简略”
 - `rename_history` 现在会记录每次 rename 对应的风格版本
 
+当前命名还有一条新的“组件组合”约定：
+
+- 默认模式是 `structured`
+- 标题由 `tag / kind / scope / summary / project` 这些组件按顺序拼装
+- tag 目录可以在 Settings 里编辑
+- 高级用户也可以切到 `prompt-override`，给 AI 一段自定义命名覆写 prompt
+- `template` 现在只保留为兼容层参考字段，不再是主要推荐入口
+
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 - Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
 - WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、context 策略与字符预算配置、运行态面板；旧的 `rename.mode` 已不再在设置页暴露
 - 运行态面板现在还会显示 AI 请求日志，包含活跃请求、最近请求状态、传输方式、耗时与错误
+- Settings / 运行态现在都会展示“平均标题字数”
 - TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
 
 ## 文档导航
@@ -191,6 +200,14 @@ language = "zh-CN"
 default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
+composition_mode = "structured"
+components = ["tag", "kind", "summary"]
+component_separator = " · "
+
+[[naming.tags]]
+id = "settings"
+description = "配置、设置、保存、语言、provider 相关会话。"
+prompt_hint = "setting settings config save language provider"
 ```
 
 如果你想显式指定 URL + API key：
@@ -247,8 +264,8 @@ npm run web
 WebUI 当前包含 3 个主视图：
 
 - `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
-- `Settings`：命名模板、默认命名风格、context 策略与 `context_max_chars`、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
-- `Rename Ops / 运行态`：自动重命名运行态、近期应用活动、命名来源分布、工作区 token 压力、预览队列与原始 doctor 信息
+- `Settings`：默认命名风格、context 策略与 `context_max_chars`、结构化命名组件、tag 目录、prompt override、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
+- `Rename Ops / 运行态`：自动重命名运行态、近期应用活动、命名来源分布、工作区 token 压力、平均标题字数、预览队列与原始 doctor 信息
 
 运行态页现在会明确展示：
 

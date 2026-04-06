@@ -49,6 +49,16 @@ template = "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"
 max_length = 72
 language = "zh-CN"
 default_style = "detailed"
+context_strategy = "summary-signals"
+context_max_chars = 8000
+composition_mode = "structured"
+components = ["tag", "kind", "summary"]
+component_separator = " · "
+
+[[naming.tags]]
+id = "settings"
+description = "配置、设置、保存、语言、provider 相关会话。"
+prompt_hint = "setting settings config save language provider"
 
 [ai]
 backend = "codex"
@@ -82,6 +92,8 @@ backup_before_compact = true
 从当前版本开始，`[naming]` 还新增一个正式配置项：
 
 - `default_style = "detailed" | "brief"`
+- `context_strategy = "summary-signals" | "user-assistant-transcript"`
+- `context_max_chars = <number>`
 
 语义：
 
@@ -99,12 +111,62 @@ backup_before_compact = true
 - 它决定的是“在当前命名链路里，标题更偏详细版还是简略版”
 - 单会话还可以单独覆盖这个默认值
 
+## 结构化命名组合
+
+从这一版开始，`[naming]` 还新增了一组“结构化命名组合”字段：
+
+- `composition_mode = "structured" | "prompt-override"`
+- `components = ["tag", "kind", "scope", "summary", "project"]` 的有序子集
+- `component_separator = " · "`：组件之间如何拼接
+- `[[naming.tags]]`：可编辑的分类 tag 目录
+- `custom_prompt = "..."`：仅在 `prompt-override` 模式下作为 AI 覆写指令
+
+语义：
+
+- `structured`
+  - 默认模式
+  - AI prompt 和 heuristic 都会读取组件顺序与 tag 目录
+  - 用户不需要自己写 prompt，只需要调组件和 tag
+- `prompt-override`
+  - 仍然保留结构化组件信息
+  - 但会额外把 `custom_prompt` 作为最高优先级 AI 指令
+  - 适合高级用户做强约束或个性化覆写
+
+注意：
+
+- `template` 现在退化为兼容层参考字段，不再是主要推荐入口
+- 真正控制最终标题结构的主入口已经变成：
+  - `components`
+  - `component_separator`
+  - `tags`
+- 如果组件顺序里不包含 `tag`，即使某个 tag 被命中，也不会出现在最终标题里
+
+## Tag 目录
+
+`[[naming.tags]]` 每项当前支持：
+
+- `id`
+- `label`
+- `description`
+- `prompt_hint`
+
+用法：
+
+- `id`：内部稳定标识
+- `label`：最终显示标签；如果缺省，会回退到内置的本地化 label 或直接使用 `id`
+- `description`：给人和 prompt preview 看的短说明
+- `prompt_hint`：给 AI 和 heuristic 做分类命中的关键词提示
+
+当前 tag 的定位是“分类”，不是“二级模板”。
+也就是说，tag 只负责告诉系统“这次会话大致属于哪一类”，
+真正的标题正文仍由 `kind / scope / summary / project` 等组件决定。
+
 ## AI 后端
 
 ### `backend = "none"`
 
 - 不使用 AI
-- 全部由 heuristic + template 生成
+- 全部由 heuristic + 结构化组件生成
 - 默认必须可用
 
 ### `backend = "openai-compatible"`

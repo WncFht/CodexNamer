@@ -108,7 +108,19 @@ describe("config loading", () => {
           maxLength: 48,
           defaultStyle: "brief",
           contextStrategy: "user-assistant-transcript",
-          contextMaxChars: 4096
+          contextMaxChars: 4096,
+          compositionMode: "prompt-override",
+          components: ["tag", "summary"],
+          componentSeparator: " / ",
+          tags: [
+            {
+              id: "settings",
+              label: "设置",
+              description: "配置与设置问题",
+              promptHint: "config settings save"
+            }
+          ],
+          customPrompt: "Always classify the session before naming it."
         },
         providerProfiles: [
           {
@@ -141,6 +153,12 @@ describe("config loading", () => {
     expect(effective.naming.defaultStyle).toBe("brief");
     expect(effective.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(effective.naming.contextMaxChars).toBe(4096);
+    expect(effective.naming.compositionMode).toBe("prompt-override");
+    expect(effective.naming.components).toEqual(["tag", "summary"]);
+    expect(effective.naming.componentSeparator).toBe(" / ");
+    expect(effective.naming.tags).toHaveLength(1);
+    expect(effective.naming.tags[0]?.id).toBe("settings");
+    expect(effective.naming.customPrompt).toBe("Always classify the session before naming it.");
     expect(effective.providerProfiles[0]?.apiKey).toBe("keep-me");
     expect(view.userConfig.providerProfiles?.[0]?.apiKey).toBe(REDACTED_SECRET);
     expect(written).toContain('api_key = "keep-me"');
@@ -148,5 +166,9 @@ describe("config loading", () => {
     expect(written).toContain('default_style = "brief"');
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
+    expect(written).toContain('composition_mode = "prompt-override"');
+    expect(written).toContain('components = [ "tag", "summary" ]');
+    expect(written).toContain('component_separator = " / "');
+    expect(written).toContain('custom_prompt = "Always classify the session before naming it."');
   });
 });

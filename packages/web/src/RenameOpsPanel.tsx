@@ -688,6 +688,13 @@ export function RenameOpsPanel(props: {
             </p>
           </article>
           <article className="metric-card">
+            <span className="metric-label">{inline("平均标题字数", "Average title length")}</span>
+            <strong>{formatUiNumber(overview?.workload.averageTitleLength, props.uiLanguage)}</strong>
+            <p>
+              {formatUiNumber(overview?.sessions.named, props.uiLanguage)} {inline("个正式标题参与统计", "official titles in sample")}
+            </p>
+          </article>
+          <article className="metric-card">
             <span className="metric-label">{inline("当前队列", "Current queues")}</span>
             <strong>
               {formatUiNumber(previewApplyCount + previewSuggestCount, props.uiLanguage)}

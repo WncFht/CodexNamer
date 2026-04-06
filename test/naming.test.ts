@@ -36,7 +36,8 @@ describe("naming specificity", () => {
     expect(suggestion.summary).toContain("设置");
     expect(suggestion.summary).toContain("自动重命名逻辑");
     expect(suggestion.summary).toContain("聚焦");
-    expect(suggestion.name).toContain("fix(settings):");
+    expect(suggestion.name).toContain("#设置");
+    expect(suggestion.name).toContain("fix");
   });
 
   it("asks AI for specific names with expanded kind options", () => {
@@ -65,7 +66,38 @@ describe("naming specificity", () => {
     expect(prompt).toContain("Make the rename concrete");
     expect(prompt).toContain("Preferred naming style: detailed");
     expect(prompt).toContain("namingStyle: detailed");
+    expect(prompt).toContain("namingCompositionMode: structured");
+    expect(prompt).toContain("namingComponents: tag, kind, summary");
+    expect(prompt).toContain("Structured naming tags:");
     expect(prompt).toContain("Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.");
+  });
+
+  it("includes a custom prompt override when prompt-override mode is enabled", () => {
+    const config = buildConfigForTests({
+      naming: {
+        compositionMode: "prompt-override",
+        customPrompt: "Always prefer a domain tag first, then produce a concrete Chinese title."
+      }
+    });
+
+    const prompt = buildRenamePrompt(
+      {
+        threadId: "t-override",
+        rolloutPath: "/tmp/r.jsonl",
+        cwd: "/tmp/project",
+        projectName: "project",
+        taskCompleteCount: 1,
+        tokenTotal: 88,
+        firstUserMessage: "把 rename 做成可以加 tag 的样子",
+        lastUserMessage: "同时允许 prompt override",
+        lastAgentMessage: "我会把配置和 prompt 一起接上。"
+      },
+      config
+    );
+
+    expect(prompt).toContain("namingCompositionMode: prompt-override");
+    expect(prompt).toContain("Custom naming override:");
+    expect(prompt).toContain("Always prefer a domain tag first");
   });
 
   it("keeps brief style names shorter than detailed ones", () => {

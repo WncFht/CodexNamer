@@ -135,6 +135,7 @@ describe("local api", () => {
     expect(overview.statusCode).toBe(200);
     expect(overview.json().sessions.total).toBeGreaterThanOrEqual(1);
     expect(overview.json().runtime.daemonStatus).toBe("not_seen");
+    expect(overview.json().workload.averageTitleLength).toBeGreaterThanOrEqual(0);
 
     const logId = manager.db.startAiRequestLog({
       threadId: "019d-api-2",
@@ -324,7 +325,19 @@ describe("local api", () => {
           defaultStyle: "brief",
           template: "{{summary}}",
           contextStrategy: "user-assistant-transcript",
-          contextMaxChars: 4096
+          contextMaxChars: 4096,
+          compositionMode: "prompt-override",
+          components: ["tag", "summary"],
+          componentSeparator: " / ",
+          tags: [
+            {
+              id: "settings",
+              label: "设置",
+              description: "配置和保存问题",
+              promptHint: "config settings save"
+            }
+          ],
+          customPrompt: "Always output a Chinese classification tag first."
         },
         watch: {
           candidateIdleSeconds: 33
@@ -337,6 +350,13 @@ describe("local api", () => {
     expect(update.json().config.effectiveConfig.naming.defaultStyle).toBe("brief");
     expect(update.json().config.effectiveConfig.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(update.json().config.effectiveConfig.naming.contextMaxChars).toBe(4096);
+    expect(update.json().config.effectiveConfig.naming.compositionMode).toBe("prompt-override");
+    expect(update.json().config.effectiveConfig.naming.components).toEqual(["tag", "summary"]);
+    expect(update.json().config.effectiveConfig.naming.componentSeparator).toBe(" / ");
+    expect(update.json().config.effectiveConfig.naming.tags[0].id).toBe("settings");
+    expect(update.json().config.effectiveConfig.naming.customPrompt).toBe(
+      "Always output a Chinese classification tag first."
+    );
     expect(update.json().config.effectiveConfig.watch.candidateIdleSeconds).toBe(33);
 
     const events = await app.inject({
@@ -352,6 +372,10 @@ describe("local api", () => {
     expect(written).toContain('default_style = "brief"');
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
+    expect(written).toContain('composition_mode = "prompt-override"');
+    expect(written).toContain('components = [ "tag", "summary" ]');
+    expect(written).toContain('component_separator = " / "');
+    expect(written).toContain('custom_prompt = "Always output a Chinese classification tag first."');
     expect(written).toContain('candidate_idle_seconds = 33');
   });
 });
