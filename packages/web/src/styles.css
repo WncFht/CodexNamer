@@ -751,6 +751,12 @@ pre {
   min-height: 80px;
 }
 
+.settings-field-help {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .settings-choice-group {
   display: flex;
   flex-wrap: wrap;
@@ -1017,18 +1023,18 @@ pre {
 }
 
 .settings-hero {
-  width: min(100%, 1240px);
+  width: min(100%, 1180px);
   margin: 0 auto;
-  padding: 28px 28px 14px;
+  padding: 24px 24px 12px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .settings-hero-copy h2 {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   max-width: 18ch;
   font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
-  font-size: clamp(28px, 2.1vw, 40px);
+  font-size: clamp(24px, 1.9vw, 34px);
   font-weight: 500;
   line-height: 1.06;
   letter-spacing: -0.04em;
@@ -1039,8 +1045,8 @@ pre {
   margin: 0;
   max-width: 70ch;
   color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.68;
+  font-size: 13px;
+  line-height: 1.62;
 }
 
 .settings-hero .panel-kicker {
@@ -1056,14 +1062,14 @@ pre {
 
 .settings-hero-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .settings-hero-metric {
-  min-height: 104px;
-  padding: 16px 18px;
-  border-radius: 20px;
+  min-height: 96px;
+  padding: 14px 16px;
+  border-radius: 18px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-secondary) 78%, white 22%);
   box-shadow: var(--shadow-sm), 0 10px 26px rgba(20, 20, 19, 0.04);
@@ -1081,25 +1087,25 @@ pre {
 .settings-hero-metric strong {
   display: block;
   font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
-  font-size: clamp(24px, 1.7vw, 33px);
+  font-size: clamp(21px, 1.55vw, 29px);
   line-height: 1;
   letter-spacing: -0.04em;
   color: var(--text);
 }
 
 .settings-hero-metric p {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.58;
+  font-size: 12px;
+  line-height: 1.52;
 }
 
 .settings-shell {
-  width: min(100%, 1240px);
+  width: min(100%, 1180px);
   margin: 0 auto;
-  padding: 0 28px 36px;
+  padding: 0 24px 32px;
   display: grid;
-  gap: 20px;
+  gap: 16px;
   grid-template-columns: minmax(220px, 248px) minmax(0, 1fr);
   flex: 1;
   min-height: auto;
@@ -1108,15 +1114,15 @@ pre {
 
 .settings-nav {
   position: sticky;
-  top: 18px;
+  top: 14px;
   align-self: start;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .settings-nav-item {
-  padding: 16px 16px 15px;
-  border-radius: 18px;
+  padding: 14px 14px 13px;
+  border-radius: 16px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
   text-align: left;
@@ -1126,16 +1132,16 @@ pre {
 
 .settings-nav-item strong {
   display: block;
-  margin-bottom: 6px;
-  font-size: 14px;
+  margin-bottom: 5px;
+  font-size: 13px;
   color: var(--text);
 }
 
 .settings-nav-item span {
   display: block;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .settings-nav-item.active {
@@ -1149,8 +1155,8 @@ pre {
 }
 
 .settings-stage-section {
-  padding: 24px;
-  border-radius: 30px;
+  padding: 20px;
+  border-radius: 26px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
   box-shadow: var(--shadow-sm), 0 16px 34px rgba(20, 20, 19, 0.05);
@@ -1159,7 +1165,7 @@ pre {
 .settings-section-header h3 {
   margin: 4px 0 10px;
   font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
-  font-size: clamp(22px, 1.9vw, 32px);
+  font-size: clamp(20px, 1.7vw, 28px);
   font-weight: 500;
   line-height: 1.04;
   letter-spacing: -0.04em;
@@ -1176,8 +1182,8 @@ pre {
 
 .settings-section-body {
   display: grid;
-  gap: 16px;
-  margin-top: 18px;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .settings-stage-grid {
@@ -1195,8 +1201,8 @@ pre {
 }
 
 .settings-surface-card {
-  padding: 18px;
-  border-radius: 22px;
+  padding: 16px;
+  border-radius: 20px;
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-sm);
@@ -1213,7 +1219,7 @@ pre {
 
 .settings-surface-card h4 {
   margin: 2px 0 0;
-  font-size: 18px;
+  font-size: 16px;
   color: var(--text);
 }
 
@@ -1235,6 +1241,7 @@ pre {
   border-color: var(--border-strong);
   color: var(--text);
   box-shadow: var(--ring-sm);
+  font-size: 13px;
 }
 
 .settings-stage-section .settings-field textarea::placeholder,
@@ -1249,14 +1256,17 @@ pre {
 }
 
 .settings-choice {
+  display: flex;
+  flex-direction: column;
   min-width: 160px;
-  min-height: 46px;
-  padding: 12px 14px;
-  border-radius: 16px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
   color: var(--text);
   box-shadow: var(--ring-sm);
+  gap: 3px;
   justify-content: flex-start;
   align-items: flex-start;
   flex: 1 1 190px;
@@ -1264,7 +1274,7 @@ pre {
 
 .settings-choice span {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   pointer-events: none;
 }
 
@@ -1272,8 +1282,8 @@ pre {
   display: block;
   margin-top: 4px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .settings-choice.active {
@@ -1330,7 +1340,7 @@ pre {
 
 .settings-builder-label,
 .settings-preview-kicker {
-  color: rgba(166, 190, 241, 0.72);
+  color: var(--text-muted);
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1343,39 +1353,61 @@ pre {
 }
 
 .settings-builder-chip {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 999px;
-  border: 1px dashed rgba(166, 72, 42, 0.32);
-  background: color-mix(in srgb, var(--bg-secondary) 88%, white 12%);
+  border: 1px dashed rgba(166, 72, 42, 0.24);
+  background: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
   color: var(--text);
+  font-size: 12px;
+}
+
+.settings-builder-chip-separator {
+  font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+}
+
+.settings-custom-separator {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-custom-separator input {
+  min-width: 120px;
+  flex: 0 1 160px;
 }
 
 .settings-builder-lane {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .settings-builder-card {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 18px;
+  padding: 12px 14px;
+  border-radius: 16px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
+}
+
+.settings-builder-card.separator {
+  background: color-mix(in srgb, var(--bg-tertiary) 74%, white 26%);
 }
 
 .settings-builder-card strong {
   display: block;
   margin-bottom: 4px;
   color: var(--text);
+  font-size: 13px;
 }
 
 .settings-builder-card p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .settings-builder-actions {
@@ -1383,11 +1415,16 @@ pre {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.settings-builder-actions select {
+  min-width: 140px;
 }
 
 .settings-preview-card {
-  padding: 18px;
-  border-radius: 22px;
+  padding: 16px;
+  border-radius: 20px;
   border: 1px solid rgba(166, 72, 42, 0.18);
   background:
     radial-gradient(circle at top right, rgba(201, 100, 66, 0.12), transparent 28%),
@@ -1399,7 +1436,7 @@ pre {
 
 .settings-preview-card strong {
   font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
-  font-size: clamp(22px, 1.6vw, 30px);
+  font-size: clamp(19px, 1.45vw, 25px);
   line-height: 1.12;
   color: var(--text);
   letter-spacing: -0.03em;
@@ -1408,7 +1445,8 @@ pre {
 .settings-preview-card p {
   margin: 0;
   color: var(--text-secondary);
-  line-height: 1.65;
+  line-height: 1.55;
+  font-size: 12px;
 }
 
 .settings-tag-gallery {
@@ -1418,8 +1456,8 @@ pre {
 }
 
 .settings-tag-card-button {
-  padding: 16px;
-  border-radius: 20px;
+  padding: 14px;
+  border-radius: 18px;
   border: 1px solid var(--border-strong);
   background: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
   text-align: left;
@@ -1432,7 +1470,8 @@ pre {
 .settings-tag-card-button small {
   margin: 0;
   color: var(--text-secondary);
-  line-height: 1.55;
+  line-height: 1.5;
+  font-size: 12px;
 }
 
 .settings-tag-card-button code {
@@ -1452,10 +1491,10 @@ pre {
 .settings-tag-pill {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: 999px;
   border: 1px solid rgba(120, 153, 223, 0.18);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1536,8 +1575,8 @@ pre {
   width: min(820px, 100%);
   max-height: calc(100vh - 48px);
   overflow: auto;
-  padding: 20px 20px 18px;
-  border-radius: 28px;
+  padding: 18px 18px 16px;
+  border-radius: 24px;
   border: 1px solid var(--border-strong);
   background:
     radial-gradient(circle at top right, rgba(201, 100, 66, 0.09), transparent 22%),
@@ -1555,7 +1594,7 @@ pre {
 
 .settings-modal-header h4 {
   margin: 4px 0 0;
-  font-size: 22px;
+  font-size: 19px;
   color: var(--text);
 }
 
@@ -1606,7 +1645,8 @@ pre {
   margin: 0;
   color: var(--text);
   word-break: break-word;
-  line-height: 1.5;
+  line-height: 1.45;
+  font-size: 13px;
 }
 
 .settings-json {
@@ -1618,8 +1658,8 @@ pre {
   overflow: auto;
   color: var(--text-secondary);
   box-shadow: var(--shadow-sm);
-  font-size: 12px;
-  line-height: 1.65;
+  font-size: 11px;
+  line-height: 1.58;
 }
 
 .settings-json-large {

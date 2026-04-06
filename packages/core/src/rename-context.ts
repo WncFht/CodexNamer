@@ -4,6 +4,7 @@ import type {
   RenameContext,
   RenameContextSegment,
   RenameContextSegmentSource,
+  RenameContextStrategy,
   SessionTranscript
 } from "@codex-session-manager/shared";
 
@@ -103,13 +104,18 @@ function dedupeConsecutiveSegments(segments: RenameContextSegment[]): RenameCont
   return output;
 }
 
-function buildSummarySignalContext(
+function buildSummaryCandidates(
   session: MaterializedSession,
-  maxChars: number,
-  requestedStrategy: RenameContext["requestedStrategy"],
-  fallbackReason?: RenameContext["fallbackReason"]
-): RenameContext {
-  const candidates = [
+  strategy: Extract<RenameContextStrategy, "summary-signals" | "last-user-last-assistant">
+): RenameContextSegment[] {
+  if (strategy === "last-user-last-assistant") {
+    return [
+      buildSegment("user", session.lastUserMessage, "summary_last_user"),
+      buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant")
+    ].filter((value): value is RenameContextSegment => Boolean(value));
+  }
+
+  return [
     buildSegment("user", session.firstUserMessage, "summary_first_user"),
     buildSegment(
       "user",
@@ -120,7 +126,16 @@ function buildSummarySignalContext(
     ),
     buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant")
   ].filter((value): value is RenameContextSegment => Boolean(value));
+}
 
+function buildContextFromCandidates(
+  candidates: RenameContextSegment[],
+  maxChars: number,
+  requestedStrategy: RenameContext["requestedStrategy"],
+  strategy: RenameContext["strategy"],
+  session: MaterializedSession,
+  fallbackReason?: RenameContext["fallbackReason"]
+): RenameContext {
   const selected: RenameContextSegment[] = [];
   let remainingChars = maxChars;
   let truncated = false;
@@ -137,7 +152,7 @@ function buildSummarySignalContext(
 
   return {
     requestedStrategy,
-    strategy: "summary-signals",
+    strategy,
     maxChars,
     text: formatContextText(selected),
     truncated,
@@ -152,10 +167,45 @@ function buildSummarySignalContext(
   };
 }
 
-function buildTranscriptCandidates(transcript?: SessionTranscript): RenameContextSegment[] {
+function buildSummarySignalContext(
+  session: MaterializedSession,
+  maxChars: number,
+  requestedStrategy: RenameContext["requestedStrategy"],
+  fallbackReason?: RenameContext["fallbackReason"]
+): RenameContext {
+  return buildContextFromCandidates(
+    buildSummaryCandidates(session, "summary-signals"),
+    maxChars,
+    requestedStrategy,
+    "summary-signals",
+    session,
+    fallbackReason
+  );
+}
+
+function buildLastTurnContext(
+  session: MaterializedSession,
+  maxChars: number,
+  requestedStrategy: RenameContext["requestedStrategy"]
+): RenameContext {
+  return buildContextFromCandidates(
+    buildSummaryCandidates(session, "last-user-last-assistant"),
+    maxChars,
+    requestedStrategy,
+    "last-user-last-assistant",
+    session
+  );
+}
+
+function buildTranscriptCandidates(
+  transcript: SessionTranscript | undefined,
+  roles: Array<"user" | "assistant">
+): RenameContextSegment[] {
   if (!transcript) {
     return [];
   }
+
+  const allowedRoles = new Set(roles);
 
   const candidates = transcript.items
     .filter((item) => !item.hidden)
@@ -163,6 +213,7 @@ function buildTranscriptCandidates(transcript?: SessionTranscript): RenameContex
     .filter((item): item is typeof item & { role: "user" | "assistant" } =>
       item.role === "user" || item.role === "assistant"
     )
+    .filter((item) => allowedRoles.has(item.role))
     .map((item) =>
       buildSegment(item.role, item.content, "transcript_recent", item.timestamp)
     )
@@ -171,21 +222,19 @@ function buildTranscriptCandidates(transcript?: SessionTranscript): RenameContex
   return dedupeConsecutiveSegments(candidates);
 }
 
-export function buildRenameContext(
+function buildTranscriptContext(
   session: MaterializedSession,
-  config: EffectiveConfig,
-  options?: {
-    transcript?: SessionTranscript;
-  }
+  maxChars: number,
+  requestedStrategy: Extract<
+    RenameContextStrategy,
+    | "user-assistant-transcript"
+    | "user-only-transcript"
+    | "assistant-only-transcript"
+    | "user-transcript-last-assistant"
+  >,
+  transcript?: SessionTranscript
 ): RenameContext {
-  const requestedStrategy = config.naming.contextStrategy;
-  const maxChars = Math.max(32, Math.trunc(config.naming.contextMaxChars || 8_000));
-
-  if (requestedStrategy === "summary-signals") {
-    return buildSummarySignalContext(session, maxChars, requestedStrategy);
-  }
-
-  if (!options?.transcript) {
+  if (!transcript) {
     return buildSummarySignalContext(
       session,
       maxChars,
@@ -194,7 +243,14 @@ export function buildRenameContext(
     );
   }
 
-  const recentCandidates = buildTranscriptCandidates(options.transcript);
+  const roles =
+    requestedStrategy === "assistant-only-transcript"
+      ? (["assistant"] as Array<"assistant">)
+      : requestedStrategy === "user-assistant-transcript"
+        ? (["user", "assistant"] as Array<"user" | "assistant">)
+        : (["user"] as Array<"user">);
+
+  const recentCandidates = buildTranscriptCandidates(transcript, roles);
   if (recentCandidates.length === 0) {
     return buildSummarySignalContext(
       session,
@@ -205,8 +261,10 @@ export function buildRenameContext(
   }
 
   const seedContent =
-    normalizeContextMessage(session.firstUserMessage) ??
-    recentCandidates.find((segment) => segment.role === "user")?.content;
+    requestedStrategy === "assistant-only-transcript"
+      ? undefined
+      : normalizeContextMessage(session.firstUserMessage) ??
+        recentCandidates.find((segment) => segment.role === "user")?.content;
   const seedSegment = seedContent
     ? buildSegment("user", seedContent, "transcript_seed")
     : undefined;
@@ -255,9 +313,22 @@ export function buildRenameContext(
 
   selected.push(...tail.reverse());
 
+  if (requestedStrategy === "user-transcript-last-assistant") {
+    const lastAssistant = buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant");
+    if (lastAssistant) {
+      const appended = appendWithinBudget(selected, lastAssistant, remainingChars);
+      if (appended.usedChars > 0) {
+        truncated ||= appended.clipped;
+        remainingChars -= appended.usedChars;
+      } else {
+        truncated = true;
+      }
+    }
+  }
+
   return {
     requestedStrategy,
-    strategy: "user-assistant-transcript",
+    strategy: requestedStrategy,
     maxChars,
     text: formatContextText(selected),
     truncated,
@@ -269,4 +340,25 @@ export function buildRenameContext(
       lastAgentMessage: normalizeContextMessage(session.lastAgentMessage)
     }
   };
+}
+
+export function buildRenameContext(
+  session: MaterializedSession,
+  config: EffectiveConfig,
+  options?: {
+    transcript?: SessionTranscript;
+  }
+): RenameContext {
+  const requestedStrategy = config.naming.contextStrategy;
+  const maxChars = Math.max(32, Math.trunc(config.naming.contextMaxChars || 8_000));
+
+  if (requestedStrategy === "summary-signals") {
+    return buildSummarySignalContext(session, maxChars, requestedStrategy);
+  }
+
+  if (requestedStrategy === "last-user-last-assistant") {
+    return buildLastTurnContext(session, maxChars, requestedStrategy);
+  }
+
+  return buildTranscriptContext(session, maxChars, requestedStrategy, options?.transcript);
 }

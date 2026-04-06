@@ -4,10 +4,23 @@ export type ProviderSource = "explicit" | "inherit-codex" | "mixed";
 export type ProviderWireApi = "responses" | "chat_completions" | "auto";
 export type AiRequestTransport = "responses" | "chat_completions" | "codex-exec";
 export type AiRequestStatus = "running" | "succeeded" | "failed";
-export type RenameContextStrategy = "summary-signals" | "user-assistant-transcript";
+export type RenameContextStrategy =
+  | "summary-signals"
+  | "last-user-last-assistant"
+  | "user-assistant-transcript"
+  | "user-only-transcript"
+  | "assistant-only-transcript"
+  | "user-transcript-last-assistant";
 export type NamingStyle = "brief" | "detailed";
 export type NamingCompositionMode = "structured" | "prompt-override";
-export type NamingComponent = "tag" | "kind" | "scope" | "summary" | "project";
+export type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
+export type NamingTimestampPreset =
+  | "%Y/%m/%d"
+  | "%Y-%m-%d"
+  | "%m/%d"
+  | "%m-%d"
+  | "%Y/%m/%d %H:%M"
+  | "%H:%M";
 export type UiLanguage = "en-US" | "zh-CN";
 export type RenameContextSegmentSource =
   | "summary_first_user"
@@ -52,6 +65,17 @@ export interface NamingTagDefinition {
   promptHint?: string;
 }
 
+export type NamingBuilderItem =
+  | {
+      type: "component";
+      component: NamingComponent;
+      format?: NamingTimestampPreset;
+    }
+  | {
+      type: "separator";
+      value: string;
+    };
+
 export interface WatchConfig {
   scanIntervalSeconds: number;
   candidateIdleSeconds: number;
@@ -71,6 +95,7 @@ export interface NamingConfig {
   contextStrategy: RenameContextStrategy;
   contextMaxChars: number;
   compositionMode: NamingCompositionMode;
+  builder?: NamingBuilderItem[];
   components: NamingComponent[];
   componentSeparator: string;
   tags: NamingTagDefinition[];

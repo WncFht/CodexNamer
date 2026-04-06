@@ -55,6 +55,7 @@ type DataResource =
   | "prompt-preview";
 
 const ALL_WORKSPACES_ID = "__all_workspaces__";
+const SESSION_FILTERS_ENABLED = false;
 
 type UrlUiState = {
   tab: TabId;
@@ -101,13 +102,13 @@ function writeUiStateToUrl(state: UrlUiState): void {
     params.set("tab", state.tab);
   }
 
-  if (!state.search) {
+  if (!SESSION_FILTERS_ENABLED || !state.search) {
     params.delete("q");
   } else {
     params.set("q", state.search);
   }
 
-  if (state.dirtyOnly) {
+  if (!SESSION_FILTERS_ENABLED || state.dirtyOnly) {
     params.delete("dirty");
   } else {
     params.set("dirty", "0");
@@ -492,9 +493,11 @@ export function useControlDeckState() {
     setError(null);
     const requestId = ++sessionsRequestIdRef.current;
     try {
+      const effectiveSearch = SESSION_FILTERS_ENABLED ? nextSearch : "";
+      const effectiveDirtyOnly = SESSION_FILTERS_ENABLED ? nextDirtyOnly : false;
       const payload = await fetchSessions({
-        search: nextSearch,
-        dirtyOnly: nextDirtyOnly,
+        search: effectiveSearch,
+        dirtyOnly: effectiveDirtyOnly,
         workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
       });
       if (requestId !== sessionsRequestIdRef.current) {

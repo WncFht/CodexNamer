@@ -67,11 +67,45 @@ describe("naming specificity", () => {
     expect(prompt).toContain("Preferred naming style: detailed");
     expect(prompt).toContain("namingStyle: detailed");
     expect(prompt).toContain("namingCompositionMode: structured");
-    expect(prompt).toContain("namingComponents: tag, kind, summary");
-    expect(prompt).toContain("Structured naming tags:");
+    expect(prompt).toContain("Naming builder:");
+    expect(prompt).toContain("1. tag");
+    expect(prompt).toContain('2. separator " · "');
+    expect(prompt).toContain("Tag presets:");
     expect(prompt).toContain("Return only a JSON object with keys: name, kind, summary, scope, tagId.");
     expect(prompt).toContain("set tagId to the matching preset id");
     expect(prompt).toContain("Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.");
+  });
+
+  it("switches prompt instruction language with the UI language", () => {
+    const config = buildConfigForTests({
+      general: {
+        uiLanguage: "zh-CN"
+      },
+      naming: {
+        language: "zh-CN",
+        defaultStyle: "detailed"
+      }
+    });
+
+    const prompt = buildRenamePrompt(
+      {
+        threadId: "t-zh-prompt",
+        rolloutPath: "/tmp/r.jsonl",
+        cwd: "/tmp/project",
+        projectName: "project",
+        taskCompleteCount: 1,
+        tokenTotal: 64,
+        firstUserMessage: "把自动 rename 的标题做得更具体一些",
+        lastUserMessage: "顺便把 builder 和 prompt 放到设置页里",
+        lastAgentMessage: "我会先调整核心 builder，再同步 Web 设置页。"
+      },
+      config
+    );
+
+    expect(prompt).toContain("你要为 Codex Session Manager 生成一个用于会话列表的命名建议。");
+    expect(prompt).toContain("Prompt 语言：中文。");
+    expect(prompt).toContain("命名构建器：");
+    expect(prompt).toContain("Tag 预设：");
   });
 
   it("includes a custom prompt override when prompt-override mode is enabled", () => {

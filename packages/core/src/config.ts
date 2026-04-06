@@ -79,6 +79,121 @@ function normalizeNamingTags(value: unknown): EffectiveConfig["naming"]["tags"] 
   return tags.length > 0 ? tags : undefined;
 }
 
+const NAMING_COMPONENTS: EffectiveConfig["naming"]["components"] = [
+  "timestamp",
+  "workspace",
+  "project",
+  "tag",
+  "kind",
+  "scope",
+  "summary"
+];
+
+const DEFAULT_TIMESTAMP_PRESET = "%Y-%m-%d" satisfies NonNullable<
+  NonNullable<EffectiveConfig["naming"]["builder"]>[number] & { type: "component" }
+>["format"];
+
+function buildLegacyNamingBuilder(
+  components: EffectiveConfig["naming"]["components"] | undefined,
+  separator: string | undefined
+): NonNullable<EffectiveConfig["naming"]["builder"]> | undefined {
+  if (!components || components.length === 0) {
+    return undefined;
+  }
+
+  const builder: NonNullable<EffectiveConfig["naming"]["builder"]> = [];
+  components.forEach((component, index) => {
+    builder.push({
+      type: "component",
+      component,
+      ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {})
+    });
+    if (separator && index < components.length - 1) {
+      builder.push({
+        type: "separator",
+        value: separator
+      });
+    }
+  });
+  return builder;
+}
+
+function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["builder"] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const builder = value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((record) => {
+      const type = getString(record, "type");
+      if (type === "separator") {
+        const separator = getString(record, "value");
+        return separator
+          ? {
+              type: "separator" as const,
+              value: separator
+            }
+          : undefined;
+      }
+
+      if (type === "component") {
+        const component = getString(record, "component") as EffectiveConfig["naming"]["components"][number] | undefined;
+        if (!component || !NAMING_COMPONENTS.includes(component)) {
+          return undefined;
+        }
+        const format = getString(record, "format");
+        return {
+          type: "component" as const,
+          component,
+          ...(component === "timestamp" && format ? { format } : {})
+        };
+      }
+
+      return undefined;
+    })
+    .filter(
+      (
+        item
+      ): item is NonNullable<EffectiveConfig["naming"]["builder"]>[number] => Boolean(item)
+    );
+
+  return builder.length > 0 ? builder : undefined;
+}
+
+function deriveLegacyComponentsFromBuilder(
+  builder: EffectiveConfig["naming"]["builder"] | undefined
+): EffectiveConfig["naming"]["components"] | undefined {
+  const components = builder
+    ?.filter(
+      (
+        item
+      ): item is Extract<NonNullable<EffectiveConfig["naming"]["builder"]>[number], { type: "component" }> =>
+        item.type === "component"
+    )
+    .map((item) => item.component);
+
+  return components && components.length > 0 ? components : undefined;
+}
+
+function deriveLegacySeparatorFromBuilder(builder: EffectiveConfig["naming"]["builder"] | undefined): string | undefined {
+  const separators = builder
+    ?.filter(
+      (
+        item
+      ): item is Extract<NonNullable<EffectiveConfig["naming"]["builder"]>[number], { type: "separator" }> =>
+        item.type === "separator"
+    )
+    .map((item) => item.value);
+
+  if (!separators || separators.length === 0) {
+    return undefined;
+  }
+
+  const [first] = separators;
+  return separators.every((value) => value === first) ? first : undefined;
+}
+
 const DEFAULT_NAMING_TAGS: EffectiveConfig["naming"]["tags"] = [
   {
     id: "settings",
@@ -156,6 +271,13 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     contextStrategy: "summary-signals",
     contextMaxChars: 8_000,
     compositionMode: "structured",
+    builder: [
+      { type: "component", component: "tag" },
+      { type: "separator", value: " · " },
+      { type: "component", component: "kind" },
+      { type: "separator", value: " · " },
+      { type: "component", component: "summary" }
+    ],
     components: ["tag", "kind", "summary"],
     componentSeparator: " · ",
     tags: DEFAULT_NAMING_TAGS,
@@ -242,6 +364,9 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
   const rename = (raw.rename ?? {}) as Record<string, unknown>;
   const watch = (raw.watch ?? {}) as Record<string, unknown>;
   const naming = (raw.naming ?? {}) as Record<string, unknown>;
+  const legacyComponents = getStringArray(naming, "components") as EffectiveConfig["naming"]["components"] | undefined;
+  const legacySeparator = getString(naming, "component_separator", "componentSeparator");
+
   const ai = (raw.ai ?? {}) as Record<string, unknown>;
   const maintenance = (raw.maintenance ?? {}) as Record<string, unknown>;
 
@@ -328,12 +453,9 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
         "composition_mode",
         "compositionMode"
       ) as EffectiveConfig["naming"]["compositionMode"] | undefined,
-      components: getStringArray(naming, "components") as EffectiveConfig["naming"]["components"] | undefined,
-      componentSeparator: getString(
-        naming,
-        "component_separator",
-        "componentSeparator"
-      ),
+      builder: normalizeNamingBuilder(naming.builder) ?? buildLegacyNamingBuilder(legacyComponents, legacySeparator),
+      components: legacyComponents,
+      componentSeparator: legacySeparator,
       tags: normalizeNamingTags(naming.tags),
       customPrompt: getString(naming, "custom_prompt", "customPrompt")
     },
@@ -430,6 +552,10 @@ function stripEmptyRecord(record: Record<string, unknown>): Record<string, unkno
 }
 
 function serializeConfigDocument(document: ConfigDocument): string {
+  const derivedBuilder = document.naming?.builder;
+  const derivedComponents = document.naming?.components ?? deriveLegacyComponentsFromBuilder(derivedBuilder);
+  const derivedSeparator =
+    document.naming?.componentSeparator ?? deriveLegacySeparatorFromBuilder(derivedBuilder);
   const providerTable: Record<string, Record<string, unknown>> = {};
   for (const profile of document.providerProfiles ?? []) {
     const encoded = stripEmptyRecord({
@@ -481,8 +607,20 @@ function serializeConfigDocument(document: ConfigDocument): string {
       context_strategy: document.naming?.contextStrategy,
       context_max_chars: document.naming?.contextMaxChars,
       composition_mode: document.naming?.compositionMode,
-      components: document.naming?.components,
-      component_separator: document.naming?.componentSeparator,
+      builder: document.naming?.builder?.map((item) =>
+        item.type === "separator"
+          ? stripEmptyRecord({
+              type: item.type,
+              value: item.value
+            })
+          : stripEmptyRecord({
+              type: item.type,
+              component: item.component,
+              format: item.format
+            })
+      ),
+      components: derivedComponents,
+      component_separator: derivedSeparator,
       tags: document.naming?.tags?.map((tag) =>
         stripEmptyRecord({
           id: tag.id,

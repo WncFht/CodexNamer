@@ -70,6 +70,44 @@
   - `last_applied_style`
   - `preferred_style`
 
+## 2.2 命名 Builder
+
+从 `2026-04-06` 起，命名结构的主入口已经从：
+
+- `components`
+- `component_separator`
+
+迁移到：
+
+- `naming.builder`
+
+`builder` 是一个有序 token 列表，当前 token 分两类：
+
+- `component`
+  - `timestamp`
+  - `workspace`
+  - `project`
+  - `tag`
+  - `kind`
+  - `scope`
+  - `summary`
+- `separator`
+  - 任意原样插入的分隔文本
+
+额外约定：
+
+- `timestamp` 支持 `format`
+- 当前 UI 提供固定下拉预设
+- `components / component_separator` 仍然兼容读取和派生写出
+- 但核心渲染以 `builder` 为准
+
+当前渲染策略：
+
+- 缺失值组件不会直接输出
+- 分隔符不会在标题开头单独出现
+- 对于缺失组件之间的连续分隔符，当前会折叠为最后一个存活分隔符
+- 因此默认 builder `tag · kind · summary` 在 `tag` 缺失时不会产出前导 `·`
+
 ## 3. `evaluateAutoRename`
 
 ### 3.1 输入
@@ -487,14 +525,14 @@ AI prompt 现在会同时带上：
   - 结构化组件仍会保留在 prompt 里
   - 但 `custom_prompt` 会被声明为最高优先级命名约束
 
-### 7.2.1 `brief / detailed` 与 `summary-signals / user-assistant-transcript` 的区别
+### 7.2.1 `brief / detailed` 与各类 context strategy 的区别
 
 这四个选项分成两层，不要混淆：
 
 - `brief / detailed`
   - 这是“标题风格层”
   - 它决定 summary 要写得多具体、是否补 secondary focus、长度预算偏紧还是偏宽
-- `summary-signals / user-assistant-transcript`
+- `summary-signals / last-user-last-assistant / user-assistant-transcript / user-only-transcript / assistant-only-transcript / user-transcript-last-assistant`
   - 这是“上下文取材层”
   - 它决定 prompt 和 heuristic 到底读哪一份会话内容
 
@@ -510,10 +548,22 @@ AI prompt 现在会同时带上：
 - `requestedContextStrategy = summary-signals`
   - prompt 里主要是 `firstUserMessage / lastUserMessage / lastAgentMessage`
   - renameContext 正文会更短、更稳
+- `requestedContextStrategy = last-user-last-assistant`
+  - prompt 里只保留最后一轮 user / assistant
+  - 适合只关心最近收尾状态的会话
 - `requestedContextStrategy = user-assistant-transcript`
   - prompt 会明确看到 transcript 版 `Rename context`
   - 会固定保留首个用户目标，再加入最近 user/assistant 消息
   - 更适合产出具体标题，但更容易受噪声影响
+- `requestedContextStrategy = user-only-transcript`
+  - prompt 只看可见 user message
+  - 更适合保留原始需求与用户目标
+- `requestedContextStrategy = assistant-only-transcript`
+  - prompt 只看可见 assistant message
+  - 更适合按结果和输出物总结会话
+- `requestedContextStrategy = user-transcript-last-assistant`
+  - prompt 先看 user transcript，再补最后一条 assistant
+  - 适合“过程看用户，收尾看助手总结”的会话
 
 这也意味着，旧的 heuristic 官方名如果需要升级，会在后续调度里被重新送回 AI，而不是继续当作最终标题保留。
 
@@ -533,6 +583,30 @@ AI prompt 现在会同时带上：
 - `GET /api/v1/ai/prompt-preview`
 - Web `Settings`
 - TUI `Settings`
+
+从这一版开始，Web Settings 的主展示位置已经调整为：
+
+- `Naming policy`
+  - 用来一边调 builder / tag / custom prompt，一边看真实 Prompt
+- `Runtime`
+  - 不再重复展示 Prompt
+  - 只保留 provider 解析与配置路径
+
+### 7.4 Prompt 语言约定
+
+从这一版开始，AI Prompt 的指令语言与最终标题语言是两条不同的控制线：
+
+- Prompt 指令语言
+  - 跟随 `general.ui_language`
+  - 中文界面 -> 中文 Prompt
+  - 英文界面 -> 英文 Prompt
+- 最终标题语言
+  - 跟随 `naming.language`
+
+这样做的目的：
+
+- 用户在 Settings 里调 builder / tag / custom prompt 时，能够直接阅读同语言 Prompt
+- 同时仍允许“英文界面，但输出中文标题”这种组合
 
 维护要求：
 

@@ -139,6 +139,77 @@ describe("provider backends", () => {
     expect(events[1]?.status).toBe("succeeded");
   });
 
+  it("does not include legacy template reference in the AI prompt", async () => {
+    let capturedPrompt = "";
+    const service = new OpenAICompatibleRenameInferenceService(
+      buildConfigForTests({
+        general: {
+          codexHome: "~/.codex",
+          stateDir: "~/.local/state/codex-session-manager",
+          uiLanguage: "zh-CN"
+        },
+        naming: {
+          preset: "conventional",
+          template: "{{summary}}",
+          maxLength: 24,
+          language: "zh-CN",
+          contextStrategy: "user-only-transcript"
+        },
+        ai: {
+          backend: "openai-compatible",
+          providerSource: "explicit",
+          profile: "default",
+          timeoutSeconds: 10,
+          temperature: 0.2
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            backendKind: "openai-compatible",
+            displayName: "default",
+            providerSource: "explicit",
+            baseUrl: "http://example.test/v1",
+            model: "gpt-test",
+            apiKey: "test-key",
+            wireApi: "responses",
+            enabled: true,
+            isDefault: true
+          }
+        ]
+      }),
+      async (_url, init) => {
+        capturedPrompt = JSON.parse(String(init?.body)).input;
+        return new Response(
+          JSON.stringify({
+            output_text: '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}'
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        );
+      }
+    );
+
+    await service.suggest({
+      threadId: "t-prompt",
+      rolloutPath: "/tmp/r.jsonl",
+      cwd: "/tmp/project",
+      projectName: "project",
+      taskCompleteCount: 1,
+      tokenTotal: 100,
+      firstUserMessage: "实现 session rename",
+      lastAgentMessage: "完成 session rename"
+    });
+
+    expect(capturedPrompt).toContain("Prompt 语言：中文。");
+    expect(capturedPrompt).toContain("requestedContextStrategy: user-only-transcript");
+    expect(capturedPrompt).not.toContain("兼容层");
+    expect(capturedPrompt).not.toContain("Legacy template reference");
+  });
+
   it("uses codex exec runner and reads structured output file", async () => {
     const writes: string[] = [];
     let schemaPayload = "";

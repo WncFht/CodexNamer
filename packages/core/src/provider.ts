@@ -18,6 +18,8 @@ import type {
 
 import {
   composeConfiguredSuggestionName,
+  describeNamingBuilderItem,
+  getEffectiveNamingBuilder,
   resolveNamingStyle,
   resolveTagDisplayLabel,
   resolveNamingTag,
@@ -179,36 +181,102 @@ function normalizePromptField(value: string | undefined, maxLength: number): str
 export function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
   const style = resolveNamingStyle(session, config);
-  const componentSummary = config.naming.components.join(", ") || "(none)";
-  const structuredGuidance =
-    "Structured naming mode is active. Return structured fields that the caller can assemble into the final title. When one configured tag preset clearly fits, set tagId to the matching preset id; otherwise leave tagId empty.";
-  const promptOverrideDetails = config.naming.customPrompt?.trim()
-    ? [
-        "Custom prompt override is active. Treat the override below as the highest-priority naming policy, while still obeying the JSON-only response contract and max length.",
-        "Custom naming override:",
-        config.naming.customPrompt.trim()
-      ]
-    : [
-        "Prompt override mode is active, but no custom override text was configured. Fall back to the structured component policy."
-      ];
+  const promptLanguage = /^zh\b/i.test(config.general.uiLanguage) ? "zh-CN" : "en-US";
+  const promptInChinese = promptLanguage === "zh-CN";
+  const builderSummary = getEffectiveNamingBuilder(config)
+    .map((item, index) => `${index + 1}. ${describeNamingBuilderItem(item, promptLanguage)}`)
+    .join("\n");
   const tagLines = config.naming.tags.map((tag) => {
-    const label = resolveTagDisplayLabel(tag, config.naming.language);
+    const label = resolveTagDisplayLabel(tag, promptLanguage);
     const descriptor =
       normalizePromptField(tag.description, 120) ||
       normalizePromptField(tag.promptHint, 120) ||
       "";
     return descriptor ? `- ${tag.id} => ${label} | ${descriptor}` : `- ${tag.id} => ${label}`;
   });
+  if (promptInChinese) {
+    const styleGuidance =
+      style === "detailed"
+        ? "偏好风格：detailed。尽量利用可用长度，并在确实能区分会话时补一个具体的次焦点。"
+        : "偏好风格：brief。保持短、适合列表扫读，但仍要保留主子系统和实际动作。";
+    const promptOverrideDetails = config.naming.customPrompt?.trim()
+      ? [
+          "当前启用了 Prompt 覆写模式。请把下面这段覆写文本视为最高优先级命名规则，同时仍然遵守只返回 JSON、最大长度和结构化字段约束。",
+          "自定义命名覆写：",
+          config.naming.customPrompt.trim()
+        ]
+      : ["当前启用了 Prompt 覆写模式，但没有配置覆写文本；请回退到结构化命名规则。"];
+    const structuredGuidance =
+      "当前启用结构化命名模式。请返回结构化字段，调用方会根据命名构建器组装最终标题。如果某个 tag 预设明显匹配，就把 tagId 设为对应 id；否则留空。";
+
+    return [
+      "你要为 Codex Session Manager 生成一个用于会话列表的命名建议。",
+      "只返回一个 JSON 对象，键包括：name, kind, summary, scope, tagId。",
+      "不要查看文件，不要运行命令，也不要依赖仓库外部信息。",
+      "只能使用下面给出的会话上下文。",
+      `Prompt 语言：中文。`,
+      `标题目标语言：${config.naming.language}。`,
+      `最终标题最大长度：${config.naming.maxLength}。`,
+      styleGuidance,
+      "标题要具体，能体现主子系统以及实际动作、问题或评审焦点。",
+      "如果会话有两个紧密相关的目标，可以补一个很短的次级片段，但不要退化成空泛大类词。",
+      config.naming.compositionMode === "structured" ? structuredGuidance : promptOverrideDetails[0],
+      "允许的 kind 值：feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops。",
+      "",
+      "命名构建器：",
+      builderSummary || "(none)",
+      "",
+      "会话上下文：",
+      `threadId: ${session.threadId}`,
+      `project: ${session.projectName ?? ""}`,
+      `cwd: ${session.cwd ?? ""}`,
+      `modelProvider: ${session.modelProvider ?? ""}`,
+      `model: ${session.model ?? ""}`,
+      `requestedContextStrategy: ${renameContext.requestedStrategy}`,
+      `resolvedContextStrategy: ${renameContext.strategy}`,
+      `contextTruncated: ${String(renameContext.truncated)}`,
+      `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
+      `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
+      `namingStyle: ${style}`,
+      `namingCompositionMode: ${config.naming.compositionMode}`,
+      `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
+      `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
+      `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
+      `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
+      `taskCompleteCount: ${session.taskCompleteCount}`,
+      `tokenTotal: ${session.tokenTotal}`,
+      "",
+      "Rename context：",
+      normalizePromptField(renameContext.text, renameContext.maxChars),
+      "",
+      "Tag 预设：",
+      ...(tagLines.length > 0 ? tagLines : ["(none)"]),
+      "",
+      ...(config.naming.compositionMode === "prompt-override" ? [...promptOverrideDetails.slice(1), ""] : [])
+    ].join("\n");
+  }
+
   const styleGuidance =
     style === "detailed"
-      ? "Preferred naming style: detailed. Use more of the available length budget, and include one concrete secondary focus when it materially distinguishes the session."
+      ? "Preferred naming style: detailed. Use more of the available length budget and include one concrete secondary focus when it materially distinguishes the session."
       : "Preferred naming style: brief. Keep the name short and list-safe while still preserving the main subsystem and action.";
-  const parts = [
-    "You generate a concise session rename suggestion for Codex Session Manager.",
+  const promptOverrideDetails = config.naming.customPrompt?.trim()
+    ? [
+        "Custom prompt override mode is active. Treat the override below as the highest-priority naming policy while still obeying the JSON-only response contract, max length, and structured fields.",
+        "Custom naming override:",
+        config.naming.customPrompt.trim()
+      ]
+    : ["Prompt override mode is active, but no custom override text is configured. Fall back to the structured naming policy."];
+  const structuredGuidance =
+    "Structured naming mode is active. Return structured fields that the caller can assemble into the final title from the naming builder. When one configured tag preset clearly fits, set tagId to the matching preset id; otherwise leave tagId empty.";
+
+  return [
+    "You generate a session rename suggestion for Codex Session Manager.",
     "Return only a JSON object with keys: name, kind, summary, scope, tagId.",
     "Do not inspect files, do not run shell commands, and do not rely on repository context.",
     "Use only the session context provided below.",
-    `Target language: ${config.naming.language}.`,
+    "Prompt language: English.",
+    `Target title language: ${config.naming.language}.`,
     `Max final name length: ${config.naming.maxLength}.`,
     styleGuidance,
     "Prefer a short but specific summary suitable for a session list.",
@@ -216,6 +284,9 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     "If the session has two tightly related goals, use one short secondary fragment rather than a generic umbrella noun.",
     config.naming.compositionMode === "structured" ? structuredGuidance : promptOverrideDetails[0],
     "Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.",
+    "",
+    "Naming builder:",
+    builderSummary || "(none)",
     "",
     "Session context:",
     `threadId: ${session.threadId}`,
@@ -230,8 +301,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
     `namingStyle: ${style}`,
     `namingCompositionMode: ${config.naming.compositionMode}`,
-    `namingComponents: ${componentSummary}`,
-    `componentSeparator: ${JSON.stringify(config.naming.componentSeparator)}`,
     `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
     `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
     `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
@@ -242,15 +311,11 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     "Rename context:",
     normalizePromptField(renameContext.text, renameContext.maxChars),
     "",
-    "Structured naming tags:",
+    "Tag presets:",
     ...(tagLines.length > 0 ? tagLines : ["(none)"]),
     "",
-    ...(config.naming.compositionMode === "prompt-override" ? [...promptOverrideDetails.slice(1), ""] : []),
-    "Legacy template reference:",
-    config.naming.template
-  ];
-
-  return parts.join("\n");
+    ...(config.naming.compositionMode === "prompt-override" ? [...promptOverrideDetails.slice(1), ""] : [])
+  ].join("\n");
 }
 
 function extractFirstJsonObject(text: string): JsonSuggestionPayload | undefined {

@@ -61,7 +61,6 @@ export function SessionBrowser(props: {
   const [historyExpanded, setHistoryExpanded] = React.useState(false);
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
-  const sessionSearchId = React.useId();
   const latestRename = props.detail?.renameHistory?.[0];
 
   React.useEffect(() => {
@@ -100,35 +99,11 @@ export function SessionBrowser(props: {
           <div>
             <p className="panel-kicker">{tt("conversationArchive")}</p>
             <h2>{props.selectedWorkspaceLabel}</h2>
-            <span className="badge">{props.sessions.length} {tt("sessionCountSuffix")}</span>
           </div>
           <div className="header-actions">
-            <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
-              {props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions")}
-            </button>
             <button className="btn-refresh" onClick={props.onRefresh} title={tt("refresh")} type="button">
               &#8635; {tt("refresh")}
             </button>
-            <label className="checkbox-inline">
-              <input
-                checked={props.dirtyOnly}
-                onChange={(event) => props.onDirtyOnlyChange(event.target.checked)}
-                type="checkbox"
-              />
-              {tt("dirtyOnly")}
-            </label>
-            <label className="sr-only" htmlFor={sessionSearchId}>
-              {tt("searchSessionsLabel")}
-            </label>
-            <input
-              id={sessionSearchId}
-              className="filter-input"
-              name="session-search"
-              onChange={(event) => props.onSearchChange(event.target.value)}
-              placeholder={tt("filterSessions")}
-              type="search"
-              value={props.search}
-            />
           </div>
         </header>
 
@@ -143,7 +118,6 @@ export function SessionBrowser(props: {
             <section className="session-group-block" key={group.label}>
               <div className="time-group-header">
                 <span>{group.label}</span>
-                <span>{group.items.length}</span>
               </div>
               {group.items.map((session) => (
                 <button
@@ -247,9 +221,6 @@ export function SessionBrowser(props: {
                   </div>
                 </div>
                 <div className="chat-header-right">
-                  <button className="btn-sm" onClick={props.onToggleSessionPane} type="button">
-                    {props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions")}
-                  </button>
                   {props.detail.dirty ? <span className="chip danger">{tt("dirty")}</span> : <span className="chip success">{tt("clean")}</span>}
                   {props.detail.frozen ? <span className="chip warning">{tt("frozen")}</span> : null}
                   {props.detail.manualOverride ? <span className="chip manual">{tt("manual")}</span> : null}

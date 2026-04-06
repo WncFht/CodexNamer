@@ -158,4 +158,95 @@ describe("rename context", () => {
     expect(context.strategy).toBe("summary-signals");
     expect(context.fallbackReason).toBe("missing_transcript");
   });
+
+  it("can build context from user messages only", () => {
+    const base = buildConfigForTests();
+    const config = buildConfigForTests({
+      naming: {
+        ...base.naming,
+        contextStrategy: "user-only-transcript",
+        contextMaxChars: 180
+      }
+    });
+
+    const transcript: SessionTranscript = {
+      items: [
+        { id: "1", role: "user", kind: "message", content: "先把设置页里的命名模式整理成下拉" },
+        { id: "2", role: "assistant", kind: "message", content: "我会先改 SettingsPanel 和 provider prompt" },
+        { id: "3", role: "user", kind: "message", content: "再把 context 策略扩成几种可选模式" },
+        { id: "4", role: "assistant", kind: "message", content: "最后补测试和文档" }
+      ],
+      counts: {
+        total: 4,
+        visible: 4,
+        hidden: 0,
+        tools: 0
+      }
+    };
+
+    const context = buildRenameContext(
+      {
+        threadId: "thread-user-only",
+        rolloutPath: "/tmp/rollout.jsonl",
+        firstUserMessage: "先把设置页里的命名模式整理成下拉",
+        lastUserMessage: "再把 context 策略扩成几种可选模式",
+        lastAgentMessage: "最后补测试和文档",
+        taskCompleteCount: 1,
+        tokenTotal: 100
+      },
+      config,
+      { transcript }
+    );
+
+    expect(context.requestedStrategy).toBe("user-only-transcript");
+    expect(context.strategy).toBe("user-only-transcript");
+    expect(context.text).toContain("user(goal): 先把设置页里的命名模式整理成下拉");
+    expect(context.text).toContain("user: 再把 context 策略扩成几种可选模式");
+    expect(context.text).not.toContain("assistant:");
+  });
+
+  it("can append the last assistant summary after user transcript", () => {
+    const base = buildConfigForTests();
+    const config = buildConfigForTests({
+      naming: {
+        ...base.naming,
+        contextStrategy: "user-transcript-last-assistant",
+        contextMaxChars: 220
+      }
+    });
+
+    const transcript: SessionTranscript = {
+      items: [
+        { id: "1", role: "user", kind: "message", content: "我要把 prompt 里的兼容层彻底去掉" },
+        { id: "2", role: "assistant", kind: "message", content: "先改 provider.ts，再重启 live API" },
+        { id: "3", role: "user", kind: "message", content: "然后把 context 选项扩成更细粒度" }
+      ],
+      counts: {
+        total: 3,
+        visible: 3,
+        hidden: 0,
+        tools: 0
+      }
+    };
+
+    const context = buildRenameContext(
+      {
+        threadId: "thread-user-plus-last-assistant",
+        rolloutPath: "/tmp/rollout.jsonl",
+        firstUserMessage: "我要把 prompt 里的兼容层彻底去掉",
+        lastUserMessage: "然后把 context 选项扩成更细粒度",
+        lastAgentMessage: "先改 provider.ts，再重启 live API",
+        taskCompleteCount: 1,
+        tokenTotal: 100
+      },
+      config,
+      { transcript }
+    );
+
+    expect(context.requestedStrategy).toBe("user-transcript-last-assistant");
+    expect(context.strategy).toBe("user-transcript-last-assistant");
+    expect(context.text).toContain("user(goal): 我要把 prompt 里的兼容层彻底去掉");
+    expect(context.text).toContain("user: 然后把 context 选项扩成更细粒度");
+    expect(context.text).toContain("assistant(last): 先改 provider.ts，再重启 live API");
+  });
 });

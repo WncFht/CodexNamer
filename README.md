@@ -69,15 +69,28 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 
 - 默认模式是 `structured`
 - AI 会先返回 `kind / summary / scope / tagId`
-- 后端再按 `tag / kind / scope / summary / project` 这些组件顺序拼装最终标题
+- 后端再按 `naming.builder` 里的 token 顺序拼装最终标题
+- builder 当前支持：
+  - `timestamp`
+  - `workspace`
+  - `project`
+  - `tag`
+  - `kind`
+  - `scope`
+  - `summary`
+- `timestamp` 组件支持多个固定格式下拉预设
 - tag 目录现在是 AI 命名规则预设，可以在 Settings 里编辑
 - 高级用户也可以切到 `prompt-override`，给 AI 一段自定义命名覆写 prompt
-- `template` 现在只保留为兼容层参考字段，不再是主要推荐入口
+- AI Prompt 的指令语言跟随界面语言：
+  - 中文界面 -> 中文 Prompt
+  - 英文界面 -> 英文 Prompt
+  - 最终标题输出语言仍由 `naming.language` 控制
 
 Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 
 - Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
 - WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、context 策略与字符预算配置、运行态面板；旧的 `rename.mode` 已不再在设置页暴露
+- Settings 的 `Naming policy` 现在已经内置 token builder 和 Prompt Preview；`Runtime` 区只保留 provider 解析与配置路径
 - 运行态面板现在还会显示 AI 请求日志，包含活跃请求、最近请求状态、传输方式、耗时与错误
 - Settings / 运行态现在都会展示“平均标题字数”
 - TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
@@ -202,8 +215,13 @@ default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 composition_mode = "structured"
-components = ["tag", "kind", "summary"]
-component_separator = " · "
+builder = [
+  { type = "component", component = "tag" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "kind" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "summary" }
+]
 
 [[naming.tags]]
 id = "settings"
@@ -330,12 +348,16 @@ npm run tui -- --api-base http://127.0.0.1:42110
 - `A`：批量 apply dirty
 - `q`：退出
 
-命名 context 目前支持两种策略：
+命名 context 现在支持多种策略：
 
 - `summary-signals`：只使用 `firstUserMessage / lastUserMessage / lastAgentMessage`
+- `last-user-last-assistant`：只使用最后一条用户消息和最后一条助手消息
 - `user-assistant-transcript`：读取完整 transcript，但只保留 `user` 和 `assistant` 的 message 内容，自动去掉 tool call/output 和隐藏 bootstrap，再按 `context_max_chars` 截断后提供给 heuristic / AI
+- `user-only-transcript`：只读取可见用户消息
+- `assistant-only-transcript`：只读取可见助手消息
+- `user-transcript-last-assistant`：读取可见用户消息，并追加最后一条助手消息
 
-如果你想让 rename 更贴近整段会话，而不是只看首尾摘要，可以在 Web/TUI 的 `Settings` 里把 `Context strategy` 切到 `user-assistant-transcript`。
+如果你想让 rename 更贴近整段会话，而不是只看首尾摘要，可以在 Web/TUI 的 `Settings` 里切换更细粒度的 `Context strategy`。
 
 Settings 界面里：
 

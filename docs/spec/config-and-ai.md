@@ -52,8 +52,13 @@ default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 composition_mode = "structured"
-components = ["tag", "kind", "summary"]
-component_separator = " · "
+builder = [
+  { type = "component", component = "tag" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "kind" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "summary" }
+]
 
 [[naming.tags]]
 id = "settings"
@@ -92,7 +97,13 @@ backup_before_compact = true
 从当前版本开始，`[naming]` 还新增一个正式配置项：
 
 - `default_style = "detailed" | "brief"`
-- `context_strategy = "summary-signals" | "user-assistant-transcript"`
+- `context_strategy`
+  - `summary-signals`
+  - `last-user-last-assistant`
+  - `user-assistant-transcript`
+  - `user-only-transcript`
+  - `assistant-only-transcript`
+  - `user-transcript-last-assistant`
 - `context_max_chars = <number>`
 
 语义：
@@ -116,8 +127,30 @@ backup_before_compact = true
 从这一版开始，`[naming]` 还新增了一组“结构化命名组合”字段：
 
 - `composition_mode = "structured" | "prompt-override"`
-- `components = ["tag", "kind", "scope", "summary", "project"]` 的有序子集
-- `component_separator = " · "`：组件之间如何拼接
+- `builder = [...]`
+  - 这是新的主入口
+  - 是一个有序 token 列表
+  - token 分两类：
+    - `component`
+    - `separator`
+- `component.component`
+  - 当前支持：
+    - `timestamp`
+    - `workspace`
+    - `project`
+    - `tag`
+    - `kind`
+    - `scope`
+    - `summary`
+- `component.format`
+  - 仅 `timestamp` 可用
+  - 当前 UI 预设：
+    - `"%Y/%m/%d"`
+    - `"%Y-%m-%d"`
+    - `"%m/%d"`
+    - `"%m-%d"`
+    - `"%Y/%m/%d %H:%M"`
+    - `"%H:%M"`
 - `[[naming.tags]]`：可编辑的 AI tag 预设目录
 - `custom_prompt = "..."`：仅在 `prompt-override` 模式下作为 AI 覆写指令
 
@@ -138,10 +171,16 @@ backup_before_compact = true
 
 - `template` 现在退化为兼容层参考字段，不再是主要推荐入口
 - 真正控制最终标题结构的主入口已经变成：
-  - `components`
-  - `component_separator`
+  - `builder`
   - `tags`
 - 如果组件顺序里不包含 `tag`，即使 AI 返回了 `tagId`，也不会出现在最终标题里
+- `components` / `component_separator` 仍会兼容读取，也会作为兼容层派生写出
+  - 但它们已经不再足够表达完整 builder
+  - 例如混合多个分隔符、带时间戳格式的 builder，只能靠 `builder` 完整表示
+- 当前 Prompt 指令语言跟随 `general.ui_language`
+  - 中文界面 -> 中文 Prompt
+  - 英文界面 -> 英文 Prompt
+  - 最终标题输出语言仍由 `naming.language` 控制
 
 ## Tag 目录
 
@@ -167,6 +206,20 @@ backup_before_compact = true
 - AI 在 structured 模式下决定是否返回某个 `tagId`
 - 真正的标题正文仍由 `kind / scope / summary / project` 等组件决定
 - heuristic fallback 不再消费 tag 目录去猜分类
+
+## Settings 页约定
+
+当前 Web Settings 的命名区已经改成 builder-first：
+
+- Prompt Preview 直接放在 `Naming policy` 下
+- builder 支持：
+  - 添加组件
+  - 添加快捷分隔符
+  - 添加自定义分隔符
+  - 调整 token 顺序
+  - 删除 token
+  - 对 `timestamp` 单独选择格式
+- `Runtime` 区不再重复展示 Prompt，而只保留 provider 解析与配置路径
 
 ## AI 后端
 

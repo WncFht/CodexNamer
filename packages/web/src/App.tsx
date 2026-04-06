@@ -4,7 +4,7 @@ import { formatWhen } from "./browser-utils.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
-import { AppViewTransition } from "./view-transitions.js";
+import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
 
 const WORKSPACE_PANE_MIN_WIDTH = 220;
 const WORKSPACE_PANE_MAX_WIDTH = 420;
@@ -262,6 +262,7 @@ export function App() {
               key={id}
               onClick={() =>
                 React.startTransition(() => {
+                  addAppTransitionType("nav-lateral");
                   state.setTab(id as typeof state.tab);
                 })
               }
@@ -277,7 +278,6 @@ export function App() {
             <div className="project-group-header codex">
               <span className="project-group-dot" />
               <span>{tt("workspaces")}</span>
-              <span className="project-group-count">{state.workspaces.length}</span>
             </div>
             <div className="project-group-items">
               <button
@@ -286,7 +286,6 @@ export function App() {
                 type="button"
               >
                 <span className="name">{tt("allWorkspaces")}</span>
-                <span className="count">{state.workspaces.reduce((sum, item) => sum + item.sessionCount, 0)}</span>
               </button>
               {state.workspaces.map((workspace) => (
                 <button
@@ -296,7 +295,6 @@ export function App() {
                   type="button"
                 >
                   <span className="name">{workspace.workspaceLabel}</span>
-                  <span className="count">{workspace.sessionCount}</span>
                 </button>
               ))}
             </div>

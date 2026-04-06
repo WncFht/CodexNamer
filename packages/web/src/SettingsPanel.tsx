@@ -1,6 +1,6 @@
-import { startTransition, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { startTransition, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-import { autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
+import { formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import type {
   ConfigDocument,
   ConfigView,
@@ -9,7 +9,7 @@ import type {
   ProviderProfile,
   ProviderResponse
 } from "./types.js";
-import { AppViewTransition } from "./view-transitions.js";
+import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
 
 type SettingsDraft = {
   uiLanguage: "en-US" | "zh-CN";
@@ -21,8 +21,7 @@ type SettingsDraft = {
   namingContextStrategy: string;
   namingContextMaxChars: string;
   namingCompositionMode: "structured" | "prompt-override";
-  namingComponents: Array<"tag" | "kind" | "scope" | "summary" | "project">;
-  namingComponentSeparator: string;
+  namingBuilder: NamingBuilderItem[];
   namingTags: Array<{
     id: string;
     label: string;
@@ -56,7 +55,25 @@ type RenameAutoApply = "disabled" | "idle-finalize";
 type AiBackend = "none" | "codex" | "openai-compatible";
 type ProviderSource = "inherit-codex" | "explicit";
 type NamingCompositionMode = "structured" | "prompt-override";
-type NamingComponent = "tag" | "kind" | "scope" | "summary" | "project";
+type RenameContextStrategy =
+  | "summary-signals"
+  | "last-user-last-assistant"
+  | "user-assistant-transcript"
+  | "user-only-transcript"
+  | "assistant-only-transcript"
+  | "user-transcript-last-assistant";
+type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
+type NamingTimestampPreset = "%Y/%m/%d" | "%Y-%m-%d" | "%m/%d" | "%m-%d" | "%Y/%m/%d %H:%M" | "%H:%M";
+type NamingBuilderItem =
+  | {
+      type: "component";
+      component: NamingComponent;
+      format?: NamingTimestampPreset;
+    }
+  | {
+      type: "separator";
+      value: string;
+    };
 type SettingsSectionId = "overview" | "naming" | "ai" | "scheduler" | "runtime";
 type ChoiceOption<T extends string> = {
   value: T;
@@ -85,6 +102,33 @@ type TextTools = {
 type SettingsTagDraft = SettingsDraft["namingTags"][number];
 
 const DEFAULT_NAMING_COMPONENTS: NamingComponent[] = ["tag", "kind", "summary"];
+const DEFAULT_NAMING_BUILDER: NamingBuilderItem[] = [
+  { type: "component", component: "tag" },
+  { type: "separator", value: " · " },
+  { type: "component", component: "kind" },
+  { type: "separator", value: " · " },
+  { type: "component", component: "summary" }
+];
+const DEFAULT_TIMESTAMP_PRESET: NamingTimestampPreset = "%Y-%m-%d";
+const QUICK_SEPARATOR_OPTIONS = [
+  { value: " · ", label: "·" },
+  { value: " / ", label: "/" },
+  { value: " | ", label: "|" },
+  { value: " - ", label: "-" },
+  { value: " ", label: "space" },
+  { value: " · [", label: "· [" },
+  { value: "] ", label: "]" },
+  { value: " (", label: "(" },
+  { value: ") ", label: ")" }
+] as const;
+const TIMESTAMP_PRESET_OPTIONS: Array<{ value: NamingTimestampPreset; label: string }> = [
+  { value: "%Y/%m/%d", label: "YYYY/MM/DD" },
+  { value: "%Y-%m-%d", label: "YYYY-MM-DD" },
+  { value: "%m/%d", label: "MM/DD" },
+  { value: "%m-%d", label: "MM-DD" },
+  { value: "%Y/%m/%d %H:%M", label: "YYYY/MM/DD HH:mm" },
+  { value: "%H:%M", label: "HH:mm" }
+];
 const SECTION_ORDER: SettingsSectionId[] = ["naming", "ai", "scheduler", "runtime", "overview"];
 const TAG_TONE_CLASSES = [
   "settings-tag-tone-0",
@@ -115,9 +159,78 @@ function normalizeNamingComponents(raw: unknown): NamingComponent[] {
   if (!Array.isArray(raw)) {
     return DEFAULT_NAMING_COMPONENTS;
   }
-  const allowed: NamingComponent[] = ["tag", "kind", "scope", "summary", "project"];
+  const allowed: NamingComponent[] = ["timestamp", "workspace", "project", "tag", "kind", "scope", "summary"];
   const selected = raw.filter((value): value is NamingComponent => allowed.includes(value as NamingComponent));
   return selected.length > 0 ? selected : DEFAULT_NAMING_COMPONENTS;
+}
+
+function buildLegacyNamingBuilder(components: NamingComponent[], separator: string): NamingBuilderItem[] {
+  const builder: NamingBuilderItem[] = [];
+  components.forEach((component, index) => {
+    builder.push({
+      type: "component",
+      component,
+      ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {})
+    });
+    if (separator && index < components.length - 1) {
+      builder.push({
+        type: "separator",
+        value: separator
+      });
+    }
+  });
+  return builder.length > 0 ? builder : DEFAULT_NAMING_BUILDER;
+}
+
+function normalizeNamingBuilder(raw: unknown, legacyComponents: NamingComponent[], legacySeparator: string): NamingBuilderItem[] {
+  if (!Array.isArray(raw)) {
+    return buildLegacyNamingBuilder(legacyComponents, legacySeparator);
+  }
+
+  const builder = raw
+    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+    .map((record) => {
+      if (record.type === "separator" && typeof record.value === "string") {
+        return {
+          type: "separator" as const,
+          value: record.value
+        };
+      }
+      if (record.type === "component" && typeof record.component === "string") {
+        const component = record.component as NamingComponent;
+        if (!["timestamp", "workspace", "project", "tag", "kind", "scope", "summary"].includes(component)) {
+          return undefined;
+        }
+        const format = typeof record.format === "string" ? (record.format as NamingTimestampPreset) : undefined;
+        return {
+          type: "component" as const,
+          component,
+          ...(component === "timestamp" ? { format: format ?? DEFAULT_TIMESTAMP_PRESET } : {})
+        };
+      }
+      return undefined;
+    })
+    .filter((item): item is NamingBuilderItem => Boolean(item));
+
+  return builder.length > 0 ? builder : buildLegacyNamingBuilder(legacyComponents, legacySeparator);
+}
+
+function deriveNamingComponents(builder: NamingBuilderItem[]): NamingComponent[] {
+  const components = builder
+    .filter((item): item is Extract<NamingBuilderItem, { type: "component" }> => item.type === "component")
+    .map((item) => item.component);
+  return components.length > 0 ? components : DEFAULT_NAMING_COMPONENTS;
+}
+
+function deriveNamingSeparator(builder: NamingBuilderItem[]): string | undefined {
+  const separators = builder
+    .filter((item): item is Extract<NamingBuilderItem, { type: "separator" }> => item.type === "separator")
+    .map((item) => item.value);
+  if (separators.length === 0) {
+    return undefined;
+  }
+  const [first] = separators;
+  return separators.every((value) => value === first) ? first : undefined;
 }
 
 function normalizeNamingTags(raw: unknown): SettingsDraft["namingTags"] {
@@ -179,6 +292,8 @@ function buildDraft(configView: ConfigView): SettingsDraft {
   const naming = asRecord(effective.naming);
   const rename = asRecord(effective.rename);
   const watch = asRecord(effective.watch);
+  const legacyNamingComponents = normalizeNamingComponents(naming.components);
+  const legacyNamingSeparator = asString(naming.componentSeparator || naming.component_separator, " · ");
   const ai = asRecord(effective.ai);
   const maintenance = asRecord(effective.maintenance);
   const providerProfilesRaw = Array.isArray(effective.providerProfiles) ? effective.providerProfiles : [];
@@ -201,8 +316,7 @@ function buildDraft(configView: ConfigView): SettingsDraft {
       naming.compositionMode || naming.composition_mode,
       "structured"
     ) as NamingCompositionMode,
-    namingComponents: normalizeNamingComponents(naming.components),
-    namingComponentSeparator: asString(naming.componentSeparator || naming.component_separator, " · "),
+    namingBuilder: normalizeNamingBuilder(naming.builder, legacyNamingComponents, legacyNamingSeparator),
     namingTags: normalizeNamingTags(naming.tags),
     namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
@@ -271,6 +385,8 @@ function firstNonEmptyString(...values: Array<unknown>): string | undefined {
 }
 
 function encodeDraft(draft: SettingsDraft): ConfigDocument {
+  const derivedComponents = deriveNamingComponents(draft.namingBuilder);
+  const derivedSeparator = deriveNamingSeparator(draft.namingBuilder);
   return {
     general: {
       uiLanguage: draft.uiLanguage
@@ -295,14 +411,23 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
       language: stripEmptyString(draft.namingLanguage),
       defaultStyle: draft.namingDefaultStyle,
       maxLength: parseNumber(draft.namingMaxLength),
-      contextStrategy: stripEmptyString(draft.namingContextStrategy) as
-        | "summary-signals"
-        | "user-assistant-transcript"
-        | undefined,
+      contextStrategy: stripEmptyString(draft.namingContextStrategy) as RenameContextStrategy | undefined,
       contextMaxChars: parseNumber(draft.namingContextMaxChars),
       compositionMode: draft.namingCompositionMode,
-      components: draft.namingComponents,
-      componentSeparator: draft.namingComponentSeparator,
+      builder: draft.namingBuilder.map((item) =>
+        item.type === "separator"
+          ? {
+              type: "separator" as const,
+              value: item.value
+            }
+          : {
+              type: "component" as const,
+              component: item.component,
+              ...(item.component === "timestamp" ? { format: item.format ?? DEFAULT_TIMESTAMP_PRESET } : {})
+            }
+      ),
+      components: derivedComponents,
+      componentSeparator: derivedSeparator,
       tags: draft.namingTags
         .map((tag) => ({
           id: tag.id.trim(),
@@ -375,16 +500,41 @@ function renderTagLabel(tag: SettingsTagDraft, uiLanguage: "en-US" | "zh-CN"): s
   return uiLanguage === "zh-CN" ? "未命名" : "Untitled";
 }
 
+function formatPreviewTimestamp(format: NamingTimestampPreset): string {
+  const sample = new Date(Date.UTC(2026, 3, 6, 14, 32));
+  const replacements: Record<string, string> = {
+    "%Y": String(sample.getUTCFullYear()),
+    "%m": String(sample.getUTCMonth() + 1).padStart(2, "0"),
+    "%d": String(sample.getUTCDate()).padStart(2, "0"),
+    "%H": String(sample.getUTCHours()).padStart(2, "0"),
+    "%M": String(sample.getUTCMinutes()).padStart(2, "0")
+  };
+  let output: string = format;
+  for (const [token, value] of Object.entries(replacements)) {
+    output = output.replaceAll(token, value);
+  }
+  return output;
+}
+
 function renderNamingStructurePreview(draft: SettingsDraft, uiLanguage: "en-US" | "zh-CN"): string {
   const previewTag = draft.namingTags[0] ? `#${renderTagLabel(draft.namingTags[0], uiLanguage)}` : uiLanguage === "zh-CN" ? "#标签" : "#tag";
+  const timestampBuilderItem = draft.namingBuilder.find(
+    (item): item is { type: "component"; component: NamingComponent; format?: NamingTimestampPreset } =>
+      item.type === "component" && item.component === "timestamp"
+  );
   const componentMap: Record<NamingComponent, string> = {
+    timestamp: formatPreviewTimestamp(timestampBuilderItem?.format ?? DEFAULT_TIMESTAMP_PRESET),
+    workspace: "ai-tools",
+    project: "codex-session-manager",
     tag: previewTag,
     kind: "fix",
-    scope: uiLanguage === "zh-CN" ? "settings" : "settings",
-    summary: uiLanguage === "zh-CN" ? "修复设置保存与语言切换" : "fix settings save and language switching",
-    project: "codex-session-manager"
+    scope: "settings",
+    summary: uiLanguage === "zh-CN" ? "修复设置保存与语言切换" : "fix settings save and language switching"
   };
-  return draft.namingComponents.map((component) => componentMap[component]).join(draft.namingComponentSeparator || " · ");
+  return draft.namingBuilder
+    .map((item) => (item.type === "separator" ? item.value : componentMap[item.component]))
+    .join("")
+    .trim();
 }
 
 function useSettingsDraft(configView: ConfigView | null) {
@@ -456,37 +606,33 @@ function useSettingsDraft(configView: ConfigView | null) {
   };
 }
 
-function ChoiceGroup<T extends string>(props: {
+function SelectField<T extends string>(props: {
   label: string;
   value: T;
   options: ChoiceOption<T>[];
   onChange: (value: T) => void;
 }) {
-  const groupName = useId();
-
   return (
-    <fieldset className="settings-field settings-choice-field">
-      <legend>{props.label}</legend>
-      <div className="settings-choice-group">
+    <label className="settings-field">
+      <span>{props.label}</span>
+      <select
+        onChange={(event) => {
+          props.onChange(event.target.value as T);
+        }}
+        value={props.value}
+      >
         {props.options.map((option) => (
-          <label
-            className={option.value === props.value ? "settings-choice active" : "settings-choice"}
-            key={option.value}
-          >
-            <input
-              checked={option.value === props.value}
-              className="settings-choice-input"
-              name={groupName}
-              onChange={() => props.onChange(option.value)}
-              type="radio"
-              value={option.value}
-            />
-            <span>{option.label}</span>
-            {option.description ? <small>{option.description}</small> : null}
-          </label>
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
-      </div>
-    </fieldset>
+      </select>
+      {props.options.find((option) => option.value === props.value)?.description ? (
+        <small className="settings-field-help">
+          {props.options.find((option) => option.value === props.value)?.description}
+        </small>
+      ) : null}
+    </label>
   );
 }
 
@@ -524,7 +670,7 @@ function SettingsNav(props: {
     },
     runtime: {
       title: props.text.inline("运行时", "Runtime"),
-      copy: props.text.inline("解析后的环境、prompt preview、provider 结果。", "Resolved environment, prompt preview, and provider state.")
+      copy: props.text.inline("解析后的环境、provider 结果与配置路径。", "Resolved environment, provider state, and config paths.")
     },
     overview: {
       title: props.text.inline("总览", "Overview"),
@@ -540,6 +686,7 @@ function SettingsNav(props: {
           key={section}
           onClick={() =>
             startTransition(() => {
+              addAppTransitionType("nav-lateral");
               props.onChange(section);
             })
           }
@@ -730,6 +877,9 @@ function TagPresetDialog(props: {
 function NamingSection(props: {
   draft: SettingsDraft;
   text: TextTools;
+  promptPreview: PromptPreviewResponse | null;
+  promptPreviewRefreshing: boolean;
+  onRefreshPromptPreview: () => void | Promise<void>;
   updateDraftState: DraftStateUpdater;
   updateDraftField: DraftFieldUpdater;
 }) {
@@ -745,8 +895,24 @@ function NamingSection(props: {
       }
     | null
   >(null);
+  const [customSeparator, setCustomSeparator] = useState("");
 
   const namingComponentOptions: Array<{ value: NamingComponent; label: string; copy: string }> = [
+    {
+      value: "timestamp",
+      label: props.text.inline("时间戳", "Timestamp"),
+      copy: props.text.inline("按选定格式输出日期或时间。", "Render date or time using the selected format.")
+    },
+    {
+      value: "workspace",
+      label: props.text.inline("工作区", "Workspace"),
+      copy: props.text.inline("工作区标签，通常来自 cwd / project。", "Workspace label, usually derived from cwd / project.")
+    },
+    {
+      value: "project",
+      label: props.text.inline("项目", "Project"),
+      copy: props.text.inline("项目目录名，适合做更短的路径信号。", "Project directory name for a shorter path signal.")
+    },
     {
       value: "tag",
       label: props.text.inline("Tag", "Tag"),
@@ -766,30 +932,83 @@ function NamingSection(props: {
       value: "summary",
       label: props.text.inline("Summary", "Summary"),
       copy: props.text.inline("标题正文与具体动作焦点。", "Main title body and concrete focus.")
-    },
-    {
-      value: "project",
-      label: props.text.inline("Project", "Project"),
-      copy: props.text.inline("项目或工作区名。", "Project or workspace name.")
     }
   ];
-
-  const selectedNamingComponents = props.draft.namingComponents;
-  const availableNamingComponents = namingComponentOptions.filter(
-    (option) => !selectedNamingComponents.includes(option.value)
-  );
-
-  const updateNamingComponents = (nextComponents: NamingComponent[]) => {
-    props.updateDraftField("namingComponents", nextComponents);
+  const updateNamingBuilder = (nextBuilder: NamingBuilderItem[]) => {
+    props.updateDraftField("namingBuilder", nextBuilder);
   };
+  const addComponent = (component: NamingComponent) => {
+    updateNamingBuilder([
+      ...props.draft.namingBuilder,
+      {
+        type: "component",
+        component,
+        ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {})
+      }
+    ]);
+  };
+  const addSeparator = (separator: string) => {
+    if (!separator) {
+      return;
+    }
+    updateNamingBuilder([
+      ...props.draft.namingBuilder,
+      {
+        type: "separator",
+        value: separator
+      }
+    ]);
+    setCustomSeparator("");
+  };
+  const updateBuilderItem = (index: number, item: NamingBuilderItem) => {
+    updateNamingBuilder(props.draft.namingBuilder.map((current, currentIndex) => (currentIndex === index ? item : current)));
+  };
+  const removeBuilderItem = (index: number) => {
+    updateNamingBuilder(props.draft.namingBuilder.filter((_, currentIndex) => currentIndex !== index));
+  };
+  const moveBuilderItem = (index: number, delta: number) => {
+    updateNamingBuilder(moveItem(props.draft.namingBuilder, index, index + delta));
+  };
+  const contextStrategyOptions: ChoiceOption<RenameContextStrategy>[] = [
+    {
+      value: "summary-signals",
+      label: props.text.inline("首尾摘要", "Summary signals"),
+      description: props.text.inline("首条用户 + 末条用户 + 末条助手。", "First user + last user + last assistant.")
+    },
+    {
+      value: "last-user-last-assistant",
+      label: props.text.inline("最后一轮", "Last turn pair"),
+      description: props.text.inline("只读最后一条用户和最后一条助手。", "Only the last user and the last assistant.")
+    },
+    {
+      value: "user-assistant-transcript",
+      label: props.text.inline("用户+助手全文", "User + assistant transcript"),
+      description: props.text.inline("读可见 user / assistant message。", "Read visible user / assistant messages.")
+    },
+    {
+      value: "user-only-transcript",
+      label: props.text.inline("仅用户全文", "User-only transcript"),
+      description: props.text.inline("只读用户消息，适合保留原始目标。", "Read only user messages to keep the original goal.")
+    },
+    {
+      value: "assistant-only-transcript",
+      label: props.text.inline("仅助手全文", "Assistant-only transcript"),
+      description: props.text.inline("只读助手消息，适合按产出总结。", "Read only assistant messages to summarize output.")
+    },
+    {
+      value: "user-transcript-last-assistant",
+      label: props.text.inline("用户全文 + 最后助手", "User transcript + last assistant"),
+      description: props.text.inline("读用户过程，再补最后一条助手总结。", "Read user history, then append the last assistant summary.")
+    }
+  ];
 
   return (
     <SettingsSectionFrame
       kicker={props.text.inline("Naming policy", "Naming policy")}
-      title={props.text.inline("像工具面板一样配置命名，而不是写整段 prompt", "Configure naming like a control surface, not a freeform prompt")}
+      title={props.text.inline("按组件和上下文控制最终标题", "Control final titles with components and context")}
       copy={props.text.inline(
-        "这部分参考了 SubLinkPro 的构建器思路：结构拆开、规则显式、Tag 用 dialog 编辑、右侧直接给预览。Tag 现在是 AI 命名规则预设，不再是 heuristic 分类。",
-        "This section takes cues from SubLinkPro: split the structure, make rules explicit, edit tags in dialogs, and keep preview visible. Tags are now AI naming presets instead of heuristic categories."
+        "先决定 AI 读哪些内容，再排标题组件顺序，右侧直接看结构预览和真实 prompt。",
+        "Choose what the AI reads, arrange title components, and inspect both structure and prompt on the right."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -801,7 +1020,7 @@ function NamingSection(props: {
             </div>
           </div>
           <div className="settings-two-up">
-            <ChoiceGroup
+            <SelectField
               label={props.text.tt("uiLanguage")}
               onChange={(value) => {
                 props.updateDraftField("uiLanguage", value);
@@ -812,7 +1031,7 @@ function NamingSection(props: {
               ]}
               value={props.draft.uiLanguage}
             />
-            <ChoiceGroup
+            <SelectField
               label={props.text.tt("defaultNamingStyle")}
               onChange={(value) => {
                 props.updateDraftField("namingDefaultStyle", value);
@@ -825,12 +1044,15 @@ function NamingSection(props: {
             />
             <label className="settings-field">
               <span>{props.text.tt("language")}</span>
-              <input
+              <select
                 onChange={(event) => {
                   props.updateDraftField("namingLanguage", event.target.value);
                 }}
                 value={props.draft.namingLanguage}
-              />
+              >
+                <option value="zh-CN">zh-CN</option>
+                <option value="en-US">en-US</option>
+              </select>
             </label>
             <label className="settings-field">
               <span>{props.text.tt("maxLength")}</span>
@@ -852,24 +1074,13 @@ function NamingSection(props: {
             </div>
           </div>
           <div className="settings-two-up">
-            <ChoiceGroup
+            <SelectField
               label={props.text.tt("contextStrategy")}
               onChange={(value) => {
                 props.updateDraftField("namingContextStrategy", value);
               }}
-              options={[
-                {
-                  value: "summary-signals",
-                  label: "summary-signals",
-                  description: props.text.inline("只读首条用户、末条用户、末条助手。", "Use first user, last user, and last assistant only.")
-                },
-                {
-                  value: "user-assistant-transcript",
-                  label: "user-assistant-transcript",
-                  description: props.text.inline("读可见 user / assistant transcript。", "Read visible user / assistant transcript.")
-                }
-              ]}
-              value={props.draft.namingContextStrategy as "summary-signals" | "user-assistant-transcript"}
+              options={contextStrategyOptions}
+              value={props.draft.namingContextStrategy as RenameContextStrategy}
             />
             <label className="settings-field">
               <span>{props.text.tt("contextMaxChars")}</span>
@@ -882,11 +1093,11 @@ function NamingSection(props: {
             </label>
           </div>
           <div className="settings-inline-note">
-            <strong>{props.text.inline("区别", "Difference")}</strong>
+            <strong>{props.text.inline("区别与 Prompt 语言", "Difference and prompt language")}</strong>
             <p>
               {props.text.inline(
-                "`summary-signals` 更稳、更便宜；`user-assistant-transcript` 更具体，但更依赖上下文质量。",
-                "`summary-signals` is steadier and cheaper; `user-assistant-transcript` is more specific but depends more on transcript quality."
+                "摘要型策略更稳、更便宜；transcript 型策略更具体。Prompt 指令语言跟随界面语言，最终标题输出语言由上面的 `language` 控制。",
+                "Summary-based strategies are steadier and cheaper; transcript-based strategies are more specific. Prompt instruction language follows the UI language, while `language` above controls the final title language."
               )}
             </p>
           </div>
@@ -899,15 +1110,15 @@ function NamingSection(props: {
               <h4>{props.text.inline("结构化组件与最终标题预览", "Structured components and final title preview")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "默认推荐 `structured`。AI 返回 kind / summary / scope / tagId，后端再根据这里的组件顺序拼出最终标题。只有在需要强制个人规则时，再切到 `prompt-override`。",
-                  "Prefer `structured` by default. AI returns kind / summary / scope / tagId and the backend assembles the final title using this component order. Switch to `prompt-override` only for strong personal overrides."
+                  "结构化模式下，AI 返回字段，后端按这里的顺序组装标题；需要强制特殊规则时再用 prompt 覆写。",
+                  "In structured mode, the AI returns fields and the backend assembles the title in this order; use prompt override only for special rules."
                 )}
               </p>
             </div>
           </div>
 
           <div className="settings-two-up">
-            <ChoiceGroup
+            <SelectField
               label={props.text.inline("命名模式", "Naming mode")}
               onChange={(value) => {
                 props.updateDraftField("namingCompositionMode", value as NamingCompositionMode);
@@ -926,15 +1137,6 @@ function NamingSection(props: {
               ]}
               value={props.draft.namingCompositionMode}
             />
-            <label className="settings-field">
-              <span>{props.text.inline("组件分隔符", "Component separator")}</span>
-              <input
-                onChange={(event) => {
-                  props.updateDraftField("namingComponentSeparator", event.target.value);
-                }}
-                value={props.draft.namingComponentSeparator}
-              />
-            </label>
           </div>
 
           <div className="settings-builder-grid">
@@ -942,12 +1144,12 @@ function NamingSection(props: {
               <div className="settings-builder-strip">
                 <span className="settings-builder-label">{props.text.inline("可用组件", "Available components")}</span>
                 <div className="settings-chip-row">
-                  {availableNamingComponents.map((option) => (
+                  {namingComponentOptions.map((option) => (
                     <button
                       className="settings-builder-chip"
                       key={option.value}
                       onClick={() => {
-                        updateNamingComponents([...selectedNamingComponents, option.value]);
+                        addComponent(option.value);
                       }}
                       type="button"
                     >
@@ -957,24 +1159,88 @@ function NamingSection(props: {
                 </div>
               </div>
 
+              <div className="settings-builder-strip">
+                <span className="settings-builder-label">{props.text.inline("快捷分隔符", "Quick separators")}</span>
+                <div className="settings-chip-row">
+                  {QUICK_SEPARATOR_OPTIONS.map((separator) => (
+                    <button
+                      className="settings-builder-chip settings-builder-chip-separator"
+                      key={`${separator.label}-${separator.value}`}
+                      onClick={() => {
+                        addSeparator(separator.value);
+                      }}
+                      type="button"
+                    >
+                      {separator.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="settings-custom-separator">
+                  <input
+                    onChange={(event) => {
+                      setCustomSeparator(event.target.value);
+                    }}
+                    placeholder={props.text.inline("自定义", "Custom")}
+                    value={customSeparator}
+                  />
+                  <button className="btn-refresh" onClick={() => addSeparator(customSeparator)} type="button">
+                    {props.text.inline("添加", "Add")}
+                  </button>
+                </div>
+              </div>
+
               <div className="settings-builder-lane">
-                {selectedNamingComponents.map((component, index) => {
-                  const option = namingComponentOptions.find((item) => item.value === component);
-                  if (!option) {
-                    return null;
-                  }
+                {props.draft.namingBuilder.length === 0 ? (
+                  <div className="settings-empty-state">
+                    {props.text.inline("先从上方添加组件或分隔符。", "Start by adding components or separators above.")}
+                  </div>
+                ) : null}
+                {props.draft.namingBuilder.map((item, index) => {
+                  const option =
+                    item.type === "component"
+                      ? namingComponentOptions.find((candidate) => candidate.value === item.component)
+                      : undefined;
+
                   return (
-                    <article className="settings-builder-card" key={`${component}-${index}`}>
+                    <article
+                      className={item.type === "separator" ? "settings-builder-card separator" : "settings-builder-card"}
+                      key={`${item.type}-${index}-${item.type === "separator" ? item.value : item.component}`}
+                    >
                       <div>
-                        <strong>{option.label}</strong>
-                        <p>{option.copy}</p>
+                        <strong>
+                          {item.type === "separator"
+                            ? props.text.inline(`分隔符 ${JSON.stringify(item.value)}`, `Separator ${JSON.stringify(item.value)}`)
+                            : option?.label ?? item.component}
+                        </strong>
+                        <p>
+                          {item.type === "separator"
+                            ? props.text.inline("原样拼进最终标题。", "Inserted into the final title verbatim.")
+                            : option?.copy}
+                        </p>
                       </div>
                       <div className="settings-builder-actions">
+                        {item.type === "component" && item.component === "timestamp" ? (
+                          <select
+                            onChange={(event) => {
+                              updateBuilderItem(index, {
+                                ...item,
+                                format: event.target.value as NamingTimestampPreset
+                              });
+                            }}
+                            value={item.format ?? DEFAULT_TIMESTAMP_PRESET}
+                          >
+                            {TIMESTAMP_PRESET_OPTIONS.map((preset) => (
+                              <option key={preset.value} value={preset.value}>
+                                {preset.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                         <button
                           className="btn-refresh"
                           disabled={index === 0}
                           onClick={() => {
-                            updateNamingComponents(moveItem(selectedNamingComponents, index, index - 1));
+                            moveBuilderItem(index, -1);
                           }}
                           type="button"
                         >
@@ -982,9 +1248,9 @@ function NamingSection(props: {
                         </button>
                         <button
                           className="btn-refresh"
-                          disabled={index === selectedNamingComponents.length - 1}
+                          disabled={index === props.draft.namingBuilder.length - 1}
                           onClick={() => {
-                            updateNamingComponents(moveItem(selectedNamingComponents, index, index + 1));
+                            moveBuilderItem(index, 1);
                           }}
                           type="button"
                         >
@@ -992,11 +1258,8 @@ function NamingSection(props: {
                         </button>
                         <button
                           className="btn-refresh"
-                          disabled={selectedNamingComponents.length === 1}
                           onClick={() => {
-                            updateNamingComponents(
-                              selectedNamingComponents.filter((_, componentIndex) => componentIndex !== index)
-                            );
+                            removeBuilderItem(index);
                           }}
                           type="button"
                         >
@@ -1105,19 +1368,56 @@ function NamingSection(props: {
               value={props.draft.namingCustomPrompt}
             />
           </label>
-          <details className="settings-disclosure">
-            <summary>{props.text.inline("查看兼容层 template", "View legacy template")}</summary>
-            <label className="settings-field settings-field-wide">
-              <span>{props.text.tt("template")}</span>
-              <textarea
-                onChange={(event) => {
-                  props.updateDraftField("namingTemplate", event.target.value);
-                }}
-                rows={3}
-                value={props.draft.namingTemplate}
-              />
-            </label>
-          </details>
+        </article>
+
+        <article className="settings-surface-card settings-span-two">
+          <div className="settings-card-header">
+            <div>
+              <p className="panel-kicker">{props.text.tt("promptPreview")}</p>
+              <h4>{props.text.inline("命名策略实际发送给 AI 的 Prompt", "The prompt actually sent to AI for naming")}</h4>
+              <p className="settings-copy">
+                {props.text.inline(
+                  "这里直接展示当前命名策略真实生成的 prompt。界面语言切换后，Prompt 指令语言也会跟着切换；而最终标题语言仍由上面的 `language` 控制。",
+                  "This shows the prompt currently generated from the naming policy. When UI language changes, the prompt instruction language changes too; the final title language is still controlled by `language` above."
+                )}
+              </p>
+            </div>
+            <button className="btn-sm" onClick={() => void props.onRefreshPromptPreview()} type="button">
+              {props.promptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
+            </button>
+          </div>
+          <dl className="settings-runtime-grid compact">
+            <div>
+              <dt>{props.text.inline("来源", "Source")}</dt>
+              <dd>
+                {props.promptPreview
+                  ? props.promptPreview.synthetic
+                    ? props.text.tt("promptSynthetic")
+                    : props.text.tt("promptForSelected")
+                  : props.text.tt("nA")}
+              </dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("线程", "Thread")}</dt>
+              <dd>{props.promptPreview?.threadId ?? props.text.tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("上下文策略", "Context strategy")}</dt>
+              <dd>{props.promptPreview?.renameContext.strategy ?? props.text.tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("上下文字符数", "Context chars")}</dt>
+              <dd>
+                {props.promptPreview
+                  ? `${props.promptPreview.renameContext.selectedChars}/${props.promptPreview.renameContext.maxChars}`
+                  : props.text.tt("nA")}
+              </dd>
+            </div>
+          </dl>
+          <pre className="settings-json settings-json-large">
+            {props.promptPreview?.prompt ??
+              (props.promptPreviewRefreshing ? props.text.tt("loadingPrompt") : props.text.tt("noPreviewLoaded"))}
+          </pre>
         </article>
       </div>
 
@@ -1217,7 +1517,7 @@ function AiProviderSection(props: {
             </div>
           </div>
           <div className="settings-two-up">
-            <ChoiceGroup
+            <SelectField
               label={props.text.tt("backend")}
               onChange={(value) => {
                 props.updateDraftField("aiBackend", value);
@@ -1229,7 +1529,7 @@ function AiProviderSection(props: {
               ]}
               value={props.draft.aiBackend as AiBackend}
             />
-            <ChoiceGroup
+            <SelectField
               label={props.text.tt("providerSource")}
               onChange={(value) => {
                 props.updateDraftField("aiProviderSource", value);
@@ -1350,7 +1650,7 @@ function AiProviderSection(props: {
                     value={selectedProfile.displayName ?? ""}
                   />
                 </label>
-                <ChoiceGroup<NonNullable<ProviderProfile["backendKind"]>>
+                <SelectField<NonNullable<ProviderProfile["backendKind"]>>
                   label={props.text.tt("backendKind")}
                   onChange={(value) => {
                     props.updateDraftState((current) => ({
@@ -1367,7 +1667,7 @@ function AiProviderSection(props: {
                   ]}
                   value={selectedProfile.backendKind ?? "openai-compatible"}
                 />
-                <ChoiceGroup<NonNullable<ProviderProfile["providerSource"]>>
+                <SelectField<NonNullable<ProviderProfile["providerSource"]>>
                   label={props.text.tt("profileSource")}
                   onChange={(value) => {
                     props.updateDraftState((current) => ({
@@ -1425,7 +1725,7 @@ function AiProviderSection(props: {
                     value={selectedProfile.model ?? ""}
                   />
                 </label>
-                <ChoiceGroup<NonNullable<ProviderProfile["wireApi"]>>
+                <SelectField<NonNullable<ProviderProfile["wireApi"]>>
                   label={props.text.tt("wireApi")}
                   onChange={(value) => {
                     props.updateDraftState((current) => ({
@@ -1541,7 +1841,7 @@ function SchedulerSection(props: {
               <h4>{props.text.inline("自动应用开关", "Auto-apply policy")}</h4>
             </div>
           </div>
-          <ChoiceGroup
+          <SelectField
             label={props.text.tt("autoApply")}
             onChange={(value) => {
               props.updateDraftField("renameAutoApply", value);
@@ -1698,28 +1998,21 @@ function SchedulerSection(props: {
 function RuntimeSection(props: {
   configView: ConfigView;
   providers: ProviderResponse | null;
-  promptPreview: PromptPreviewResponse | null;
-  promptPreviewRefreshing: boolean;
-  previewApplyCount: number;
-  previewSuggestCount: number;
   text: TextTools;
-  onRefreshPromptPreview: () => void | Promise<void>;
 }) {
   const effective = asRecord(props.configView.effectiveConfig);
   const inheritedCodex = asRecord(effective.inheritedCodex);
-  const promptPreviewStatus =
-    props.previewApplyCount > 0 ? "apply" : props.previewSuggestCount > 0 ? "suggest" : "skip";
 
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("runtime")}
-      title={props.text.inline("运行时解析结果与真实 Prompt", "Resolved runtime state and exact prompt")}
+      title={props.text.inline("运行时解析结果与 provider 路径", "Resolved runtime state and provider path")}
       copy={props.text.inline(
-        "这部分回答两个问题：最终到底会走哪个 provider，以及当前真正发送给 AI 的 prompt 长什么样。",
-        "This section answers two questions: which provider is actually used, and what exact prompt is currently sent to the AI."
+        "Prompt 已经移到命名策略区，这里只保留运行时路径、provider 解析和配置落点，方便排查真正会命中的后端。",
+        "Prompt has moved into the Naming policy section. This view keeps runtime paths, provider resolution, and config locations so you can inspect the backend that is actually in effect."
       )}
     >
-      <div className="settings-stage-grid">
+      <div className="settings-stage-grid settings-stage-grid-wide">
         <article className="settings-surface-card">
           <div className="settings-card-header">
             <div>
@@ -1757,46 +2050,6 @@ function RuntimeSection(props: {
             <summary>{props.text.tt("inspectResolvedProvider")}</summary>
             <pre className="settings-json">{JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}</pre>
           </details>
-        </article>
-
-        <article className="settings-surface-card settings-span-two">
-          <div className="settings-card-header">
-            <div>
-              <p className="panel-kicker">{props.text.tt("promptPreview")}</p>
-              <h4>{props.text.inline("现在输入给 AI 的完整 prompt", "The exact prompt currently sent to AI")}</h4>
-            </div>
-            <button className="btn-sm" onClick={() => void props.onRefreshPromptPreview()} type="button">
-              {props.promptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
-            </button>
-          </div>
-          <dl className="settings-runtime-grid compact">
-            <div>
-              <dt>{props.text.inline("来源", "Source")}</dt>
-              <dd>
-                {props.promptPreview
-                  ? props.promptPreview.synthetic
-                    ? props.text.tt("promptSynthetic")
-                    : props.text.tt("promptForSelected")
-                  : props.text.tt("nA")}
-              </dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("线程", "Thread")}</dt>
-              <dd>{props.promptPreview?.threadId ?? props.text.tt("nA")}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("上下文策略", "Context strategy")}</dt>
-              <dd>{props.promptPreview?.renameContext.strategy ?? props.text.tt("nA")}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("预览状态", "Preview status")}</dt>
-              <dd>{autoRenameStatusLabel(promptPreviewStatus, props.text.uiLanguage)}</dd>
-            </div>
-          </dl>
-          <pre className="settings-json settings-json-large">
-            {props.promptPreview?.prompt ??
-              (props.promptPreviewRefreshing ? props.text.tt("loadingPrompt") : props.text.tt("noPreviewLoaded"))}
-          </pre>
         </article>
       </div>
     </SettingsSectionFrame>
@@ -1953,6 +2206,9 @@ export function SettingsPanel(props: {
         return (
           <NamingSection
             draft={loadedDraft}
+            onRefreshPromptPreview={props.onRefreshPromptPreview}
+            promptPreview={props.promptPreview}
+            promptPreviewRefreshing={props.promptPreviewRefreshing}
             text={text}
             updateDraftField={updateDraftField}
             updateDraftState={updateDraftState}
@@ -1975,11 +2231,6 @@ export function SettingsPanel(props: {
         return (
           <RuntimeSection
             configView={configView}
-            onRefreshPromptPreview={props.onRefreshPromptPreview}
-            previewApplyCount={props.previewApplyCount}
-            previewSuggestCount={props.previewSuggestCount}
-            promptPreview={props.promptPreview}
-            promptPreviewRefreshing={props.promptPreviewRefreshing}
             providers={props.providers}
             text={text}
           />
@@ -2003,11 +2254,11 @@ export function SettingsPanel(props: {
       <header className="settings-hero">
         <div className="settings-hero-copy">
           <p className="panel-kicker">{inline("Control Surface", "Control surface")}</p>
-          <h2>{inline("把命名策略做成可观察、可编辑、可回放的面板", "Turn naming policy into an observable, editable, replayable control panel")}</h2>
+          <h2>{inline("把命名策略做成可调的控制面板", "Make naming policy a controllable panel")}</h2>
           <p>
             {inline(
-              "这版设置页参考了 SubLinkPro 的做法：把复杂规则拆成卡片、builder 和 dialog，不让用户在大表单里硬写 prompt。Tag 现在是 AI 命名规则预设，保存设置时也会清空旧 candidate，避免继续复用过期标题。",
-              "This settings page borrows from SubLinkPro: complex rules are broken into cards, builders, and dialogs instead of a giant prompt form. Tags are now AI naming presets, and saving config clears stale candidates so old titles are not reused."
+              "在这里调整 context、标题组件、tag 规则和 provider，并直接查看预览和实际 prompt。",
+              "Adjust context, title components, tag rules, and providers here, then inspect the preview and the real prompt."
             )}
           </p>
         </div>

@@ -248,10 +248,27 @@ export type ConfigDocument = {
     maxLength?: number;
     language?: string;
     defaultStyle?: "brief" | "detailed";
-    contextStrategy?: "summary-signals" | "user-assistant-transcript";
+    contextStrategy?:
+      | "summary-signals"
+      | "last-user-last-assistant"
+      | "user-assistant-transcript"
+      | "user-only-transcript"
+      | "assistant-only-transcript"
+      | "user-transcript-last-assistant";
     contextMaxChars?: number;
     compositionMode?: "structured" | "prompt-override";
-    components?: Array<"tag" | "kind" | "scope" | "summary" | "project">;
+    builder?: Array<
+      | {
+          type: "component";
+          component: "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
+          format?: "%Y/%m/%d" | "%Y-%m-%d" | "%m/%d" | "%m-%d" | "%Y/%m/%d %H:%M" | "%H:%M";
+        }
+      | {
+          type: "separator";
+          value: string;
+        }
+    >;
+    components?: Array<"timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary">;
     componentSeparator?: string;
     tags?: Array<{
       id: string;

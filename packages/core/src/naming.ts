@@ -1,13 +1,16 @@
 import type {
   EffectiveConfig,
   MaterializedSession,
+  NamingBuilderItem,
+  NamingComponent,
   NamingTagDefinition,
+  NamingTimestampPreset,
   NamingStyle,
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
 import { buildRenameContext } from "./rename-context.js";
-import { basenameSafe, excerpt, normalizeWhitespace, stripControl, toUtcIso } from "./util.js";
+import { basenameSafe, excerpt, normalizeWhitespace, stripControl, toUtcIso, workspaceLabelForCwd } from "./util.js";
 
 type TopicRule = {
   scope: string;
@@ -180,6 +183,61 @@ const BUILTIN_TAG_LABELS: Record<
   docs: { zh: "文档", en: "docs" },
   workspace: { zh: "工作区", en: "workspace" }
 };
+
+export const DEFAULT_NAMING_TIMESTAMP_PRESET: NamingTimestampPreset = "%Y-%m-%d";
+
+function buildLegacyNamingBuilder(
+  components: NamingComponent[] | undefined,
+  separator: string | undefined
+): NamingBuilderItem[] {
+  if (!components || components.length === 0) {
+    return [];
+  }
+
+  const builder: NamingBuilderItem[] = [];
+  components.forEach((component, index) => {
+    builder.push({
+      type: "component",
+      component,
+      ...(component === "timestamp" ? { format: DEFAULT_NAMING_TIMESTAMP_PRESET } : {})
+    });
+    if (separator && index < components.length - 1) {
+      builder.push({
+        type: "separator",
+        value: separator
+      });
+    }
+  });
+  return builder;
+}
+
+export function getEffectiveNamingBuilder(config: Pick<EffectiveConfig, "naming">): NamingBuilderItem[] {
+  if (config.naming.builder && config.naming.builder.length > 0) {
+    return config.naming.builder;
+  }
+  return buildLegacyNamingBuilder(config.naming.components, config.naming.componentSeparator);
+}
+
+export function describeNamingBuilderItem(item: NamingBuilderItem, language: string): string {
+  if (item.type === "separator") {
+    return prefersChinese(language) ? `分隔符 ${JSON.stringify(item.value)}` : `separator ${JSON.stringify(item.value)}`;
+  }
+
+  const labels: Record<NamingComponent, { zh: string; en: string }> = {
+    timestamp: { zh: "时间戳", en: "timestamp" },
+    workspace: { zh: "工作区", en: "workspace" },
+    project: { zh: "项目", en: "project" },
+    tag: { zh: "标签", en: "tag" },
+    kind: { zh: "动作", en: "kind" },
+    scope: { zh: "范围", en: "scope" },
+    summary: { zh: "摘要", en: "summary" }
+  };
+
+  const base = prefersChinese(language) ? labels[item.component].zh : labels[item.component].en;
+  return item.component === "timestamp"
+    ? `${base} (${item.format ?? DEFAULT_NAMING_TIMESTAMP_PRESET})`
+    : base;
+}
 
 function prefersChinese(language: string): boolean {
   return /^zh\b/i.test(language);
@@ -604,9 +662,29 @@ function renderStructuredName(
     tag?: NamingTagDefinition;
   }
 ): string {
-  const parts = config.naming.components
-    .map((component) => {
-      switch (component) {
+  const builder = getEffectiveNamingBuilder(config);
+  if (builder.length === 0) {
+    return renderTemplate(config.naming.template, session, fields);
+  }
+
+  const renderedParts: string[] = [];
+  let pendingSeparator: string | undefined;
+  for (const item of builder) {
+    if (item.type === "separator") {
+      if (renderedParts.length > 0) {
+        pendingSeparator = item.value;
+      }
+      continue;
+    }
+
+    const value = (() => {
+      switch (item.component) {
+        case "timestamp":
+          return formatTime(session.updatedAt ?? session.createdAt, item.format ?? DEFAULT_NAMING_TIMESTAMP_PRESET);
+        case "workspace":
+          return workspaceLabelForCwd(session.cwd, session.projectName);
+        case "project":
+          return basenameSafe(session.cwd) ?? session.projectName ?? undefined;
         case "tag":
           return fields.tag ? `#${resolveTagDisplayLabel(fields.tag, config.naming.language)}` : undefined;
         case "kind":
@@ -615,20 +693,25 @@ function renderStructuredName(
           return fields.scope;
         case "summary":
           return fields.summary;
-        case "project":
-          return session.projectName ?? basenameSafe(session.cwd) ?? undefined;
         default:
           return undefined;
       }
-    })
-    .filter((value): value is string => Boolean(value && value.trim().length > 0));
+    })();
 
-  const separator = config.naming.componentSeparator || " · ";
-  if (parts.length === 0) {
-    return renderTemplate(config.naming.template, session, fields);
+    if (!value || value.length === 0) {
+      continue;
+    }
+
+    if (pendingSeparator) {
+      renderedParts.push(pendingSeparator);
+      pendingSeparator = undefined;
+    }
+    renderedParts.push(value);
   }
 
-  return parts.join(separator).replace(/\s+/g, " ").trim();
+  const rendered = renderedParts.join("").trim();
+
+  return rendered || renderTemplate(config.naming.template, session, fields);
 }
 
 export function composeConfiguredSuggestionName(

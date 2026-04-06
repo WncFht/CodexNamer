@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "echarts": "^6.0.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react": "19.3.0-canary-1b45e243-20260402",
+    "react-dom": "19.3.0-canary-1b45e243-20260402"
   },
   "devDependencies": {
     "@types/react": "^19.2.2",
