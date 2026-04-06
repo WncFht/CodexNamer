@@ -18,6 +18,7 @@ import {
 } from "./i18n.js";
 import { TranscriptPanel } from "./TranscriptPanel.js";
 import type { SessionDetail, SessionSummary } from "./types.js";
+import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
 
 const SESSION_PANE_MIN_WIDTH = 320;
 const SESSION_PANE_MAX_WIDTH = 560;
@@ -57,9 +58,15 @@ export function SessionBrowser(props: {
     () => groupSessionsByTime(props.sessions, props.uiLanguage),
     [props.sessions, props.uiLanguage]
   );
+  const [historyExpanded, setHistoryExpanded] = React.useState(false);
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
   const sessionSearchId = React.useId();
+  const latestRename = props.detail?.renameHistory?.[0];
+
+  React.useEffect(() => {
+    setHistoryExpanded(false);
+  }, [props.detail?.threadId]);
 
   const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
@@ -142,7 +149,12 @@ export function SessionBrowser(props: {
                 <button
                   className={props.selectedId === session.threadId ? "session-item active" : "session-item"}
                   key={session.threadId}
-                  onClick={() => props.onSelectSession(session.threadId)}
+                  onClick={() =>
+                    React.startTransition(() => {
+                      addAppTransitionType("nav-forward");
+                      props.onSelectSession(session.threadId);
+                    })
+                  }
                   type="button"
                 >
                   <div className="session-item-topline">
@@ -182,7 +194,13 @@ export function SessionBrowser(props: {
 
       <section className="chat-view">
         {props.detail ? (
-          <>
+          <AppViewTransition
+            default="none"
+            enter={{ "nav-forward": "nav-forward", default: "fade-in" }}
+            exit={{ "nav-forward": "nav-forward", default: "fade-out" }}
+            key={props.detail.threadId}
+          >
+            <>
             <header className="view-header chat-header">
               <div className="chat-title-wrap">
                 <div className="chat-title-block">
@@ -277,29 +295,67 @@ export function SessionBrowser(props: {
             />
 
             <div className="chat-footer-panels single-panel">
-              <section className="detail-panel">
-                <p className="panel-kicker">{tt("timeline")}</p>
-                <h3>{tt("renameHistory")}</h3>
-                <div className="history-stack">
-                  {(props.detail.renameHistory ?? []).slice(0, 10).map((entry, index) => (
-                    <article className="history-row" key={`${index}-${entry.appliedAt}-${entry.newName}`}>
-                      <div>
-                        <strong>{entry.newName}</strong>
-                        <p>
-                          {entry.kind} / {entry.source} / {namingStyleLabel(entry.style, props.uiLanguage)} / {autoRenameStatusLabel(entry.status, props.uiLanguage)}
-                          {entry.reason ? ` / ${autoRenameReasonLabel(entry.reason, props.uiLanguage)}` : ""}
-                        </p>
-                      </div>
-                      <span>{formatWhen(entry.appliedAt, props.uiLanguage)}</span>
-                    </article>
-                  ))}
-                  {(props.detail.renameHistory ?? []).length === 0 ? (
-                    <div className="history-empty">{tt("noRenameHistory")}</div>
-                  ) : null}
+              <section className="detail-panel history-tray">
+                <div className="panel-topline history-tray-header">
+                  <div>
+                    <p className="panel-kicker">{tt("timeline")}</p>
+                    <h3>{tt("renameHistory")}</h3>
+                  </div>
+                  <button
+                    className="btn-refresh"
+                    onClick={() =>
+                      React.startTransition(() => {
+                        setHistoryExpanded((current) => !current);
+                      })
+                    }
+                    type="button"
+                  >
+                    {historyExpanded ? tt("hideRenameHistory") : tt("showRenameHistory")}
+                  </button>
                 </div>
+
+                {latestRename ? (
+                  <div className="history-summary-row">
+                    <div className="history-summary-copy">
+                      <strong>{latestRename.newName}</strong>
+                      <p>
+                        {latestRename.kind} / {latestRename.source} / {namingStyleLabel(latestRename.style, props.uiLanguage)} / {autoRenameStatusLabel(latestRename.status, props.uiLanguage)}
+                        {latestRename.reason ? ` / ${autoRenameReasonLabel(latestRename.reason, props.uiLanguage)}` : ""}
+                      </p>
+                    </div>
+                    <div className="history-summary-meta">
+                      <span>{formatWhen(latestRename.appliedAt, props.uiLanguage)}</span>
+                      <span>
+                        {(props.detail.renameHistory ?? []).length} {tt("renameCountSuffix")}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="history-empty compact">{tt("noRenameHistory")}</div>
+                )}
+
+                {historyExpanded && (props.detail.renameHistory ?? []).length > 0 ? (
+                  <AppViewTransition default="none" enter="fade-in" exit="fade-out">
+                    <div className="history-stack history-expanded-list">
+                      {(props.detail.renameHistory ?? []).slice(0, 10).map((entry, index) => (
+                        <article className="history-row" key={`${index}-${entry.appliedAt}-${entry.newName}`}>
+                          <div>
+                            <strong>{entry.newName}</strong>
+                            <p>
+                              {entry.kind} / {entry.source} / {namingStyleLabel(entry.style, props.uiLanguage)} / {autoRenameStatusLabel(entry.status, props.uiLanguage)}
+                              {entry.reason ? ` / ${autoRenameReasonLabel(entry.reason, props.uiLanguage)}` : ""}
+                            </p>
+                          </div>
+                          <span>{formatWhen(entry.appliedAt, props.uiLanguage)}</span>
+                        </article>
+                      ))}
+                    </div>
+                  </AppViewTransition>
+                ) : null}
               </section>
             </div>
-          </>
+            </>
+          </AppViewTransition>
         ) : (
           <div className="history-empty">{tt("selectSessionHint")}</div>
         )}

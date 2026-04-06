@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { startTransition, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { autoRenameStatusLabel, formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import type {
@@ -9,6 +9,7 @@ import type {
   ProviderProfile,
   ProviderResponse
 } from "./types.js";
+import { AppViewTransition } from "./view-transitions.js";
 
 type SettingsDraft = {
   uiLanguage: "en-US" | "zh-CN";
@@ -537,7 +538,11 @@ function SettingsNav(props: {
         <button
           className={props.activeSection === section ? "settings-nav-item active" : "settings-nav-item"}
           key={section}
-          onClick={() => props.onChange(section)}
+          onClick={() =>
+            startTransition(() => {
+              props.onChange(section);
+            })
+          }
           type="button"
         >
           <strong>{labels[section].title}</strong>
@@ -2058,7 +2063,11 @@ export function SettingsPanel(props: {
 
       <div className="settings-shell">
         <SettingsNav activeSection={activeSection} onChange={setActiveSection} text={text} />
-        <div className="settings-stage">{renderActiveSection()}</div>
+        <div className="settings-stage">
+          <AppViewTransition default="none" enter="fade-in" exit="fade-out" key={activeSection}>
+            {renderActiveSection()}
+          </AppViewTransition>
+        </div>
       </div>
     </section>
   );

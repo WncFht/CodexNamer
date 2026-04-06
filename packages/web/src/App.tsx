@@ -4,6 +4,7 @@ import { formatWhen } from "./browser-utils.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
+import { AppViewTransition } from "./view-transitions.js";
 
 const WORKSPACE_PANE_MIN_WIDTH = 220;
 const WORKSPACE_PANE_MAX_WIDTH = 420;
@@ -224,7 +225,11 @@ export function App() {
         } as React.CSSProperties
       }
     >
-      <aside className={workspacePaneCollapsed ? "collapsed" : undefined} id="sidebar">
+      <aside
+        className={workspacePaneCollapsed ? "collapsed" : undefined}
+        id="sidebar"
+        style={{ viewTransitionName: "persistent-nav" } as React.CSSProperties}
+      >
         <div className="sidebar-header">
           <div>
             <p className="sidebar-kicker">Claude Design MD</p>
@@ -255,7 +260,11 @@ export function App() {
               aria-current={state.tab === id ? "page" : undefined}
               className={state.tab === id ? "sidebar-btn active" : "sidebar-btn"}
               key={id}
-              onClick={() => state.setTab(id as typeof state.tab)}
+              onClick={() =>
+                React.startTransition(() => {
+                  state.setTab(id as typeof state.tab);
+                })
+              }
               type="button"
             >
               {label}
@@ -380,36 +389,52 @@ export function App() {
 
         <div className="app-tab-panel" hidden={state.tab !== "settings"}>
           {showSettingsPanel ? (
-            <React.Suspense fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}>
-              <SettingsPanel
-                configView={state.configView}
-                overview={state.overview}
-                onReload={() => void state.refreshSettings()}
-                onSave={(patch) => state.saveConfig(patch)}
-                previewApplyCount={previewApplyCount}
-                previewSuggestCount={previewSuggestCount}
-                providers={state.providers}
-                saving={state.savingConfig}
-                promptPreview={state.promptPreview}
-                promptPreviewRefreshing={state.promptPreviewRefreshing}
-                onRefreshPromptPreview={() => void state.refreshPromptPreview()}
-              />
+            <React.Suspense
+              fallback={
+                <AppViewTransition exit="slide-down">
+                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
+                </AppViewTransition>
+              }
+            >
+              <AppViewTransition default="none" enter="slide-up">
+                <SettingsPanel
+                  configView={state.configView}
+                  overview={state.overview}
+                  onReload={() => void state.refreshSettings()}
+                  onSave={(patch) => state.saveConfig(patch)}
+                  previewApplyCount={previewApplyCount}
+                  previewSuggestCount={previewSuggestCount}
+                  providers={state.providers}
+                  saving={state.savingConfig}
+                  promptPreview={state.promptPreview}
+                  promptPreviewRefreshing={state.promptPreviewRefreshing}
+                  onRefreshPromptPreview={() => void state.refreshPromptPreview()}
+                />
+              </AppViewTransition>
             </React.Suspense>
           ) : null}
         </div>
 
         <div className="app-tab-panel" hidden={state.tab !== "maintenance"}>
           {showMaintenancePanel ? (
-            <React.Suspense fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}>
-              <RenameOpsPanel
-                aiRequestLogs={state.aiRequestLogs}
-                doctor={state.doctor}
-                onRefreshPreview={(options) => state.refreshPreview(options)}
-                overview={state.overview}
-                preview={state.preview}
-                previewRefreshing={state.previewRefreshing}
-                uiLanguage={uiLanguage}
-              />
+            <React.Suspense
+              fallback={
+                <AppViewTransition exit="slide-down">
+                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
+                </AppViewTransition>
+              }
+            >
+              <AppViewTransition default="none" enter="slide-up">
+                <RenameOpsPanel
+                  aiRequestLogs={state.aiRequestLogs}
+                  doctor={state.doctor}
+                  onRefreshPreview={(options) => state.refreshPreview(options)}
+                  overview={state.overview}
+                  preview={state.preview}
+                  previewRefreshing={state.previewRefreshing}
+                  uiLanguage={uiLanguage}
+                />
+              </AppViewTransition>
             </React.Suspense>
           ) : null}
         </div>
