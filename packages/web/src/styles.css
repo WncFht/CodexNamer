@@ -2421,6 +2421,7 @@ pre {
 .ops-log-table {
   width: 100%;
   min-width: 1180px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -2478,10 +2479,81 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.ops-log-nowrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ops-log-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ops-log-col-time {
+  width: 118px;
+}
+
+.ops-log-col-project {
+  width: 132px;
+}
+
+.ops-log-col-thread {
+  width: 184px;
+}
+
+.ops-log-col-model {
+  width: 126px;
+}
+
+.ops-log-col-duration {
+  width: 84px;
+}
+
+.ops-log-col-chars {
+  width: 120px;
+}
+
+.ops-log-col-transport {
+  width: 126px;
+}
+
+.ops-log-col-endpoint {
+  width: 190px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ops-log-col-info {
+  width: 200px;
+}
+
 .ops-log-empty {
   padding: 24px;
   text-align: center;
   color: var(--text-secondary);
+}
+
+.ops-queue-empty {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 84%, white 16%);
+}
+
+.ops-skip-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-skip-chip-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .ops-disclosure {

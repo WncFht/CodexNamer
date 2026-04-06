@@ -109,7 +109,17 @@ export function SessionBrowser(props: {
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
   const sessionPaneToggleLabel = props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions");
-  const renameHistory = props.detail?.renameHistory ?? [];
+  const renameHistory = React.useMemo(() => {
+    const seen = new Set<string>();
+    return (props.detail?.renameHistory ?? []).filter((entry) => {
+      const key = entry.newName.trim();
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [props.detail?.renameHistory]);
 
   const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
@@ -376,7 +386,6 @@ export function SessionBrowser(props: {
                           >
                             <div className="naming-entry-main">
                               <strong>{entry.newName}</strong>
-                              {entry.oldName ? <p>{entry.oldName} → {entry.newName}</p> : null}
                               <div className="naming-entry-meta">
                                 <span>{renameHistorySourceLabel(entry.source, props.uiLanguage)}</span>
                                 <span>{renameHistoryStatusLabel(entry.status, props.uiLanguage)}</span>

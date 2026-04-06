@@ -278,6 +278,23 @@ export function RenameOpsPanel(props: {
   const previewSuggestCount = previewItems.filter((item) => item.status === "suggest").length;
   const previewSkipCount = previewItems.filter((item) => item.status === "skip").length;
   const previewHasCandidateNames = previewItems.some((item) => typeof item.candidateName === "string");
+  const actionablePreviewItems = React.useMemo(
+    () => previewItems.filter((item) => item.status === "apply" || item.status === "suggest"),
+    [previewItems]
+  );
+  const skipReasonSummary = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of previewItems) {
+      if (item.status !== "skip") {
+        continue;
+      }
+      const key = item.reason || "skip";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((left, right) => right.count - left.count);
+  }, [previewItems]);
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
   const latestAiRequest = aiRequestLogs?.items[0];
   const filteredAiRequests = React.useMemo(() => {
@@ -811,7 +828,7 @@ export function RenameOpsPanel(props: {
         <div className="panel-topline">
           <div>
             <p className="panel-kicker">{tt("scheduler")}</p>
-            <h3>{inline("预览队列", "Preview queue")}</h3>
+            <h3>{inline("待处理队列", "Action queue")}</h3>
           </div>
           <span className="chip manual">
             {previewHasCandidateNames ? inline("含候选名", "with names") : inline("仅状态", "status only")}
@@ -837,17 +854,40 @@ export function RenameOpsPanel(props: {
         </div>
         <div className="history-stack">
           {previewItems.length === 0 ? <div className="history-empty">{tt("noPreviewLoaded")}</div> : null}
-          {previewItems.slice(0, 16).map((item) => (
+          {actionablePreviewItems.length === 0 && previewItems.length > 0 ? (
+            <div className="ops-queue-empty">
+              {inline("当前没有待建议或待应用的会话。", "There are no actionable suggest/apply items right now.")}
+            </div>
+          ) : null}
+          {actionablePreviewItems.slice(0, 16).map((item) => (
             <article className="history-row" key={`${item.threadId}-${item.status}-${item.reason}`}>
               <div>
                 <strong>{item.candidateName ?? item.threadId}</strong>
                 <p>{item.threadId}</p>
               </div>
               <span>
-                {autoRenameStatusLabel(item.status, props.uiLanguage)} / {autoRenameReasonLabel(item.reason, props.uiLanguage)}
+                {autoRenameStatusLabel(item.status, props.uiLanguage)}
               </span>
             </article>
           ))}
+        </div>
+        <div className="ops-skip-summary">
+          <div className="panel-topline">
+            <div>
+              <p className="panel-kicker">{inline("跳过摘要", "Skip summary")}</p>
+              <h3>{inline("为什么没进队", "Why items were skipped")}</h3>
+            </div>
+          </div>
+          <div className="ops-skip-chip-list">
+            {skipReasonSummary.length === 0 ? (
+              <span className="ops-log-summary-chip">{inline("当前没有跳过项", "No skipped items right now")}</span>
+            ) : null}
+            {skipReasonSummary.slice(0, 8).map((item) => (
+              <span className="ops-log-summary-chip" key={item.reason}>
+                {autoRenameReasonLabel(item.reason, props.uiLanguage)}: {formatUiNumber(item.count, props.uiLanguage)}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -957,42 +997,42 @@ export function RenameOpsPanel(props: {
               ) : null}
               {filteredAiRequests.map((item) => (
                 <tr className="ops-log-row" data-status={item.status} key={item.id}>
-                  <td>
-                    <div className="ops-log-primary">{formatWhen(item.startedAt, props.uiLanguage)}</div>
-                    <div className="ops-log-secondary">{formatWhen(item.finishedAt, props.uiLanguage)}</div>
+                  <td className="ops-log-col-time">
+                    <div className="ops-log-primary ops-log-nowrap" title={item.startedAt}>{formatWhen(item.startedAt, props.uiLanguage)}</div>
+                    <div className="ops-log-secondary ops-log-nowrap" title={item.finishedAt ?? ""}>{formatWhen(item.finishedAt, props.uiLanguage)}</div>
                   </td>
-                  <td>
-                    <div className="ops-log-primary">{item.projectName ?? noDataLabel}</div>
-                    <div className="ops-log-secondary">{item.backend}</div>
+                  <td className="ops-log-col-project">
+                    <div className="ops-log-primary ops-log-nowrap" title={item.projectName ?? ""}>{item.projectName ?? noDataLabel}</div>
+                    <div className="ops-log-secondary ops-log-nowrap" title={item.backend}>{item.backend}</div>
                   </td>
-                  <td className="ops-log-mono">{item.threadId}</td>
-                  <td>
-                    <div className="ops-log-primary">{item.model ?? noDataLabel}</div>
-                    <div className="ops-log-secondary">{item.metadata?.providerRef ?? noDataLabel}</div>
+                  <td className="ops-log-mono ops-log-col-thread" title={item.threadId}>{item.threadId}</td>
+                  <td className="ops-log-col-model">
+                    <div className="ops-log-primary ops-log-nowrap" title={item.model ?? ""}>{item.model ?? noDataLabel}</div>
+                    <div className="ops-log-secondary ops-log-nowrap" title={item.metadata?.providerRef ?? ""}>{item.metadata?.providerRef ?? noDataLabel}</div>
                   </td>
                   <td>
                     <span className={`chip ${aiRequestStatusTone(item.status)}`}>
                       {aiRequestStatusLabel(item.status, props.uiLanguage)}
                     </span>
                   </td>
-                  <td>
-                    <div className="ops-log-primary">{formatDurationMs(item.durationMs)}</div>
+                  <td className="ops-log-col-duration">
+                    <div className="ops-log-primary ops-log-nowrap">{formatDurationMs(item.durationMs)}</div>
                     <div className="ops-log-secondary">{latestAiRequest?.id === item.id ? inline("最新", "latest") : "\u00A0"}</div>
                   </td>
-                  <td>
-                    <div className="ops-log-primary">
+                  <td className="ops-log-col-chars">
+                    <div className="ops-log-primary ops-log-nowrap">
                       {formatUiNumber(item.promptChars, props.uiLanguage)} / {formatUiNumber(item.responseChars, props.uiLanguage)}
                     </div>
-                    <div className="ops-log-secondary">{inline("prompt / response", "prompt / response")}</div>
+                    <div className="ops-log-secondary ops-log-nowrap">{inline("prompt / response", "prompt / response")}</div>
                   </td>
-                  <td>
-                    <div className="ops-log-primary">{item.transport}</div>
-                    <div className="ops-log-secondary">{item.metadata?.requestedBackend ?? item.backend}</div>
+                  <td className="ops-log-col-transport">
+                    <div className="ops-log-primary ops-log-nowrap" title={item.transport}>{item.transport}</div>
+                    <div className="ops-log-secondary ops-log-nowrap" title={item.metadata?.requestedBackend ?? item.backend}>{item.metadata?.requestedBackend ?? item.backend}</div>
                   </td>
-                  <td className="ops-log-mono">{item.baseUrl ?? noDataLabel}</td>
-                  <td>
-                    <div className="ops-log-primary">{item.error ?? noDataLabel}</div>
-                    <div className="ops-log-secondary">
+                  <td className="ops-log-mono ops-log-col-endpoint" title={item.baseUrl ?? ""}>{item.baseUrl ?? noDataLabel}</td>
+                  <td className="ops-log-col-info">
+                    <div className={item.error ? "ops-log-primary ops-log-clamp" : "ops-log-primary ops-log-nowrap"} title={item.error ?? ""}>{item.error ?? noDataLabel}</div>
+                    <div className="ops-log-secondary ops-log-nowrap" title={item.error ? inline("错误", "error") : item.metadata?.profile ?? ""}>
                       {item.error ? inline("错误", "error") : item.metadata?.profile ?? noDataLabel}
                     </div>
                   </td>

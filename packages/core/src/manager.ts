@@ -59,6 +59,7 @@ type DaemonSweepSnapshot = {
 };
 
 const ACCEPTED_OFFICIAL_RENAME_SOURCES = ["ai", "manual"] as const;
+const SCAN_FRESH_WINDOW_MS = 1_200;
 
 function normalizeComparableName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
@@ -119,6 +120,12 @@ export class CodexSessionManager {
     size: number;
     mtimeMs: number;
     snapshot: SessionIndexSnapshot;
+  };
+  private scanPromise?: Promise<ScanReport>;
+  private lastScanCompletedAt = 0;
+  private lastScanResult: ScanReport = {
+    scannedRollouts: 0,
+    updatedSessions: 0
   };
   private readonly cwd: string;
   private readonly configPath?: string;
@@ -190,6 +197,7 @@ export class CodexSessionManager {
       }
     });
     this.sessionIndexCache = undefined;
+    this.lastScanCompletedAt = 0;
   }
 
   private requireSessionDetail(threadId: string): SessionDetail {
@@ -234,7 +242,7 @@ export class CodexSessionManager {
     return deepMerge(this.config, userConfig as Partial<EffectiveConfig>);
   }
 
-  async scan(): Promise<ScanReport> {
+  private async performScan(): Promise<ScanReport> {
     const rolloutFiles = await discoverRolloutFiles(this.config.general.codexHome);
     let updatedSessions = 0;
 
@@ -306,6 +314,28 @@ export class CodexSessionManager {
       scannedRollouts: rolloutFiles.length,
       updatedSessions
     };
+  }
+
+  async scan(): Promise<ScanReport> {
+    if (this.scanPromise) {
+      return this.scanPromise;
+    }
+
+    if (Date.now() - this.lastScanCompletedAt <= SCAN_FRESH_WINDOW_MS) {
+      return this.lastScanResult;
+    }
+
+    this.scanPromise = this.performScan()
+      .then((result) => {
+        this.lastScanResult = result;
+        this.lastScanCompletedAt = Date.now();
+        return result;
+      })
+      .finally(() => {
+        this.scanPromise = undefined;
+      });
+
+    return this.scanPromise;
   }
 
   async listSessions(options?: { dirty?: boolean }): Promise<SessionSummary[]> {
