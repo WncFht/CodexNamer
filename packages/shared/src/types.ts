@@ -313,6 +313,7 @@ export interface RenameSuggestion {
   kind: string;
   summary: string;
   scope?: string;
+  tagId?: string;
   generatedAt: string;
   metadata?: Record<string, string>;
 }

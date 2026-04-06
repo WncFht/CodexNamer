@@ -82,53 +82,53 @@ function normalizeNamingTags(value: unknown): EffectiveConfig["naming"]["tags"] 
 const DEFAULT_NAMING_TAGS: EffectiveConfig["naming"]["tags"] = [
   {
     id: "settings",
-    description: "配置、设置、保存、语言、provider 相关会话。",
-    promptHint: "setting settings config save language provider explicit inherit-codex ui"
+    description: "用于设置页、配置保存、语言切换、provider 选项这类会话。",
+    promptHint: "Choose when the main work is editing config, fixing settings forms, or explaining provider / language options."
   },
   {
     id: "rename",
-    description: "命名规则、命名风格、标题结构相关会话。",
-    promptHint: "rename naming title brief detailed style summary scope"
+    description: "用于命名规则、标题结构、风格版本、重命名策略这类会话。",
+    promptHint: "Choose when the session is about rename logic, title structure, naming style, or session title quality."
   },
   {
     id: "context",
-    description: "rename context、transcript、上下文策略相关会话。",
-    promptHint: "context transcript user assistant summary signals history"
+    description: "用于 rename context、transcript、上下文读取策略这类会话。",
+    promptHint: "Choose when the work focuses on transcript selection, context building, summary signals, or prompt inputs."
   },
   {
     id: "prompt",
-    description: "AI prompt、提示词、provider 请求构造相关会话。",
-    promptHint: "prompt instruction ai provider responses chat completions"
+    description: "用于 AI prompt、提示词策略、请求载荷构造这类会话。",
+    promptHint: "Choose when the work is mainly about prompt writing, prompt preview, or model request payload design."
   },
   {
     id: "provider",
-    description: "模型提供方、base URL、模型、鉴权配置相关会话。",
-    promptHint: "provider base url model api key auth wire api relay"
+    description: "用于模型提供方、base URL、模型与鉴权配置这类会话。",
+    promptHint: "Choose when the main focus is provider selection, base URL, model auth, wire API, or relay compatibility."
   },
   {
     id: "daemon",
-    description: "后台 watcher、scan、auto-apply 相关会话。",
-    promptHint: "daemon watcher scan auto apply heartbeat background"
+    description: "用于 watcher、scan、后台 sweep、auto-apply 这类会话。",
+    promptHint: "Choose when the session is about daemon background work, scan cadence, heartbeat, or automatic apply behavior."
   },
   {
     id: "history",
-    description: "命名历史、timeline、session detail 相关会话。",
-    promptHint: "history timeline detail rename history session detail"
+    description: "用于命名历史、timeline、session detail 这类会话。",
+    promptHint: "Choose when the main work is inspecting rename history, timelines, detail panels, or applied records."
   },
   {
     id: "tests",
-    description: "测试、回归、构建验证相关会话。",
-    promptHint: "test testing regression build tsc vitest"
+    description: "用于测试、回归、构建验证这类会话。",
+    promptHint: "Choose when the session is primarily about tests, regression coverage, builds, or verification."
   },
   {
     id: "docs",
-    description: "README、维护文档、说明同步相关会话。",
-    promptHint: "docs readme documentation spec"
+    description: "用于 README、维护文档、规格同步这类会话。",
+    promptHint: "Choose when the main output is documentation, specs, README updates, or maintenance notes."
   },
   {
     id: "workspace",
-    description: "工作区、会话列表、布局与目录边界相关会话。",
-    promptHint: "workspace session list layout project cwd"
+    description: "用于工作区、会话列表、布局和目录边界这类会话。",
+    promptHint: "Choose when the work is about workspace grouping, session list layout, project boundaries, or cwd handling."
   }
 ];
 

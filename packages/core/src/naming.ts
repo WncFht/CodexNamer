@@ -199,12 +199,30 @@ export function resolveTagDisplayLabel(tag: NamingTagDefinition, language: strin
   return tag.id;
 }
 
-function extractTagKeywords(tag: NamingTagDefinition): string[] {
-  const combined = [tag.id, tag.label, tag.description, tag.promptHint]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join(" ");
-  const matches = combined.match(/[\u4e00-\u9fff]{1,}|[A-Za-z0-9_-]{2,}/g) ?? [];
-  return Array.from(new Set(matches.map((value) => value.toLowerCase())));
+function normalizeConfiguredName(value?: string): string | undefined {
+  const normalized = normalizeWhitespace(stripControl(value));
+  return normalized ? normalized : undefined;
+}
+
+function normalizeTagLookupValue(value?: string): string | undefined {
+  const normalized = normalizeConfiguredName(value);
+  return normalized ? normalized.toLowerCase() : undefined;
+}
+
+export function resolveNamingTag(
+  tags: NamingTagDefinition[],
+  rawTagId: string | undefined,
+  language: string
+): NamingTagDefinition | undefined {
+  const lookup = normalizeTagLookupValue(rawTagId);
+  if (!lookup) {
+    return undefined;
+  }
+
+  return tags.find((tag) => {
+    const candidates = [tag.id, tag.label, resolveTagDisplayLabel(tag, language)];
+    return candidates.some((candidate) => normalizeTagLookupValue(candidate) === lookup);
+  });
 }
 
 export function resolveNamingStyle(
@@ -357,68 +375,6 @@ function detectTopics(session: MaterializedSession, language: string): Array<{ s
   }
 
   return Array.from(scores.values()).sort((left, right) => right.score - left.score);
-}
-
-function detectNamingTag(
-  session: MaterializedSession,
-  config: EffectiveConfig
-): NamingTagDefinition | undefined {
-  if (config.naming.tags.length === 0) {
-    return undefined;
-  }
-
-  const textSources = collectTaskTexts(session);
-  const topicMatches = detectTopics(session, config.naming.language);
-  const topicKeys = new Set<string>();
-  for (const topic of topicMatches) {
-    topicKeys.add(topic.scope.toLowerCase());
-    topicKeys.add(topic.label.toLowerCase());
-  }
-
-  let best:
-    | {
-        tag: NamingTagDefinition;
-        score: number;
-      }
-    | undefined;
-
-  for (const tag of config.naming.tags) {
-    const keywords = extractTagKeywords(tag);
-    if (keywords.length === 0) {
-      continue;
-    }
-
-    let score = 0;
-    for (const source of textSources) {
-      const haystack = source.text.toLowerCase();
-      for (const keyword of keywords) {
-        if (!haystack.includes(keyword)) {
-          continue;
-        }
-        score += source.weight + Math.min(keyword.length, 8);
-      }
-    }
-
-    if (topicKeys.has(tag.id.toLowerCase())) {
-      score += 12;
-    }
-    if (topicMatches.some((topic) => resolveTagDisplayLabel(tag, config.naming.language).toLowerCase() === topic.label.toLowerCase())) {
-      score += 10;
-    }
-
-    if (score <= 0) {
-      continue;
-    }
-
-    if (!best || score > best.score) {
-      best = {
-        tag,
-        score
-      };
-    }
-  }
-
-  return best?.tag;
 }
 
 function detectIssueSuffix(joined: string, language: string): string | undefined {
@@ -675,6 +631,38 @@ function renderStructuredName(
   return parts.join(separator).replace(/\s+/g, " ").trim();
 }
 
+export function composeConfiguredSuggestionName(
+  session: MaterializedSession,
+  config: EffectiveConfig,
+  fields: {
+    kind: string;
+    summary: string;
+    scope?: string;
+    tagId?: string;
+    explicitName?: string;
+  }
+): string {
+  const tag = resolveNamingTag(config.naming.tags, fields.tagId, config.naming.language);
+  if (config.naming.compositionMode === "structured") {
+    return renderStructuredName(session, config, {
+      kind: fields.kind,
+      summary: fields.summary,
+      scope: fields.scope,
+      tag
+    });
+  }
+
+  return (
+    normalizeConfiguredName(fields.explicitName) ??
+    renderStructuredName(session, config, {
+      kind: fields.kind,
+      summary: fields.summary,
+      scope: fields.scope,
+      tag
+    })
+  );
+}
+
 export function suggestNameHeuristically(
   session: MaterializedSession,
   config: EffectiveConfig
@@ -700,13 +688,10 @@ export function suggestNameHeuristically(
       : materialized.projectName && materialized.projectName !== "fanghaotian"
         ? materialized.projectName
         : undefined;
-  const tag = detectNamingTag(materialized, config);
-
-  let name = renderStructuredName(materialized, config, {
+  let name = composeConfiguredSuggestionName(materialized, config, {
     kind,
     summary,
-    scope,
-    tag
+    scope
   });
   if (name.length > config.naming.maxLength) {
     name = name.slice(0, config.naming.maxLength).trim();
@@ -720,6 +705,7 @@ export function suggestNameHeuristically(
     kind,
     summary,
     scope,
+    tagId: undefined,
     generatedAt: toUtcIso()
   };
 }

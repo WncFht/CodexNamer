@@ -68,8 +68,9 @@ Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来
 当前命名还有一条新的“组件组合”约定：
 
 - 默认模式是 `structured`
-- 标题由 `tag / kind / scope / summary / project` 这些组件按顺序拼装
-- tag 目录可以在 Settings 里编辑
+- AI 会先返回 `kind / summary / scope / tagId`
+- 后端再按 `tag / kind / scope / summary / project` 这些组件顺序拼装最终标题
+- tag 目录现在是 AI 命名规则预设，可以在 Settings 里编辑
 - 高级用户也可以切到 `prompt-override`，给 AI 一段自定义命名覆写 prompt
 - `template` 现在只保留为兼容层参考字段，不再是主要推荐入口
 
@@ -106,7 +107,7 @@ Local API、WebUI 与 TUI 都已经有第一版可运行实现：
 1. 不碰 Codex SQLite。用户 rename 层与内部抽取 title 层必须分离。
 2. 主写回层使用 `session_index.jsonl`，因为这就是官方 rename 的最终持久化层。
 3. 自动 rename 不追求“每次更新都改名”，而是用“实质更新 + idle finalize”控制频率。
-4. AI 命名不是强依赖。没有 AI 时也要能靠 heuristic 正常工作。
+4. AI 命名不是强依赖。没有 AI 时系统仍会回退 heuristic 生成临时候选，但 tag 预设只由 AI 负责选择。
 5. WebUI / TUI / CLI 必须复用同一套后端状态与 rename 引擎，避免分叉逻辑。
 6. 先让“最终名字正确落盘”，再考虑“当前活跃界面立刻刷新”。
 

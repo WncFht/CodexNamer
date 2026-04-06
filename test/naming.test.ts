@@ -36,8 +36,8 @@ describe("naming specificity", () => {
     expect(suggestion.summary).toContain("设置");
     expect(suggestion.summary).toContain("自动重命名逻辑");
     expect(suggestion.summary).toContain("聚焦");
-    expect(suggestion.name).toContain("#设置");
     expect(suggestion.name).toContain("fix");
+    expect(suggestion.tagId).toBeUndefined();
   });
 
   it("asks AI for specific names with expanded kind options", () => {
@@ -69,6 +69,8 @@ describe("naming specificity", () => {
     expect(prompt).toContain("namingCompositionMode: structured");
     expect(prompt).toContain("namingComponents: tag, kind, summary");
     expect(prompt).toContain("Structured naming tags:");
+    expect(prompt).toContain("Return only a JSON object with keys: name, kind, summary, scope, tagId.");
+    expect(prompt).toContain("set tagId to the matching preset id");
     expect(prompt).toContain("Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.");
   });
 

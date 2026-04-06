@@ -484,6 +484,18 @@ export class StateDatabase {
       .run(threadId);
   }
 
+  clearAllCandidates(): void {
+    this.db
+      .prepare(
+        `UPDATE rename_state
+         SET current_candidate_name = NULL,
+             current_candidate_source = NULL,
+             current_candidate_generated_at = NULL,
+             current_candidate_style = NULL`
+      )
+      .run();
+  }
+
   setPreferredStyle(threadId: string, preferredStyle?: NamingStyle): void {
     this.db
       .prepare(

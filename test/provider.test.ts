@@ -170,7 +170,7 @@ describe("provider backends", () => {
           schemaPayload = await fs.readFile(schemaPath, "utf8");
           await fs.writeFile(
             outputPath,
-            '{"name":"0404 research: codex provider","kind":"research","summary":"codex provider","scope":"core"}',
+            '{"name":"0404 research: codex provider","kind":"research","summary":"codex provider","scope":"core","tagId":"provider"}',
             "utf8"
           );
         }
@@ -193,9 +193,72 @@ describe("provider backends", () => {
     expect(capturedArgs).toContain('model_reasoning_effort="minimal"');
     expect(capturedArgs).toContain('model_reasoning_summary="none"');
     expect(JSON.parse(schemaPayload).required).toEqual(["name", "kind", "summary", "scope"]);
+    expect(JSON.parse(schemaPayload).properties.tagId.type).toBe("string");
     expect(suggestion.source).toBe("ai");
     expect(suggestion.kind).toBe("research");
-    expect(suggestion.name).toContain("codex provider");
+    expect(suggestion.tagId).toBe("provider");
+    expect(suggestion.name).toContain("#Provider");
+  });
+
+  it("uses AI-selected tagId when structured naming mode is active", async () => {
+    const service = new OpenAICompatibleRenameInferenceService(
+      buildConfigForTests({
+        naming: {
+          language: "zh-CN",
+          components: ["tag", "kind", "summary"],
+          componentSeparator: " · "
+        },
+        ai: {
+          backend: "openai-compatible",
+          providerSource: "explicit",
+          profile: "default",
+          timeoutSeconds: 10,
+          temperature: 0.2
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            backendKind: "openai-compatible",
+            displayName: "default",
+            providerSource: "explicit",
+            baseUrl: "http://example.test/v1",
+            model: "gpt-test",
+            apiKey: "test-key",
+            wireApi: "responses",
+            enabled: true,
+            isDefault: true
+          }
+        ]
+      }),
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text:
+              '{"name":"ignored raw name","kind":"fix","summary":"修复设置保存循环","scope":"settings","tagId":"settings"}'
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+    );
+
+    const suggestion = await service.suggest({
+      threadId: "t-structured-tag",
+      rolloutPath: "/tmp/r-tag.jsonl",
+      cwd: "/tmp/project",
+      projectName: "project",
+      taskCompleteCount: 1,
+      tokenTotal: 100,
+      firstUserMessage: "修复 web settings 保存后重置的问题"
+    });
+
+    expect(suggestion.source).toBe("ai");
+    expect(suggestion.tagId).toBe("settings");
+    expect(suggestion.name).toContain("#设置");
+    expect(suggestion.name).toContain("fix");
   });
 
   it("prefers direct HTTP when backend=codex can inherit auth from Codex", async () => {

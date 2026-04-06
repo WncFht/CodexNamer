@@ -689,6 +689,7 @@ export class CodexSessionManager {
       patch
     });
     await this.reloadConfig();
+    this.db.clearAllCandidates();
     return {
       writtenTo: result.userConfigPath,
       restartRequired: false,

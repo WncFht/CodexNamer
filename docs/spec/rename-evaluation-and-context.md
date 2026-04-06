@@ -403,6 +403,7 @@ heuristic 现在不再只盯三段摘要，而是优先消费 `renameContext`，
 
 - 候选名生成 fallback
 - AI 正式命名前的过渡态
+- 不负责 tag preset 选择
 
 对应到配置界面上，Web Settings 已经不再暴露旧的 `rename.mode` 开关。
 
@@ -469,6 +470,7 @@ AI prompt 现在会同时带上：
   - 避免无必要的第二子句
 - 需要同时抓住“子系统 + 动作 / 问题 / 审查焦点”
 - 如果会话里有两个高度相关的目标，可以保留一个短 secondary fragment
+- structured 模式下，如果一个 tag preset 明显匹配，需要返回 `tagId`
 
 如果当前配置启用了 `prompt-override`，prompt 还会额外带上：
 
@@ -478,8 +480,9 @@ AI prompt 现在会同时带上：
 语义是：
 
 - `structured`
-  - AI 需要尊重组件顺序来拼标题
-  - tag 只在“命中且组件里包含 `tag`”时出现
+  - AI 负责返回 `kind / summary / scope / tagId`
+  - 后端负责按组件顺序拼标题
+  - tag 只在“AI 返回了 tagId 且组件里包含 `tag`”时出现
 - `prompt-override`
   - 结构化组件仍会保留在 prompt 里
   - 但 `custom_prompt` 会被声明为最高优先级命名约束

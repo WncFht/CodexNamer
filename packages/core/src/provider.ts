@@ -16,7 +16,13 @@ import type {
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
-import { resolveNamingStyle, resolveTagDisplayLabel, suggestNameHeuristically } from "./naming.js";
+import {
+  composeConfiguredSuggestionName,
+  resolveNamingStyle,
+  resolveTagDisplayLabel,
+  resolveNamingTag,
+  suggestNameHeuristically
+} from "./naming.js";
 import { buildRenameContext } from "./rename-context.js";
 import { stripControl, toUtcIso } from "./util.js";
 
@@ -29,6 +35,7 @@ type JsonSuggestionPayload = {
   kind?: string;
   summary?: string;
   scope?: string;
+  tagId?: string;
 };
 
 export interface RenameInferenceRequestLogger {
@@ -174,7 +181,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
   const style = resolveNamingStyle(session, config);
   const componentSummary = config.naming.components.join(", ") || "(none)";
   const structuredGuidance =
-    "Structured naming mode is active. Build the final name by following the configured component order exactly, skipping only components that have no meaningful value.";
+    "Structured naming mode is active. Return structured fields that the caller can assemble into the final title. When one configured tag preset clearly fits, set tagId to the matching preset id; otherwise leave tagId empty.";
   const promptOverrideDetails = config.naming.customPrompt?.trim()
     ? [
         "Custom prompt override is active. Treat the override below as the highest-priority naming policy, while still obeying the JSON-only response contract and max length.",
@@ -198,7 +205,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
       : "Preferred naming style: brief. Keep the name short and list-safe while still preserving the main subsystem and action.";
   const parts = [
     "You generate a concise session rename suggestion for Codex Session Manager.",
-    "Return only a JSON object with keys: name, kind, summary, scope.",
+    "Return only a JSON object with keys: name, kind, summary, scope, tagId.",
     "Do not inspect files, do not run shell commands, and do not rely on repository context.",
     "Use only the session context provided below.",
     `Target language: ${config.naming.language}.`,
@@ -225,6 +232,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     `namingCompositionMode: ${config.naming.compositionMode}`,
     `namingComponents: ${componentSummary}`,
     `componentSeparator: ${JSON.stringify(config.naming.componentSeparator)}`,
+    `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
     `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
     `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
     `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
@@ -272,7 +280,8 @@ function tryParseJson(text: string): JsonSuggestionPayload | undefined {
       name: typeof parsed.name === "string" ? parsed.name : undefined,
       kind: typeof parsed.kind === "string" ? parsed.kind : undefined,
       summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
-      scope: typeof parsed.scope === "string" ? parsed.scope : undefined
+      scope: typeof parsed.scope === "string" ? parsed.scope : undefined,
+      tagId: typeof parsed.tagId === "string" ? parsed.tagId : undefined
     };
   } catch {
     return undefined;
@@ -281,23 +290,34 @@ function tryParseJson(text: string): JsonSuggestionPayload | undefined {
 
 function sanitizeSuggestion(
   payload: JsonSuggestionPayload | undefined,
+  session: MaterializedSession,
+  config: EffectiveConfig,
   fallback: RenameSuggestion,
-  maxLength: number,
   metadata: Record<string, string>
 ): RenameSuggestion {
-  const name = stripControl(payload?.name) ?? fallback.name;
   const kind = stripControl(payload?.kind) ?? fallback.kind;
   const summary = stripControl(payload?.summary) ?? fallback.summary;
   const scope = stripControl(payload?.scope) ?? fallback.scope;
+  const resolvedTag = resolveNamingTag(config.naming.tags, payload?.tagId, config.naming.language);
+  const rawName =
+    composeConfiguredSuggestionName(session, config, {
+      kind,
+      summary,
+      scope,
+      tagId: resolvedTag?.id,
+      explicitName: stripControl(payload?.name) ?? fallback.name
+    }) || fallback.name;
+  const name = rawName.slice(0, Math.max(1, config.naming.maxLength)).trim();
 
   return {
     threadId: fallback.threadId,
-    name: name.slice(0, Math.max(1, maxLength)).trim(),
+    name,
     source: "ai",
     style: fallback.style,
     kind,
     summary,
     scope,
+    tagId: resolvedTag?.id,
     generatedAt: toUtcIso(),
     metadata
   };
@@ -626,7 +646,7 @@ async function callChatCompletionsApi(
           {
             role: "system",
             content:
-              "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope."
+              "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
           },
           {
             role: "user",
@@ -706,7 +726,7 @@ export class OpenAICompatibleRenameInferenceService extends NoneRenameInferenceS
         }
       }
 
-      return sanitizeSuggestion(extractFirstJsonObject(text), fallback, this.config.naming.maxLength, {
+      return sanitizeSuggestion(extractFirstJsonObject(text), session, this.config, fallback, {
         backend: "openai-compatible",
         profile: provider.profileId,
         providerRef: provider.providerRef ?? "",
@@ -814,7 +834,8 @@ export class CodexRenameInferenceService extends NoneRenameInferenceService {
             name: { type: "string" },
             kind: { type: "string" },
             summary: { type: "string" },
-            scope: { type: "string" }
+            scope: { type: "string" },
+            tagId: { type: "string" }
           },
           required: ["name", "kind", "summary", "scope"]
         },
@@ -872,7 +893,7 @@ export class CodexRenameInferenceService extends NoneRenameInferenceService {
         status: "succeeded",
         responseChars: output.length
       });
-      return sanitizeSuggestion(extractFirstJsonObject(output), fallback, this.config.naming.maxLength, {
+      return sanitizeSuggestion(extractFirstJsonObject(output), session, this.config, fallback, {
         backend: "codex",
         profile: provider?.profileId ?? "default",
         providerRef: provider?.providerRef ?? ""

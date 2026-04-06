@@ -118,15 +118,17 @@ backup_before_compact = true
 - `composition_mode = "structured" | "prompt-override"`
 - `components = ["tag", "kind", "scope", "summary", "project"]` 的有序子集
 - `component_separator = " · "`：组件之间如何拼接
-- `[[naming.tags]]`：可编辑的分类 tag 目录
+- `[[naming.tags]]`：可编辑的 AI tag 预设目录
 - `custom_prompt = "..."`：仅在 `prompt-override` 模式下作为 AI 覆写指令
 
 语义：
 
 - `structured`
   - 默认模式
-  - AI prompt 和 heuristic 都会读取组件顺序与 tag 目录
-  - 用户不需要自己写 prompt，只需要调组件和 tag
+  - AI prompt 会读取组件顺序与 tag 目录
+  - AI 返回 `kind / summary / scope / tagId`
+  - 后端根据组件顺序拼装最终标题
+  - 用户不需要自己写 prompt，只需要调组件和 tag preset
 - `prompt-override`
   - 仍然保留结构化组件信息
   - 但会额外把 `custom_prompt` 作为最高优先级 AI 指令
@@ -139,7 +141,7 @@ backup_before_compact = true
   - `components`
   - `component_separator`
   - `tags`
-- 如果组件顺序里不包含 `tag`，即使某个 tag 被命中，也不会出现在最终标题里
+- 如果组件顺序里不包含 `tag`，即使 AI 返回了 `tagId`，也不会出现在最终标题里
 
 ## Tag 目录
 
@@ -155,11 +157,16 @@ backup_before_compact = true
 - `id`：内部稳定标识
 - `label`：最终显示标签；如果缺省，会回退到内置的本地化 label 或直接使用 `id`
 - `description`：给人和 prompt preview 看的短说明
-- `prompt_hint`：给 AI 和 heuristic 做分类命中的关键词提示
+- `prompt_hint`：给 AI 的选择规则与输出提示，应该写成“什么时候选这个 tag、选中后要强调什么”
 
-当前 tag 的定位是“分类”，不是“二级模板”。
-也就是说，tag 只负责告诉系统“这次会话大致属于哪一类”，
-真正的标题正文仍由 `kind / scope / summary / project` 等组件决定。
+当前 tag 的定位是“AI 可选预设”，不是 heuristic 分类，也不是二级模板。
+
+也就是说：
+
+- tag 只负责给 AI 一套可复用的标签规则
+- AI 在 structured 模式下决定是否返回某个 `tagId`
+- 真正的标题正文仍由 `kind / scope / summary / project` 等组件决定
+- heuristic fallback 不再消费 tag 目录去猜分类
 
 ## AI 后端
 
@@ -167,6 +174,7 @@ backup_before_compact = true
 
 - 不使用 AI
 - 全部由 heuristic + 结构化组件生成
+- 这时 tag preset 只保留在配置里，不会由 heuristic 主动分类
 - 默认必须可用
 
 ### `backend = "openai-compatible"`
