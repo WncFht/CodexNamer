@@ -62,7 +62,8 @@ type RenameContextStrategy =
   | "user-assistant-transcript"
   | "user-only-transcript"
   | "assistant-only-transcript"
-  | "user-transcript-last-assistant";
+  | "user-transcript-last-assistant"
+  | "paired-user-turns";
 type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
 type NamingTimestampPreset = "%Y/%m/%d" | "%Y-%m-%d" | "%m/%d" | "%m-%d" | "%Y/%m/%d %H:%M" | "%H:%M";
 type NamingBuilderItem =
@@ -1028,6 +1029,14 @@ function NamingSection(props: {
       value: "user-transcript-last-assistant",
       label: props.text.inline("用户全文 + 最后助手", "User transcript + last assistant"),
       description: props.text.inline("读用户过程，再补最后一条助手总结。", "Read user history, then append the last assistant summary.")
+    },
+    {
+      value: "paired-user-turns",
+      label: props.text.inline("配对用户轮次", "Paired user turns"),
+      description: props.text.inline(
+        "每个用户轮次只挂前一段里最后一条有效助手结论。",
+        "For each user turn, attach only the last substantive assistant from the preceding assistant cluster."
+      )
     }
   ];
 

@@ -183,9 +183,64 @@ function formatPromptSection(title: string, lines: string[], fence = "text"): st
   return [title, `\`\`\`${fence}`, ...(lines.length > 0 ? lines : ["(none)"]), "```"].join("\n");
 }
 
+function formatPairedRenameContextLines(renameContext: RenameContext): string[] {
+  const lines: string[] = [];
+  let turn = 0;
+
+  for (let index = 0; index < renameContext.segments.length; index += 1) {
+    const segment = renameContext.segments[index];
+    if (!segment) {
+      continue;
+    }
+
+    if (segment.source === "paired_previous_assistant") {
+      turn += 1;
+      lines.push(`turn ${turn}`);
+      lines.push("assistant_context");
+      lines.push(segment.content);
+
+      const next = renameContext.segments[index + 1];
+      if (next?.source === "paired_user_turn") {
+        lines.push("");
+        lines.push("user");
+        lines.push(next.content);
+        index += 1;
+      }
+
+      if (index < renameContext.segments.length - 1) {
+        lines.push("");
+      }
+      continue;
+    }
+
+    if (segment.source === "transcript_seed" || segment.source === "paired_user_turn") {
+      turn += 1;
+      lines.push(`turn ${turn}`);
+      lines.push("user");
+      lines.push(segment.content);
+      if (index < renameContext.segments.length - 1) {
+        lines.push("");
+      }
+      continue;
+    }
+
+    lines.push(`${segment.role} [${segment.source}${segment.timestamp ? ` @ ${segment.timestamp}` : ""}]`);
+    lines.push(segment.content);
+    if (index < renameContext.segments.length - 1) {
+      lines.push("");
+    }
+  }
+
+  return lines;
+}
+
 function formatRenameContextLines(renameContext: RenameContext): string[] {
   if (renameContext.segments.length === 0) {
     return ["(none)"];
+  }
+
+  if (renameContext.strategy === "paired-user-turns") {
+    return formatPairedRenameContextLines(renameContext);
   }
 
   return renameContext.segments.flatMap((segment, index) => {

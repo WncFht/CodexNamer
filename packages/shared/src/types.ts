@@ -10,7 +10,8 @@ export type RenameContextStrategy =
   | "user-assistant-transcript"
   | "user-only-transcript"
   | "assistant-only-transcript"
-  | "user-transcript-last-assistant";
+  | "user-transcript-last-assistant"
+  | "paired-user-turns";
 export type NamingStyle = "brief" | "detailed";
 export type NamingCompositionMode = "structured" | "prompt-override";
 export type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
@@ -27,7 +28,9 @@ export type RenameContextSegmentSource =
   | "summary_last_user"
   | "summary_last_assistant"
   | "transcript_seed"
-  | "transcript_recent";
+  | "transcript_recent"
+  | "paired_previous_assistant"
+  | "paired_user_turn";
 export type RenameSource = "heuristic" | "ai" | "hybrid" | "manual" | "batch" | "recovered";
 export type RenameHistoryKind = "auto" | "manual" | "batch" | "compact-rewrite";
 export type RenameStatus = "applied" | "skipped" | "failed" | "preview_only";

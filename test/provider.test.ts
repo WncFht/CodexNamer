@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 import {
   CodexRenameInferenceService,
   OpenAICompatibleRenameInferenceService,
+  buildRenameContext,
+  buildRenamePrompt,
   buildConfigForTests,
   createRenameInferenceService
 } from "@codex-session-manager/core";
+import type { SessionTranscript } from "@codex-session-manager/shared";
 
 describe("provider backends", () => {
   it("uses openai-compatible responses API and parses structured JSON", async () => {
@@ -208,6 +211,74 @@ describe("provider backends", () => {
     expect(capturedPrompt).toContain("requestedContextStrategy: user-only-transcript");
     expect(capturedPrompt).not.toContain("兼容层");
     expect(capturedPrompt).not.toContain("Legacy template reference");
+  });
+
+  it("formats paired user turns as turn blocks in the prompt", () => {
+    const base = buildConfigForTests();
+    const config = buildConfigForTests({
+      general: {
+        codexHome: "~/.codex",
+        stateDir: "~/.local/state/codex-session-manager",
+        uiLanguage: "zh-CN"
+      },
+      naming: {
+        ...base.naming,
+        contextStrategy: "paired-user-turns",
+        language: "zh-CN"
+      }
+    });
+
+    const transcript: SessionTranscript = {
+      items: [
+        { id: "1", role: "user", kind: "message", content: "先修 settings 保存状态" },
+        { id: "2", role: "assistant", kind: "message", content: "我先看一下表单状态逻辑。" },
+        { id: "3", role: "assistant", kind: "message", content: "已经定位到 dirty baseline 比较链路会造成误判。" },
+        { id: "4", role: "user", kind: "message", content: "然后加 paired context strategy" }
+      ],
+      counts: {
+        total: 4,
+        visible: 4,
+        hidden: 0,
+        tools: 0
+      }
+    };
+
+    const session = {
+      threadId: "t-paired-prompt",
+      rolloutPath: "/tmp/r.jsonl",
+      cwd: "/tmp/project",
+      projectName: "project",
+      taskCompleteCount: 1,
+      tokenTotal: 100,
+      firstUserMessage: "先修 settings 保存状态",
+      lastUserMessage: "然后加 paired context strategy",
+      lastAgentMessage: "已经定位到 dirty baseline 比较链路会造成误判。",
+      renameContext: buildRenameContext(
+        {
+          threadId: "t-paired-prompt",
+          rolloutPath: "/tmp/r.jsonl",
+          cwd: "/tmp/project",
+          projectName: "project",
+          taskCompleteCount: 1,
+          tokenTotal: 100,
+          firstUserMessage: "先修 settings 保存状态",
+          lastUserMessage: "然后加 paired context strategy",
+          lastAgentMessage: "已经定位到 dirty baseline 比较链路会造成误判。"
+        },
+        config,
+        { transcript }
+      )
+    };
+
+    const prompt = buildRenamePrompt(session, config);
+    expect(prompt).toContain("requestedContextStrategy: paired-user-turns");
+    expect(prompt).toContain("```conversation");
+    expect(prompt).toContain("turn 1");
+    expect(prompt).toContain("turn 2");
+    expect(prompt).toContain("assistant_context");
+    expect(prompt).toContain("user");
+    expect(prompt).not.toContain("我先看一下表单状态逻辑");
+    expect(prompt).toContain("已经定位到 dirty baseline 比较链路会造成误判");
   });
 
   it("uses codex exec runner and reads structured output file", async () => {

@@ -254,7 +254,8 @@ export type ConfigDocument = {
       | "user-assistant-transcript"
       | "user-only-transcript"
       | "assistant-only-transcript"
-      | "user-transcript-last-assistant";
+      | "user-transcript-last-assistant"
+      | "paired-user-turns";
     contextMaxChars?: number;
     compositionMode?: "structured" | "prompt-override";
     builder?: Array<

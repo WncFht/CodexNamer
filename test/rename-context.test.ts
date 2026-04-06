@@ -249,4 +249,56 @@ describe("rename context", () => {
     expect(context.text).toContain("user: 然后把 context 选项扩成更细粒度");
     expect(context.text).toContain("assistant(last): 先改 provider.ts，再重启 live API");
   });
+
+  it("pairs each user turn with the last substantive assistant from the preceding cluster", () => {
+    const base = buildConfigForTests();
+    const config = buildConfigForTests({
+      naming: {
+        ...base.naming,
+        contextStrategy: "paired-user-turns",
+        contextMaxChars: 320
+      }
+    });
+
+    const transcript: SessionTranscript = {
+      items: [
+        { id: "1", role: "user", kind: "message", content: "先修 save button 的 dirty 判断" },
+        { id: "2", role: "assistant", kind: "message", content: "我先检查 SettingsPanel 里的 draft 同步。" },
+        { id: "3", role: "assistant", kind: "message", content: "已经定位到 baseline 对比会让 Save 状态误判，问题在 encoded config key。" },
+        { id: "4", role: "assistant", kind: "message", content: "我现在开始改。" },
+        { id: "5", role: "user", kind: "message", content: "然后把 context 也扩成 paired strategy" },
+        { id: "6", role: "assistant", kind: "message", content: "先补 rename-context。" },
+        { id: "7", role: "user", kind: "message", content: "最后补一个对比实验报告" }
+      ],
+      counts: {
+        total: 7,
+        visible: 7,
+        hidden: 0,
+        tools: 0
+      }
+    };
+
+    const context = buildRenameContext(
+      {
+        threadId: "thread-paired-turns",
+        rolloutPath: "/tmp/rollout.jsonl",
+        firstUserMessage: "先修 save button 的 dirty 判断",
+        lastUserMessage: "最后补一个对比实验报告",
+        lastAgentMessage: "先补 rename-context。",
+        taskCompleteCount: 2,
+        tokenTotal: 220
+      },
+      config,
+      { transcript }
+    );
+
+    expect(context.requestedStrategy).toBe("paired-user-turns");
+    expect(context.strategy).toBe("paired-user-turns");
+    expect(context.text).toContain("user(goal): 先修 save button 的 dirty 判断");
+    expect(context.text).toContain("assistant(context): 已经定位到 baseline 对比会让 Save 状态误判");
+    expect(context.text).toContain("user(turn): 然后把 context 也扩成 paired strategy");
+    expect(context.text).toContain("user(turn): 最后补一个对比实验报告");
+    expect(context.text).not.toContain("我现在开始改");
+    expect(context.text).not.toContain("先补 rename-context");
+  });
 });

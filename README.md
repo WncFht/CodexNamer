@@ -356,6 +356,7 @@ npm run tui -- --api-base http://127.0.0.1:42110
 - `user-only-transcript`：只读取可见用户消息
 - `assistant-only-transcript`：只读取可见助手消息
 - `user-transcript-last-assistant`：读取可见用户消息，并追加最后一条助手消息
+- `paired-user-turns`：按 user turn 组织上下文；对每个后续 user，只挂它前一段 assistant cluster 里最后一条有效 assistant，不会跨过更早 user 回溯旧上下文
 
 如果你想让 rename 更贴近整段会话，而不是只看首尾摘要，可以在 Web/TUI 的 `Settings` 里切换更细粒度的 `Context strategy`。
 

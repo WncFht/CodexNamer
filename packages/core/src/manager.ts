@@ -366,7 +366,8 @@ export class CodexSessionManager {
       "user-assistant-transcript",
       "user-only-transcript",
       "assistant-only-transcript",
-      "user-transcript-last-assistant"
+      "user-transcript-last-assistant",
+      "paired-user-turns"
     ]);
     const transcript =
       transcriptStrategies.has(this.config.naming.contextStrategy)

@@ -104,6 +104,7 @@ backup_before_compact = true
   - `user-only-transcript`
   - `assistant-only-transcript`
   - `user-transcript-last-assistant`
+  - `paired-user-turns`
 - `context_max_chars = <number>`
 
 语义：
@@ -118,6 +119,11 @@ backup_before_compact = true
 注意：
 
 - 这不是旧的 `rename.mode`
+- `paired-user-turns` 是 transcript 类策略里更偏“任务推进线”的版本
+  - 首条 user 仍作为整体目标保留
+  - 对每个后续 user，只看它前面紧邻的一段 assistant cluster
+  - 只选这段 cluster 里最后一条“有信息量的 assistant”
+  - 不会跨过更早的 user 往前回溯，避免旧上下文串进新需求
 
 ## AI 请求并发
 
@@ -193,6 +199,12 @@ backup_before_compact = true
   - 中文界面 -> 中文 Prompt
   - 英文界面 -> 英文 Prompt
   - 最终标题输出语言仍由 `naming.language` 控制
+- transcript 类策略都会进入 fenced code block
+  - `paired-user-turns` 会按 turn block 渲染：
+    - `turn N`
+    - `assistant_context`
+    - `user`
+  - 其他 transcript 策略仍然按消息逐条换行
 
 ## Tag 目录
 
