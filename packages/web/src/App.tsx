@@ -384,7 +384,7 @@ export function App() {
               <SettingsPanel
                 configView={state.configView}
                 overview={state.overview}
-                onReload={() => void state.refreshSidePanels()}
+                onReload={() => void state.refreshSettings()}
                 onSave={(patch) => state.saveConfig(patch)}
                 previewApplyCount={previewApplyCount}
                 previewSuggestCount={previewSuggestCount}

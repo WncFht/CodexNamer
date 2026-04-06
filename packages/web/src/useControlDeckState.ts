@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import {
   applySession,
@@ -43,6 +43,16 @@ export type UiNotice = {
   tone: "info" | "success" | "error";
   text: string;
 };
+
+type DataResource =
+  | "sessions"
+  | "config"
+  | "providers"
+  | "overview"
+  | "doctor"
+  | "ai-request-logs"
+  | "preview"
+  | "prompt-preview";
 
 const ALL_WORKSPACES_ID = "__all_workspaces__";
 
@@ -129,6 +139,46 @@ function writeUiStateToUrl(state: UrlUiState): void {
   }
 }
 
+export function panelResourcesForTab(tab: TabId): DataResource[] {
+  if (tab === "settings") {
+    return ["config", "providers", "overview", "prompt-preview"];
+  }
+  if (tab === "maintenance") {
+    return ["overview", "doctor", "ai-request-logs", "preview"];
+  }
+  return [];
+}
+
+export function liveRefreshResourcesForTab(
+  tab: TabId,
+  options?: {
+    includePromptPreview?: boolean;
+  }
+): DataResource[] {
+  const resources: DataResource[] = ["sessions", "preview"];
+  if (tab === "settings") {
+    resources.push("overview");
+    if (options?.includePromptPreview) {
+      resources.push("prompt-preview");
+    }
+    return resources;
+  }
+  if (tab === "maintenance") {
+    resources.push("overview", "doctor", "ai-request-logs");
+  }
+  return resources;
+}
+
+function mergeResources(...resourceGroups: readonly DataResource[][]): DataResource[] {
+  const merged = new Set<DataResource>();
+  for (const group of resourceGroups) {
+    for (const resource of group) {
+      merged.add(resource);
+    }
+  }
+  return [...merged];
+}
+
 export function useControlDeckState() {
   const initialUiStateRef = useRef<UrlUiState | null>(null);
   if (!initialUiStateRef.current) {
@@ -164,6 +214,7 @@ export function useControlDeckState() {
   const deferredSearch = useDeferredValue(search);
   const eventCursorRef = useRef(0);
   const latestUiStateRef = useRef({
+    tab,
     deferredSearch,
     dirtyOnly,
     selectedWorkspaceId,
@@ -171,13 +222,18 @@ export function useControlDeckState() {
   });
   const sessionsRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
-  const sidePanelsRequestIdRef = useRef(0);
+  const configRequestIdRef = useRef(0);
+  const providersRequestIdRef = useRef(0);
+  const overviewRequestIdRef = useRef(0);
+  const doctorRequestIdRef = useRef(0);
+  const aiRequestLogsRequestIdRef = useRef(0);
   const previewRequestIdRef = useRef(0);
   const promptPreviewRequestIdRef = useRef(0);
   const previewUrgentPendingRef = useRef(0);
   const promptPreviewUrgentPendingRef = useRef(0);
 
   latestUiStateRef.current = {
+    tab,
     deferredSearch,
     dirtyOnly,
     selectedWorkspaceId,
@@ -248,22 +304,48 @@ export function useControlDeckState() {
     );
   };
 
-  const reloadSidePanels = async () => {
-    const requestId = ++sidePanelsRequestIdRef.current;
-    const [providerPayload, configPayload, doctorPayload, overviewPayload, aiRequestLogPayload] = await Promise.all([
-      fetchProviders(),
-      fetchConfig(),
-      fetchDoctor(),
-      fetchOverview(),
-      fetchAiRequestLogs()
-    ]);
-    if (requestId !== sidePanelsRequestIdRef.current) {
+  const reloadConfigView = async () => {
+    const requestId = ++configRequestIdRef.current;
+    const configPayload = await fetchConfig();
+    if (requestId !== configRequestIdRef.current) {
+      return;
+    }
+    setConfigView(configPayload);
+  };
+
+  const reloadProviders = async () => {
+    const requestId = ++providersRequestIdRef.current;
+    const providerPayload = await fetchProviders();
+    if (requestId !== providersRequestIdRef.current) {
       return;
     }
     setProviders(providerPayload);
-    setConfigView(configPayload);
-    setDoctor(doctorPayload);
+  };
+
+  const reloadOverview = async () => {
+    const requestId = ++overviewRequestIdRef.current;
+    const overviewPayload = await fetchOverview();
+    if (requestId !== overviewRequestIdRef.current) {
+      return;
+    }
     setOverview(overviewPayload);
+  };
+
+  const reloadDoctor = async () => {
+    const requestId = ++doctorRequestIdRef.current;
+    const doctorPayload = await fetchDoctor();
+    if (requestId !== doctorRequestIdRef.current) {
+      return;
+    }
+    setDoctor(doctorPayload);
+  };
+
+  const reloadAiRequestLogs = async () => {
+    const requestId = ++aiRequestLogsRequestIdRef.current;
+    const aiRequestLogPayload = await fetchAiRequestLogs();
+    if (requestId !== aiRequestLogsRequestIdRef.current) {
+      return;
+    }
     setAiRequestLogs(aiRequestLogPayload);
   };
 
@@ -314,6 +396,58 @@ export function useControlDeckState() {
         }
       }
     }
+  };
+
+  const loadResources = async (
+    resources: readonly DataResource[],
+    options?: {
+      threadId?: string;
+      urgentPreview?: boolean;
+      urgentPromptPreview?: boolean;
+    }
+  ) => {
+    const tasks: Array<Promise<void>> = [];
+
+    if (resources.includes("sessions")) {
+      tasks.push(reloadSessions());
+    }
+    if (resources.includes("config")) {
+      tasks.push(reloadConfigView());
+    }
+    if (resources.includes("providers")) {
+      tasks.push(reloadProviders());
+    }
+    if (resources.includes("overview")) {
+      tasks.push(reloadOverview());
+    }
+    if (resources.includes("doctor")) {
+      tasks.push(reloadDoctor());
+    }
+    if (resources.includes("ai-request-logs")) {
+      tasks.push(reloadAiRequestLogs());
+    }
+    if (resources.includes("preview")) {
+      tasks.push(
+        reloadPreview({
+          includeCandidateNames: false,
+          urgent: options?.urgentPreview
+        })
+      );
+    }
+    if (resources.includes("prompt-preview")) {
+      tasks.push(
+        reloadPromptPreview({
+          threadId: options?.threadId,
+          urgent: options?.urgentPromptPreview
+        })
+      );
+    }
+
+    if (tasks.length === 0) {
+      return;
+    }
+
+    await Promise.all(tasks);
   };
 
   const reloadDetail = async (threadId: string | undefined) => {
@@ -399,20 +533,31 @@ export function useControlDeckState() {
   }, [deferredSearch, dirtyOnly, selectedWorkspaceId]);
 
   useEffect(() => {
-    void reloadPreview({ urgent: true });
+    void loadResources(["preview"], { urgentPreview: true }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
+    const resources = panelResourcesForTab(tab);
+    if (resources.length === 0) {
+      return;
+    }
+
+    void loadResources(resources, {
+      threadId: latestUiStateRef.current.selectedId,
+      urgentPreview: tab === "maintenance",
+      urgentPromptPreview: tab === "settings"
+    }).catch((nextError) => {
+      setFailure(nextError);
+    });
+
     if (tab !== "maintenance") {
       return;
     }
 
-    void reloadSidePanels().catch(() => undefined);
-    void reloadPreview({ includeCandidateNames: false, urgent: true }).catch(() => undefined);
-
     const timer = window.setInterval(() => {
-      void reloadSidePanels().catch(() => undefined);
-      void reloadPreview({ includeCandidateNames: false }).catch(() => undefined);
+      void loadResources(resources, {
+        threadId: latestUiStateRef.current.selectedId
+      }).catch(() => undefined);
     }, 5_000);
 
     return () => {
@@ -421,11 +566,14 @@ export function useControlDeckState() {
   }, [tab]);
 
   useEffect(() => {
+    if (tab !== "settings") {
+      return;
+    }
     void reloadPromptPreview({
       threadId: selectedId,
       urgent: false
     });
-  }, [selectedId, configView?.effectiveConfig]);
+  }, [configView?.effectiveConfig, selectedId, tab]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -437,7 +585,7 @@ export function useControlDeckState() {
 
   useEffect(() => {
     let active = true;
-    void reloadSidePanels()
+    void loadResources(["config"])
       .then(() => {
         if (active) {
           setLastSyncAt((previous) => previous ?? new Date().toISOString());
@@ -453,19 +601,22 @@ export function useControlDeckState() {
     };
   }, []);
 
-  const refreshVisibleState = (
-    threadId = latestUiStateRef.current.selectedId,
-    options?: {
-      promptPreview?: boolean;
+  const refreshCurrentView = useEffectEvent(
+    (
+      options?: {
+        threadId?: string;
+        includePromptPreview?: boolean;
+      }
+    ) => {
+      const nextTab = latestUiStateRef.current.tab;
+      const resources = liveRefreshResourcesForTab(nextTab, {
+        includePromptPreview: options?.includePromptPreview
+      });
+      void loadResources(resources, {
+        threadId: options?.threadId ?? latestUiStateRef.current.selectedId
+      }).catch(() => undefined);
     }
-  ) => {
-    void reloadSessions();
-    void reloadSidePanels().catch(() => undefined);
-    void reloadPreview({ includeCandidateNames: false }).catch(() => undefined);
-    if (options?.promptPreview) {
-      void reloadPromptPreview({ threadId }).catch(() => undefined);
-    }
-  };
+  );
 
   useEffect(() => {
     if (!error) {
@@ -473,13 +624,13 @@ export function useControlDeckState() {
     }
 
     const timer = window.setInterval(() => {
-      refreshVisibleState();
+      refreshCurrentView();
     }, 3_000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [error]);
+  }, [error, refreshCurrentView]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -490,20 +641,23 @@ export function useControlDeckState() {
             return;
           }
 
-          refreshVisibleState();
+          refreshCurrentView();
         })
         .catch(() => {
-          void reloadSessions();
+          void loadResources(["sessions"]).catch(() => undefined);
         });
     }, 5_000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshCurrentView]);
 
   const refreshAfterAction = (threadId: string) => {
-    refreshVisibleState(threadId);
+    refreshCurrentView({
+      threadId,
+      includePromptPreview: true
+    });
   };
 
   const runAction = async <T>(options: {
@@ -551,8 +705,14 @@ export function useControlDeckState() {
     try {
       const result = await updateConfig(userConfig);
       setConfigView(result.config);
-      await reloadSidePanels();
-      await reloadPromptPreview({ threadId: latestUiStateRef.current.selectedId });
+      await loadResources(
+        mergeResources(["config", "sessions", "preview"], panelResourcesForTab(latestUiStateRef.current.tab)),
+        {
+          threadId: latestUiStateRef.current.selectedId,
+          urgentPreview: true,
+          urgentPromptPreview: latestUiStateRef.current.tab === "settings"
+        }
+      );
       setNotice({
         tone: "success",
         text: result.restartRequired
@@ -608,7 +768,16 @@ export function useControlDeckState() {
     refreshSessions: reloadSessions,
     refreshPreview: reloadPreview,
     refreshPromptPreview: () => reloadPromptPreview({ threadId: latestUiStateRef.current.selectedId, urgent: true }),
-    refreshSidePanels: reloadSidePanels,
+    refreshSettings: () =>
+      loadResources(panelResourcesForTab("settings"), {
+        threadId: latestUiStateRef.current.selectedId,
+        urgentPromptPreview: true
+      }),
+    refreshMaintenance: () =>
+      loadResources(panelResourcesForTab("maintenance"), {
+        threadId: latestUiStateRef.current.selectedId,
+        urgentPreview: true
+      }),
     saveConfig,
     actions: {
       suggest: () =>

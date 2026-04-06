@@ -53,7 +53,10 @@ export function SessionBrowser(props: {
   onToggleFreeze: () => void | Promise<void>;
   onToggleManualOverride: () => void | Promise<void>;
 }) {
-  const groupedSessions = groupSessionsByTime(props.sessions, props.uiLanguage);
+  const groupedSessions = React.useMemo(
+    () => groupSessionsByTime(props.sessions, props.uiLanguage),
+    [props.sessions, props.uiLanguage]
+  );
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
   const sessionSearchId = React.useId();
