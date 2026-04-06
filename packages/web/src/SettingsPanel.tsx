@@ -44,6 +44,7 @@ type SettingsDraft = {
   aiProfile: string;
   aiTimeoutSeconds: string;
   aiTemperature: string;
+  aiMaxConcurrency: string;
   maintenanceCompactMb: string;
   maintenanceCompactLines: string;
   maintenanceBackupBeforeCompact: boolean;
@@ -340,6 +341,7 @@ function buildDraft(configView: ConfigView): SettingsDraft {
     aiProfile: asString(ai.profile, selectedProfileId),
     aiTimeoutSeconds: asNumberString(ai.timeoutSeconds || ai.timeout_seconds, "45"),
     aiTemperature: asNumberString(ai.temperature, "0.2"),
+    aiMaxConcurrency: asNumberString(ai.maxConcurrency || ai.max_concurrency, "1"),
     maintenanceCompactMb: asNumberString(
       maintenance.suggestCompactIndexAboveMb || maintenance.suggest_compact_index_above_mb,
       "5"
@@ -382,6 +384,14 @@ function firstNonEmptyString(...values: Array<unknown>): string | undefined {
     }
   }
   return undefined;
+}
+
+function encodedConfigKey(document: ConfigDocument): string {
+  return JSON.stringify(document);
+}
+
+function isDraftDirty(draft: SettingsDraft, baseline: ConfigDocument): boolean {
+  return encodedConfigKey(encodeDraft(draft)) !== encodedConfigKey(baseline);
 }
 
 function encodeDraft(draft: SettingsDraft): ConfigDocument {
@@ -443,7 +453,8 @@ function encodeDraft(draft: SettingsDraft): ConfigDocument {
       providerSource: draft.aiProviderSource as ProviderSource,
       profile: stripEmptyString(draft.aiProfile),
       timeoutSeconds: parseNumber(draft.aiTimeoutSeconds),
-      temperature: parseNumber(draft.aiTemperature)
+      temperature: parseNumber(draft.aiTemperature),
+      maxConcurrency: parseNumber(draft.aiMaxConcurrency)
     },
     maintenance: {
       suggestCompactIndexAboveMb: parseNumber(draft.maintenanceCompactMb),
@@ -541,6 +552,7 @@ function useSettingsDraft(configView: ConfigView | null) {
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
   const [dirty, setDirty] = useState(false);
   const draftRef = useRef<SettingsDraft | null>(null);
+  const baselineRef = useRef<ConfigDocument | null>(null);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -567,23 +579,33 @@ function useSettingsDraft(configView: ConfigView | null) {
     }
 
     const nextDraft = buildDraft(configView);
+    const nextBaseline = encodeDraft(nextDraft);
     const currentDraft = draftRef.current;
+    baselineRef.current = nextBaseline;
     if (!dirty || !currentDraft) {
       setDraft(nextDraft);
+      setDirty(false);
       return;
     }
 
-    if (JSON.stringify(encodeDraft(currentDraft)) === JSON.stringify(encodeDraft(nextDraft))) {
+    if (!isDraftDirty(currentDraft, nextBaseline)) {
       setDraft(nextDraft);
       setDirty(false);
     }
   }, [configView, dirty]);
 
   const updateDraftState: DraftStateUpdater = (updater, options) => {
-    if (options?.dirty ?? true) {
-      setDirty(true);
-    }
-    setDraft((current) => (current ? updater(current) : current));
+    setDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const next = updater(current);
+      if (options?.dirty ?? true) {
+        setDirty(baselineRef.current ? isDraftDirty(next, baselineRef.current) : false);
+      }
+      return next;
+    });
   };
 
   const updateDraftField: DraftFieldUpdater = (field, value, options) => {
@@ -880,6 +902,10 @@ function NamingSection(props: {
   promptPreview: PromptPreviewResponse | null;
   promptPreviewRefreshing: boolean;
   onRefreshPromptPreview: () => void | Promise<void>;
+  onReplayRenames: (params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }) => Promise<unknown>;
   updateDraftState: DraftStateUpdater;
   updateDraftField: DraftFieldUpdater;
 }) {
@@ -896,6 +922,9 @@ function NamingSection(props: {
     | null
   >(null);
   const [customSeparator, setCustomSeparator] = useState("");
+  const [replaySince, setReplaySince] = useState("");
+  const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
+  const [replaying, setReplaying] = useState(false);
 
   const namingComponentOptions: Array<{ value: NamingComponent; label: string; copy: string }> = [
     {
@@ -1373,6 +1402,71 @@ function NamingSection(props: {
         <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
+              <p className="panel-kicker">{props.text.inline("Replay queue", "Replay queue")}</p>
+              <h4>{props.text.inline("按时间把旧会话重新放回命名队列", "Requeue older sessions by time")}</h4>
+              <p className="settings-copy">
+                {props.text.inline(
+                  "当你调整命名逻辑后，可以把某个时间点之后的会话重新标记为待命名。这个动作不会改配置，只会清空对应候选并重新入队。",
+                  "After changing naming logic, you can mark sessions after a chosen time for rename replay. This does not change config; it only clears stale candidates and requeues them."
+                )}
+              </p>
+            </div>
+            <button
+              className="btn-sm"
+              disabled={!replaySince || replaying}
+              onClick={async () => {
+                if (!replaySince) {
+                  return;
+                }
+                setReplaying(true);
+                try {
+                  await props.onReplayRenames({
+                    since: new Date(replaySince).toISOString(),
+                    basis: replayBasis
+                  });
+                } finally {
+                  setReplaying(false);
+                }
+              }}
+              type="button"
+            >
+              {replaying ? props.text.inline("重新入队中...", "Requeueing...") : props.text.inline("重新入队", "Requeue")}
+            </button>
+          </div>
+          <div className="settings-two-up">
+            <label className="settings-field">
+              <span>{props.text.inline("时间起点", "Since")}</span>
+              <input
+                onChange={(event) => {
+                  setReplaySince(event.target.value);
+                }}
+                type="datetime-local"
+                value={replaySince}
+              />
+            </label>
+            <SelectField
+              label={props.text.inline("比较基准", "Compare against")}
+              onChange={(value) => {
+                setReplayBasis(value);
+              }}
+              options={[
+                {
+                  value: "session-updated-at",
+                  label: props.text.inline("会话更新时间", "Session updated time")
+                },
+                {
+                  value: "last-applied-at",
+                  label: props.text.inline("上次正式命名时间", "Last applied rename time")
+                }
+              ]}
+              value={replayBasis}
+            />
+          </div>
+        </article>
+
+        <article className="settings-surface-card settings-span-two">
+          <div className="settings-card-header">
+            <div>
               <p className="panel-kicker">{props.text.tt("promptPreview")}</p>
               <h4>{props.text.inline("命名策略实际发送给 AI 的 Prompt", "The prompt actually sent to AI for naming")}</h4>
               <p className="settings-copy">
@@ -1502,10 +1596,10 @@ function AiProviderSection(props: {
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("provider")}
-      title={props.text.inline("选择谁来完成 AI 命名", "Choose who powers AI naming")}
+      title={props.text.inline("选择命名请求走哪条 AI 链路", "Choose which AI path powers naming")}
       copy={props.text.inline(
-        "这一层决定 rename 是走 Codex 继承链还是显式 provider profile。推荐先把 provider 解析结果看清，再改 profile。",
-        "This layer decides whether rename uses the Codex inheritance chain or an explicit provider profile. Check the resolved provider first, then tune the profile."
+        "先决定 backend、来源和并发数，再检查当前实际命中的 provider。只有需要精调时，才展开 profile 细节。",
+        "Set backend, source, and concurrency first, then inspect the provider actually in effect. Open the profile editor only when you need finer control."
       )}
     >
       <div className="settings-stage-grid">
@@ -1513,7 +1607,7 @@ function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.tt("ai")}</p>
-              <h4>{props.text.inline("Backend 与来源", "Backend and source")}</h4>
+              <h4>{props.text.inline("路由与并发", "Routing and concurrency")}</h4>
             </div>
           </div>
           <div className="settings-two-up">
@@ -1539,6 +1633,20 @@ function AiProviderSection(props: {
                 { value: "explicit", label: "explicit" }
               ]}
               value={props.draft.aiProviderSource as ProviderSource}
+            />
+            <SelectField
+              label={props.text.inline("并发数", "Max concurrency")}
+              onChange={(value) => {
+                props.updateDraftField("aiMaxConcurrency", value);
+              }}
+              options={[
+                { value: "1", label: "1" },
+                { value: "2", label: "2" },
+                { value: "4", label: "4" },
+                { value: "6", label: "6" },
+                { value: "8", label: "8" }
+              ]}
+              value={props.draft.aiMaxConcurrency}
             />
             <label className="settings-field">
               <span>{props.text.tt("activeProfile")}</span>
@@ -1602,7 +1710,7 @@ function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Resolved", "Resolved")}</p>
-              <h4>{props.text.inline("当前真正会命中的 provider", "The provider actually in effect")}</h4>
+              <h4>{props.text.inline("当前正在生效的 provider", "The provider currently in effect")}</h4>
             </div>
           </div>
           <dl className="settings-runtime-grid">
@@ -1630,6 +1738,12 @@ function AiProviderSection(props: {
             <div>
               <p className="panel-kicker">{props.text.inline("Profile editor", "Profile editor")}</p>
               <h4>{props.text.inline("显式 profile 细节", "Explicit profile details")}</h4>
+              <p className="settings-copy">
+                {props.text.inline(
+                  "这里只编辑显式 profile。本区不决定当前是否启用它，真正启用入口在上面的 `provider source`。",
+                  "This section edits explicit profiles only. Whether they are active is controlled above by `provider source`."
+                )}
+              </p>
             </div>
           </div>
 
@@ -2168,6 +2282,10 @@ export function SettingsPanel(props: {
   saving: boolean;
   onReload: () => void | Promise<void>;
   onRefreshPromptPreview: () => void | Promise<void>;
+  onReplayRenames: (params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }) => Promise<unknown>;
   onSave: (patch: ConfigDocument) => void | Promise<void>;
 }) {
   const { draft, dirty, setDirty, draftRef, updateDraftState, updateDraftField } = useSettingsDraft(props.configView);
@@ -2207,6 +2325,7 @@ export function SettingsPanel(props: {
           <NamingSection
             draft={loadedDraft}
             onRefreshPromptPreview={props.onRefreshPromptPreview}
+            onReplayRenames={props.onReplayRenames}
             promptPreview={props.promptPreview}
             promptPreviewRefreshing={props.promptPreviewRefreshing}
             text={text}

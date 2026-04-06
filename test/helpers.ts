@@ -5,6 +5,14 @@ import path from "node:path";
 import type { EffectiveConfig } from "@codex-session-manager/shared";
 import { buildConfigForTests, CodexSessionManager } from "@codex-session-manager/core";
 
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? Array<DeepPartial<U>>
+    : T[K] extends Record<string, unknown>
+      ? DeepPartial<T[K]>
+      : T[K];
+};
+
 export async function createTempWorkspace(): Promise<{
   root: string;
   codexHome: string;
@@ -143,7 +151,7 @@ export async function writeRolloutFixture(params: {
   return rolloutPath;
 }
 
-export async function createManagerForTest(overrides: Partial<EffectiveConfig> & {
+export async function createManagerForTest(overrides: DeepPartial<EffectiveConfig> & {
   codexHome: string;
   stateDir: string;
 }): Promise<CodexSessionManager> {

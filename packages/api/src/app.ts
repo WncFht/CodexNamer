@@ -473,5 +473,23 @@ export async function buildApiServer(options?: {
     return result;
   });
 
+  app.post("/api/v1/maintenance/requeue-renames", async (request) => {
+    const body =
+      (request.body as { since?: string; basis?: "session-updated-at" | "last-applied-at" } | undefined) ?? {};
+    if (!body.since?.trim()) {
+      throw new Error("since is required");
+    }
+    const result = await manager.requeueRenamesSince({
+      since: body.since,
+      basis: body.basis ?? "session-updated-at"
+    });
+    eventLog.publish("maintenance.rename_requeued", {
+      since: result.since,
+      basis: result.basis,
+      queued: result.queued
+    });
+    return result;
+  });
+
   return app;
 }

@@ -164,4 +164,89 @@ describe("auto rename apply", () => {
       await manager.close();
     }
   });
+
+  it("limits concurrent AI requests during auto-rename sweeps", async () => {
+    const workspace = await createTempWorkspace();
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir,
+      ai: {
+        backend: "codex",
+        providerSource: "inherit-codex",
+        profile: "default",
+        timeoutSeconds: 45,
+        temperature: 0.2,
+        maxConcurrency: 2
+      }
+    });
+
+    let active = 0;
+    let maxActive = 0;
+
+    (manager as unknown as {
+      inferenceService: {
+        suggest: (session: { threadId: string }) => Promise<{
+          threadId: string;
+          name: string;
+          source: "ai";
+          style: "detailed";
+          kind: string;
+          summary: string;
+          generatedAt: string;
+        }>;
+      };
+    }).inferenceService = {
+      suggest: async (session) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        active -= 1;
+        return {
+          threadId: session.threadId,
+          name: `rename ${session.threadId}`,
+          source: "ai",
+          style: "detailed",
+          kind: "fix",
+          summary: "rename queue",
+          generatedAt: new Date().toISOString()
+        };
+      }
+    };
+
+    try {
+      await Promise.all([
+        writeRolloutFixture({
+          codexHome: workspace.codexHome,
+          threadId: "019d-concurrency-1",
+          userMessage: "会话一",
+          lastAgentMessage: "助手一",
+          updatedAt: "2026-04-04T12:00:00.000Z"
+        }),
+        writeRolloutFixture({
+          codexHome: workspace.codexHome,
+          threadId: "019d-concurrency-2",
+          userMessage: "会话二",
+          lastAgentMessage: "助手二",
+          updatedAt: "2026-04-04T12:00:00.000Z"
+        }),
+        writeRolloutFixture({
+          codexHome: workspace.codexHome,
+          threadId: "019d-concurrency-3",
+          userMessage: "会话三",
+          lastAgentMessage: "助手三",
+          updatedAt: "2026-04-04T12:00:00.000Z"
+        })
+      ]);
+
+      const sweep = await manager.runAutoRenameSweep({
+        includeCandidateNames: true,
+        autoApply: false
+      });
+
+      expect(sweep.previews).toHaveLength(3);
+      expect(maxActive).toBe(2);
+    } finally {
+      await manager.close();
+    }
+  });
 });

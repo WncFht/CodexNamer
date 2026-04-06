@@ -407,6 +407,7 @@ export function App() {
                   promptPreview={state.promptPreview}
                   promptPreviewRefreshing={state.promptPreviewRefreshing}
                   onRefreshPromptPreview={() => void state.refreshPromptPreview()}
+                  onReplayRenames={(params) => state.replayRenamesSince(params)}
                 />
               </AppViewTransition>
             </React.Suspense>

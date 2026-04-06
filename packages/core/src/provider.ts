@@ -12,6 +12,7 @@ import type {
   MaterializedSession,
   ProviderProfile,
   ProviderWireApi,
+  RenameContext,
   RenameMode,
   RenameSuggestion
 } from "@codex-session-manager/shared";
@@ -178,6 +179,23 @@ function normalizePromptField(value: string | undefined, maxLength: number): str
   return `${compact.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
+function formatPromptSection(title: string, lines: string[], fence = "text"): string {
+  return [title, `\`\`\`${fence}`, ...(lines.length > 0 ? lines : ["(none)"]), "```"].join("\n");
+}
+
+function formatRenameContextLines(renameContext: RenameContext): string[] {
+  if (renameContext.segments.length === 0) {
+    return ["(none)"];
+  }
+
+  return renameContext.segments.flatMap((segment, index) => {
+    const header = `${segment.role} [${segment.source}${segment.timestamp ? ` @ ${segment.timestamp}` : ""}]`;
+    return index === renameContext.segments.length - 1
+      ? [header, segment.content]
+      : [header, segment.content, ""];
+  });
+}
+
 export function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
   const style = resolveNamingStyle(session, config);
@@ -209,6 +227,37 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     const structuredGuidance =
       "当前启用结构化命名模式。请返回结构化字段，调用方会根据命名构建器组装最终标题。如果某个 tag 预设明显匹配，就把 tagId 设为对应 id；否则留空。";
 
+    const builderSection = formatPromptSection("## 命名构建器", builderSummary ? builderSummary.split("\n") : []);
+    const sessionSection = formatPromptSection(
+      "## 会话元信息",
+      [
+        `threadId: ${session.threadId}`,
+        `project: ${session.projectName ?? ""}`,
+        `cwd: ${session.cwd ?? ""}`,
+        `modelProvider: ${session.modelProvider ?? ""}`,
+        `model: ${session.model ?? ""}`,
+        `requestedContextStrategy: ${renameContext.requestedStrategy}`,
+        `resolvedContextStrategy: ${renameContext.strategy}`,
+        `contextTruncated: ${String(renameContext.truncated)}`,
+        `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
+        `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
+        `namingStyle: ${style}`,
+        `namingCompositionMode: ${config.naming.compositionMode}`,
+        `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
+        `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
+        `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
+        `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
+        `taskCompleteCount: ${session.taskCompleteCount}`,
+        `tokenTotal: ${session.tokenTotal}`
+      ]
+    );
+    const contextSection = formatPromptSection("## Rename context", formatRenameContextLines(renameContext), "conversation");
+    const tagSection = formatPromptSection("## Tag 预设", tagLines);
+    const overrideSection =
+      config.naming.compositionMode === "prompt-override"
+        ? formatPromptSection("## 自定义命名覆写", promptOverrideDetails.slice(1))
+        : "";
+
     return [
       "你要为 Codex Session Manager 生成一个用于会话列表的命名建议。",
       "只返回一个 JSON 对象，键包括：name, kind, summary, scope, tagId。",
@@ -223,36 +272,14 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
       config.naming.compositionMode === "structured" ? structuredGuidance : promptOverrideDetails[0],
       "允许的 kind 值：feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops。",
       "",
-      "命名构建器：",
-      builderSummary || "(none)",
+      builderSection,
       "",
-      "会话上下文：",
-      `threadId: ${session.threadId}`,
-      `project: ${session.projectName ?? ""}`,
-      `cwd: ${session.cwd ?? ""}`,
-      `modelProvider: ${session.modelProvider ?? ""}`,
-      `model: ${session.model ?? ""}`,
-      `requestedContextStrategy: ${renameContext.requestedStrategy}`,
-      `resolvedContextStrategy: ${renameContext.strategy}`,
-      `contextTruncated: ${String(renameContext.truncated)}`,
-      `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
-      `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
-      `namingStyle: ${style}`,
-      `namingCompositionMode: ${config.naming.compositionMode}`,
-      `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
-      `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
-      `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
-      `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
-      `taskCompleteCount: ${session.taskCompleteCount}`,
-      `tokenTotal: ${session.tokenTotal}`,
+      sessionSection,
       "",
-      "Rename context：",
-      normalizePromptField(renameContext.text, renameContext.maxChars),
+      contextSection,
       "",
-      "Tag 预设：",
-      ...(tagLines.length > 0 ? tagLines : ["(none)"]),
-      "",
-      ...(config.naming.compositionMode === "prompt-override" ? [...promptOverrideDetails.slice(1), ""] : [])
+      tagSection,
+      ...(overrideSection ? ["", overrideSection] : [])
     ].join("\n");
   }
 
@@ -270,6 +297,37 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
   const structuredGuidance =
     "Structured naming mode is active. Return structured fields that the caller can assemble into the final title from the naming builder. When one configured tag preset clearly fits, set tagId to the matching preset id; otherwise leave tagId empty.";
 
+  const builderSection = formatPromptSection("## Naming builder", builderSummary ? builderSummary.split("\n") : []);
+  const sessionSection = formatPromptSection(
+    "## Session metadata",
+    [
+      `threadId: ${session.threadId}`,
+      `project: ${session.projectName ?? ""}`,
+      `cwd: ${session.cwd ?? ""}`,
+      `modelProvider: ${session.modelProvider ?? ""}`,
+      `model: ${session.model ?? ""}`,
+      `requestedContextStrategy: ${renameContext.requestedStrategy}`,
+      `resolvedContextStrategy: ${renameContext.strategy}`,
+      `contextTruncated: ${String(renameContext.truncated)}`,
+      `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
+      `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
+      `namingStyle: ${style}`,
+      `namingCompositionMode: ${config.naming.compositionMode}`,
+      `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
+      `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
+      `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
+      `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
+      `taskCompleteCount: ${session.taskCompleteCount}`,
+      `tokenTotal: ${session.tokenTotal}`
+    ]
+  );
+  const contextSection = formatPromptSection("## Rename context", formatRenameContextLines(renameContext), "conversation");
+  const tagSection = formatPromptSection("## Tag presets", tagLines);
+  const overrideSection =
+    config.naming.compositionMode === "prompt-override"
+      ? formatPromptSection("## Custom naming override", promptOverrideDetails.slice(1))
+      : "";
+
   return [
     "You generate a session rename suggestion for Codex Session Manager.",
     "Return only a JSON object with keys: name, kind, summary, scope, tagId.",
@@ -285,36 +343,14 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     config.naming.compositionMode === "structured" ? structuredGuidance : promptOverrideDetails[0],
     "Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.",
     "",
-    "Naming builder:",
-    builderSummary || "(none)",
+    builderSection,
     "",
-    "Session context:",
-    `threadId: ${session.threadId}`,
-    `project: ${session.projectName ?? ""}`,
-    `cwd: ${session.cwd ?? ""}`,
-    `modelProvider: ${session.modelProvider ?? ""}`,
-    `model: ${session.model ?? ""}`,
-    `requestedContextStrategy: ${renameContext.requestedStrategy}`,
-    `resolvedContextStrategy: ${renameContext.strategy}`,
-    `contextTruncated: ${String(renameContext.truncated)}`,
-    `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
-    `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
-    `namingStyle: ${style}`,
-    `namingCompositionMode: ${config.naming.compositionMode}`,
-    `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
-    `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
-    `lastUserMessage: ${normalizePromptField(session.lastUserMessage, 600)}`,
-    `lastAgentMessage: ${normalizePromptField(session.lastAgentMessage, 900)}`,
-    `taskCompleteCount: ${session.taskCompleteCount}`,
-    `tokenTotal: ${session.tokenTotal}`,
+    sessionSection,
     "",
-    "Rename context:",
-    normalizePromptField(renameContext.text, renameContext.maxChars),
+    contextSection,
     "",
-    "Tag presets:",
-    ...(tagLines.length > 0 ? tagLines : ["(none)"]),
-    "",
-    ...(config.naming.compositionMode === "prompt-override" ? [...promptOverrideDetails.slice(1), ""] : [])
+    tagSection,
+    ...(overrideSection ? ["", overrideSection] : [])
   ].join("\n");
 }
 

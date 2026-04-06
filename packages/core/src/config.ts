@@ -288,7 +288,8 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     providerSource: "inherit-codex",
     profile: "default",
     timeoutSeconds: 45,
-    temperature: 0.2
+    temperature: 0.2,
+    maxConcurrency: 1
   },
   providerProfiles: [
     {
@@ -310,6 +311,14 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     providers: {},
     auth: undefined
   }
+};
+
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? Array<DeepPartial<U>>
+    : T[K] extends Record<string, unknown>
+      ? DeepPartial<T[K]>
+      : T[K];
 };
 
 async function readTomlFile(filePath: string): Promise<Record<string, unknown> | undefined> {
@@ -466,7 +475,8 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
         | undefined,
       profile: getString(ai, "profile"),
       timeoutSeconds: getNumber(ai, "timeout_seconds", "timeoutSeconds"),
-      temperature: getNumber(ai, "temperature")
+      temperature: getNumber(ai, "temperature"),
+      maxConcurrency: getNumber(ai, "max_concurrency", "maxConcurrency")
     },
     providerProfiles: providerProfiles.length > 0 ? providerProfiles : undefined,
     maintenance: {
@@ -636,7 +646,8 @@ function serializeConfigDocument(document: ConfigDocument): string {
       provider_source: document.ai?.providerSource,
       profile: document.ai?.profile,
       timeout_seconds: document.ai?.timeoutSeconds,
-      temperature: document.ai?.temperature
+      temperature: document.ai?.temperature,
+      max_concurrency: document.ai?.maxConcurrency
     }),
     maintenance: stripEmptyRecord({
       suggest_compact_index_above_mb: document.maintenance?.suggestCompactIndexAboveMb,
@@ -829,6 +840,6 @@ export async function loadEffectiveConfig(options?: {
   return effective;
 }
 
-export function buildConfigForTests(overrides?: Partial<EffectiveConfig>): EffectiveConfig {
-  return deepMerge(DEFAULT_CONFIG, overrides ?? {});
+export function buildConfigForTests(overrides?: DeepPartial<EffectiveConfig>): EffectiveConfig {
+  return deepMerge(DEFAULT_CONFIG, (overrides ?? {}) as Partial<EffectiveConfig>);
 }

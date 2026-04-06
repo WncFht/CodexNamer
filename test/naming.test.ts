@@ -67,10 +67,11 @@ describe("naming specificity", () => {
     expect(prompt).toContain("Preferred naming style: detailed");
     expect(prompt).toContain("namingStyle: detailed");
     expect(prompt).toContain("namingCompositionMode: structured");
-    expect(prompt).toContain("Naming builder:");
+    expect(prompt).toContain("## Naming builder");
     expect(prompt).toContain("1. tag");
     expect(prompt).toContain('2. separator " · "');
-    expect(prompt).toContain("Tag presets:");
+    expect(prompt).toContain("## Tag presets");
+    expect(prompt).toContain("```conversation");
     expect(prompt).toContain("Return only a JSON object with keys: name, kind, summary, scope, tagId.");
     expect(prompt).toContain("set tagId to the matching preset id");
     expect(prompt).toContain("Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.");
@@ -104,8 +105,8 @@ describe("naming specificity", () => {
 
     expect(prompt).toContain("你要为 Codex Session Manager 生成一个用于会话列表的命名建议。");
     expect(prompt).toContain("Prompt 语言：中文。");
-    expect(prompt).toContain("命名构建器：");
-    expect(prompt).toContain("Tag 预设：");
+    expect(prompt).toContain("## 命名构建器");
+    expect(prompt).toContain("## Tag 预设");
   });
 
   it("includes a custom prompt override when prompt-override mode is enabled", () => {

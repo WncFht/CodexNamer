@@ -13,6 +13,7 @@ import type {
   RenameFreezeResponse,
   RenameNamingStyleResponse,
   RenameManualOverrideResponse,
+  RenameReplayResult,
   RenameSuggestResponse,
   SessionDetail,
   SessionTranscriptPage,
@@ -210,6 +211,16 @@ export async function fetchAiRequestLogs(limit = 40): Promise<AiRequestLogRespon
     url.searchParams.set("limit", String(limit));
   }
   return requestJson<AiRequestLogResponse>(url.toString());
+}
+
+export async function requeueRenamesSince(params: {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+}): Promise<RenameReplayResult> {
+  return requestJson<RenameReplayResult>("/api/v1/maintenance/requeue-renames", {
+    method: "POST",
+    body: JSON.stringify(params)
+  });
 }
 
 export async function fetchEvents(cursor: number): Promise<ApiEventsResponse> {

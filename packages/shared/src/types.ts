@@ -121,6 +121,7 @@ export interface AiConfig {
   profile: string;
   timeoutSeconds: number;
   temperature: number;
+  maxConcurrency: number;
 }
 
 export interface ProviderProfile {
@@ -214,6 +215,7 @@ export type ApiEventType =
   | "session.manual_override.changed"
   | "batch.apply.completed"
   | "config.updated"
+  | "maintenance.rename_requeued"
   | "maintenance.compact.completed";
 
 export interface ApiEventRecord {
@@ -226,6 +228,19 @@ export interface ApiEventRecord {
 export interface ApiEventBatch {
   items: ApiEventRecord[];
   nextCursor: number;
+}
+
+export interface RenameReplayRequest {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+}
+
+export interface RenameReplayResult {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+  queued: number;
+  clearedCandidates: number;
+  matchedThreadIds: string[];
 }
 
 export interface SessionIndexEntry {
@@ -358,6 +373,7 @@ export interface RenameStateRecord {
   lastAppliedStyle?: NamingStyle;
   preferredStyle?: NamingStyle;
   dirtySinceRename: boolean;
+  forceRewrite: boolean;
   manualOverride: boolean;
   frozen: boolean;
   autoApplyCount: number;

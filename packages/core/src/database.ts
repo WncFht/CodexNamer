@@ -48,6 +48,7 @@ type SessionRow = {
   current_candidate_name: string | null;
   current_candidate_style: string | null;
   dirty_since_rename: number | null;
+  force_rewrite: number | null;
   last_applied_name: string | null;
   last_applied_source: string | null;
   last_applied_style: string | null;
@@ -129,6 +130,7 @@ export class StateDatabase {
         last_applied_at TEXT,
         last_applied_revision TEXT,
         dirty_since_rename INTEGER NOT NULL DEFAULT 0,
+        force_rewrite INTEGER NOT NULL DEFAULT 0,
         manual_override INTEGER NOT NULL DEFAULT 0,
         frozen INTEGER NOT NULL DEFAULT 0,
         auto_apply_count INTEGER NOT NULL DEFAULT 0,
@@ -188,6 +190,7 @@ export class StateDatabase {
     this.ensureColumn("rename_state", "current_candidate_style", "TEXT");
     this.ensureColumn("rename_state", "last_applied_style", "TEXT");
     this.ensureColumn("rename_state", "preferred_style", "TEXT");
+    this.ensureColumn("rename_state", "force_rewrite", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("rename_history", "style", "TEXT");
     this.db.exec(`
       UPDATE rename_state
@@ -446,6 +449,7 @@ export class StateDatabase {
       lastAppliedStyle: normalizeNamingStyle(row.last_applied_style),
       preferredStyle: normalizeNamingStyle(row.preferred_style),
       dirtySinceRename: toBoolean(row.dirty_since_rename as number | null),
+      forceRewrite: toBoolean(row.force_rewrite as number | null),
       manualOverride: toBoolean(row.manual_override as number | null),
       frozen: toBoolean(row.frozen as number | null),
       autoApplyCount: Number(row.auto_apply_count ?? 0),
@@ -579,9 +583,9 @@ export class StateDatabase {
           .prepare(
             `INSERT INTO rename_state (
               thread_id, last_applied_name, last_applied_source, last_applied_at,
-              last_applied_style, last_applied_revision, dirty_since_rename, manual_override, auto_apply_count,
+              last_applied_style, last_applied_revision, dirty_since_rename, force_rewrite, manual_override, auto_apply_count,
               last_auto_name, last_manual_name, last_auto_apply_success_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
             ON CONFLICT(thread_id) DO UPDATE SET
               last_applied_name = excluded.last_applied_name,
               last_applied_source = excluded.last_applied_source,
@@ -589,6 +593,7 @@ export class StateDatabase {
               last_applied_style = excluded.last_applied_style,
               last_applied_revision = excluded.last_applied_revision,
               dirty_since_rename = 0,
+              force_rewrite = 0,
               manual_override = excluded.manual_override,
               auto_apply_count = excluded.auto_apply_count,
               last_auto_name = excluded.last_auto_name,
@@ -634,7 +639,7 @@ export class StateDatabase {
         `SELECT s.thread_id, s.cwd, s.project_name, s.first_user_message, s.updated_at, s.latest_official_name,
                 s.model_provider, s.model, s.task_complete_count, s.status_estimate,
                 rs.current_candidate_name, rs.current_candidate_style, rs.last_applied_style, rs.preferred_style,
-                rs.last_applied_revision, rs.manual_override, rs.frozen,
+                rs.last_applied_revision, rs.manual_override, rs.frozen, rs.force_rewrite,
                 rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -656,7 +661,7 @@ export class StateDatabase {
         updatedAt: (row.updated_at as string | null) ?? undefined,
         officialName: (row.latest_official_name as string | null) ?? undefined,
         candidateName: (row.current_candidate_name as string | null) ?? undefined,
-        dirty: toBoolean(row.dirty_since_rename as number | null),
+        dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null),
         frozen: toBoolean(row.frozen as number | null),
         manualOverride: toBoolean(row.manual_override as number | null),
         taskCompleteCount: Number(row.task_complete_count ?? 0),
@@ -716,7 +721,7 @@ export class StateDatabase {
                 s.last_agent_message, s.task_complete_count, s.token_total, s.latest_official_name,
                 s.status_estimate, sr.current_revision, rs.current_candidate_name, rs.current_candidate_style,
                 rs.last_applied_at, rs.last_applied_style, rs.preferred_style,
-                rs.last_applied_revision, rs.manual_override, rs.frozen, rs.dirty_since_rename
+                rs.last_applied_revision, rs.manual_override, rs.frozen, rs.force_rewrite, rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN session_revisions sr ON sr.thread_id = s.thread_id
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -739,7 +744,7 @@ export class StateDatabase {
       updatedAt: row.updated_at ?? undefined,
       officialName: row.latest_official_name ?? undefined,
       candidateName: row.current_candidate_name ?? undefined,
-      dirty: toBoolean(row.dirty_since_rename as number | null),
+      dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null),
       frozen: toBoolean(row.frozen as number | null),
       manualOverride: toBoolean(row.manual_override as number | null),
       taskCompleteCount: row.task_complete_count,
@@ -938,7 +943,8 @@ export class StateDatabase {
     const workloadRows = this.db
       .prepare(
         `SELECT s.thread_id, s.cwd, s.project_name, s.token_total, s.task_complete_count, s.status_estimate,
-                COALESCE(rs.dirty_since_rename, 0) AS dirty_since_rename
+                COALESCE(rs.dirty_since_rename, 0) AS dirty_since_rename,
+                COALESCE(rs.force_rewrite, 0) AS force_rewrite
          FROM sessions s
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id`
       )
@@ -1006,6 +1012,7 @@ export class StateDatabase {
       const threadId = (row.thread_id as string | null) ?? undefined;
       const isDirty =
         toBoolean((row.dirty_since_rename as number | null) ?? 0) ||
+        toBoolean((row.force_rewrite as number | null) ?? 0) ||
         (threadId ? nonAcceptedNamedThreadIds.has(threadId) : false);
       const workspaceId = workspaceIdForCwd(cwd);
       const workspaceLabel = workspaceLabelForCwd(cwd, projectName);
@@ -1206,6 +1213,64 @@ export class StateDatabase {
          ON CONFLICT(thread_id) DO UPDATE SET manual_override = excluded.manual_override`
       )
       .run(threadId, manualOverride ? 1 : 0);
+  }
+
+  queueRenameReplaySince(params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }): { queued: number; clearedCandidates: number; matchedThreadIds: string[] } {
+    const selectSql =
+      params.basis === "last-applied-at"
+        ? `SELECT s.thread_id
+           FROM sessions s
+           JOIN rename_state rs ON rs.thread_id = s.thread_id
+           WHERE rs.last_applied_at IS NOT NULL
+             AND rs.last_applied_at >= ?`
+        : `SELECT s.thread_id
+           FROM sessions s
+           WHERE COALESCE(s.updated_at, s.created_at) >= ?`;
+
+    const threadIds = (
+      this.db.prepare(selectSql).all(params.since) as Array<Record<string, unknown>>
+    )
+      .map((row) => (typeof row.thread_id === "string" ? row.thread_id : undefined))
+      .filter((value): value is string => Boolean(value));
+
+    if (threadIds.length === 0) {
+      return {
+        queued: 0,
+        clearedCandidates: 0,
+        matchedThreadIds: []
+      };
+    }
+
+    const transaction = this.db.transaction(() => {
+      for (const threadId of threadIds) {
+        this.db
+          .prepare(
+            `INSERT INTO rename_state (
+               thread_id, dirty_since_rename, force_rewrite, current_candidate_name, current_candidate_source, current_candidate_generated_at, current_candidate_style
+             )
+             VALUES (?, 1, 1, NULL, NULL, NULL, NULL)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               dirty_since_rename = 1,
+               force_rewrite = 1,
+               current_candidate_name = NULL,
+               current_candidate_source = NULL,
+               current_candidate_generated_at = NULL,
+               current_candidate_style = NULL`
+          )
+          .run(threadId);
+      }
+    });
+
+    transaction();
+
+    return {
+      queued: threadIds.length,
+      clearedCandidates: threadIds.length,
+      matchedThreadIds: threadIds
+    };
   }
 
   vacuum(): void {

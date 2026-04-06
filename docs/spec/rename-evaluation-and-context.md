@@ -565,6 +565,33 @@ AI prompt 现在会同时带上：
   - prompt 先看 user transcript，再补最后一条 assistant
   - 适合“过程看用户，收尾看助手总结”的会话
 
+### 7.2.2 Prompt 结构
+
+当前 rename prompt 不再把所有信息平铺成一大段文本，而是拆成几个结构化 section：
+
+- `命名构建器 / Naming builder`
+- `会话元信息 / Session metadata`
+- `Rename context`
+- `Tag 预设 / Tag presets`
+- `自定义命名覆写 / Custom naming override`（仅在 `prompt-override` 时出现）
+
+其中真正的 user / assistant 内容会放在 fenced code block 里，并按消息逐条换行，便于检查上下文是否被错误混入。
+
+### 7.2.3 Replay 队列
+
+当命名逻辑变化后，可以通过一次性 replay 动作把一批旧会话重新放回命名队列：
+
+- 输入一个时间点
+- 选择比较基准：
+  - `session-updated-at`
+  - `last-applied-at`
+- 系统会：
+  - 清空这些会话的旧 candidate
+  - 打开持久的 `force_rewrite` 标记
+  - 让它们在后续 sweep 中重新参与 rename
+
+这个动作不是持久配置项，不会写进 `config.toml`。
+
 这也意味着，旧的 heuristic 官方名如果需要升级，会在后续调度里被重新送回 AI，而不是继续当作最终标题保留。
 
 ### 7.3 Prompt Preview

@@ -15,6 +15,7 @@ import {
   type OverviewReport,
   type PromptPreview,
   type RenameHistoryRecord,
+  type RenameReplayResult,
   type RenameSuggestion,
   type ScanReport,
   type SessionDetail,
@@ -86,6 +87,30 @@ function appendDisambiguationSuffix(name: string, index: number, maxLength: numb
   const root =
     trimmedRoot.length > budget ? trimmedRoot.slice(0, budget).trimEnd() : trimmedRoot;
   return `${root}${suffix}`;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const maxConcurrency = Math.max(1, Math.trunc(concurrency));
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker(): Promise<void> {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= items.length) {
+        return;
+      }
+      results[currentIndex] = await worker(items[currentIndex] as T, currentIndex);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(maxConcurrency, items.length) }, () => runWorker()));
+  return results;
 }
 
 export class CodexSessionManager {
@@ -337,8 +362,14 @@ export class CodexSessionManager {
     detail: SessionDetail,
     style?: NamingStyle
   ): Promise<MaterializedSession> {
+    const transcriptStrategies = new Set([
+      "user-assistant-transcript",
+      "user-only-transcript",
+      "assistant-only-transcript",
+      "user-transcript-last-assistant"
+    ]);
     const transcript =
-      this.config.naming.contextStrategy === "user-assistant-transcript"
+      transcriptStrategies.has(this.config.naming.contextStrategy)
         ? detail.transcript ?? (await readSessionTranscript(detail.rolloutPath))
         : undefined;
 
@@ -358,6 +389,7 @@ export class CodexSessionManager {
       reservedNameKeys?: Set<string>;
       blockedOfficialThreadIds?: Set<string>;
       style?: NamingStyle;
+      reservationScheduler?: <T>(callback: () => T | Promise<T>) => Promise<T>;
     }
   ): Promise<RenameSuggestion> {
     const renameState = this.db.getRenameState(detail.threadId);
@@ -376,40 +408,61 @@ export class CodexSessionManager {
         candidateGeneratedAt >= sessionUpdatedAt);
 
     if (canReuseCandidate) {
-      const reusedSuggestion = this.ensureUniqueRenameSuggestion(
+      const finalizeReusedSuggestion = () => {
+        const reusedSuggestion = this.ensureUniqueRenameSuggestion(
+          detail.threadId,
+          {
+            threadId: detail.threadId,
+            name: renameState?.currentCandidateName ?? "",
+            source: renameState?.currentCandidateSource ?? "heuristic",
+            style: targetStyle,
+            kind: "chore",
+            summary: renameState?.currentCandidateName ?? "",
+            generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
+          },
+          {
+            reservedNameKeys: options?.reservedNameKeys,
+            blockedOfficialThreadIds: options?.blockedOfficialThreadIds
+          }
+        );
+        if (options?.saveCandidate !== false && reusedSuggestion.name !== renameState?.currentCandidateName) {
+          this.db.saveCandidate(detail.threadId, reusedSuggestion);
+        }
+        if (options?.reservedNameKeys) {
+          options.reservedNameKeys.add(normalizeComparableName(reusedSuggestion.name));
+        }
+        return reusedSuggestion;
+      };
+
+      return options?.reservationScheduler
+        ? options.reservationScheduler(finalizeReusedSuggestion)
+        : finalizeReusedSuggestion();
+    }
+
+    const rawSuggestion = await this.inferenceService.suggest(
+      await this.materializeSessionForSuggestion(detail, targetStyle)
+    );
+    const finalizeSuggestion = () => {
+      const suggestion = this.ensureUniqueRenameSuggestion(
         detail.threadId,
-        {
-          threadId: detail.threadId,
-          name: renameState?.currentCandidateName ?? "",
-          source: renameState?.currentCandidateSource ?? "heuristic",
-          style: targetStyle,
-          kind: "chore",
-          summary: renameState?.currentCandidateName ?? "",
-          generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
-        },
+        rawSuggestion,
         {
           reservedNameKeys: options?.reservedNameKeys,
           blockedOfficialThreadIds: options?.blockedOfficialThreadIds
         }
       );
-      if (options?.saveCandidate !== false && reusedSuggestion.name !== renameState?.currentCandidateName) {
-        this.db.saveCandidate(detail.threadId, reusedSuggestion);
+      if (options?.saveCandidate !== false) {
+        this.db.saveCandidate(detail.threadId, suggestion);
       }
-      return reusedSuggestion;
-    }
+      if (options?.reservedNameKeys) {
+        options.reservedNameKeys.add(normalizeComparableName(suggestion.name));
+      }
+      return suggestion;
+    };
 
-    const suggestion = this.ensureUniqueRenameSuggestion(
-      detail.threadId,
-      await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail, targetStyle)),
-      {
-        reservedNameKeys: options?.reservedNameKeys,
-        blockedOfficialThreadIds: options?.blockedOfficialThreadIds
-      }
-    );
-    if (options?.saveCandidate !== false) {
-      this.db.saveCandidate(detail.threadId, suggestion);
-    }
-    return suggestion;
+    return options?.reservationScheduler
+      ? options.reservationScheduler(finalizeSuggestion)
+      : finalizeSuggestion();
   }
 
   async suggest(threadId: string, options?: { style?: NamingStyle }): Promise<RenameSuggestion> {
@@ -697,6 +750,31 @@ export class CodexSessionManager {
     };
   }
 
+  async requeueRenamesSince(params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }): Promise<RenameReplayResult> {
+    await this.scan();
+
+    const sinceDate = new Date(params.since);
+    if (Number.isNaN(sinceDate.getTime())) {
+      throw new Error("Invalid replay timestamp.");
+    }
+
+    const result = this.db.queueRenameReplaySince({
+      since: sinceDate.toISOString(),
+      basis: params.basis
+    });
+
+    return {
+      since: sinceDate.toISOString(),
+      basis: params.basis,
+      queued: result.queued,
+      clearedCandidates: result.clearedCandidates,
+      matchedThreadIds: result.matchedThreadIds
+    };
+  }
+
   async testProvider(options?: { threadId?: string }): Promise<Record<string, unknown>> {
     const diagnostics = inspectRenameProvider(this.config);
     let session: MaterializedSession;
@@ -859,9 +937,23 @@ export class CodexSessionManager {
         : dirtySessions.length;
     const autoApplyEnabled =
       (options?.autoApply ?? true) && this.config.rename.autoApply === "idle-finalize";
+    const maxConcurrency = Math.max(1, Math.trunc(this.config.ai.maxConcurrency || 1));
+    let reservationChain = Promise.resolve();
+    const reservationScheduler = async <T>(callback: () => T | Promise<T>): Promise<T> => {
+      const scheduled = reservationChain.then(callback);
+      reservationChain = scheduled.then(
+        () => undefined,
+        () => undefined
+      );
+      return scheduled;
+    };
+    const workItems: Array<{
+      detail: SessionDetail;
+      evaluation: ReturnType<typeof evaluateAutoRename>;
+    }> = [];
 
     for (const session of dirtySessions) {
-      if (previews.length >= limit) {
+      if (workItems.length >= limit) {
         break;
       }
       const detail = this.db.getSessionDetail(session.threadId);
@@ -875,35 +967,47 @@ export class CodexSessionManager {
         now,
         renameState
       });
+      workItems.push({
+        detail: normalizedDetail,
+        evaluation
+      });
+    }
+
+    const sweepItems = await mapWithConcurrency(workItems, maxConcurrency, async (item) => {
       const shouldResolveSuggestion =
-        options?.includeCandidateNames === true || (autoApplyEnabled && evaluation.action === "apply");
+        options?.includeCandidateNames === true || (autoApplyEnabled && item.evaluation.action === "apply");
       const suggestion =
-        shouldResolveSuggestion && evaluation.action !== "skip"
-          ? await this.resolveSuggestionForDetail(normalizedDetail, {
+        shouldResolveSuggestion && item.evaluation.action !== "skip"
+          ? await this.resolveSuggestionForDetail(item.detail, {
               saveCandidate: autoApplyEnabled || options?.includeCandidateNames === true,
               reservedNameKeys,
-              blockedOfficialThreadIds
+              blockedOfficialThreadIds,
+              reservationScheduler
             })
           : undefined;
-      if (suggestion) {
-        reservedNameKeys.add(normalizeComparableName(suggestion.name));
-      }
 
+      return {
+        ...item,
+        suggestion
+      };
+    });
+
+    for (const item of sweepItems) {
       previews.push({
-        threadId: normalizedDetail.threadId,
-        candidateName: options?.includeCandidateNames ? suggestion?.name : undefined,
-        status: evaluation.action,
-        reason: evaluation.reason
+        threadId: item.detail.threadId,
+        candidateName: options?.includeCandidateNames ? item.suggestion?.name : undefined,
+        status: item.evaluation.action,
+        reason: item.evaluation.reason
       });
 
-      if (autoApplyEnabled && evaluation.action === "apply") {
-        const result = await this.apply(normalizedDetail.threadId, {
+      if (autoApplyEnabled && item.evaluation.action === "apply") {
+        const result = await this.apply(item.detail.threadId, {
           autoApply: true,
           skipScan: true,
-          detail: normalizedDetail
+          detail: item.detail
         });
         applied.push({
-          threadId: normalizedDetail.threadId,
+          threadId: item.detail.threadId,
           written: result.written,
           name: result.name,
           reason: result.written ? undefined : "unchanged"

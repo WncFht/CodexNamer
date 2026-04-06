@@ -284,6 +284,7 @@ export type ConfigDocument = {
     profile?: string;
     timeoutSeconds?: number;
     temperature?: number;
+    maxConcurrency?: number;
   };
   providerProfiles?: ProviderProfile[];
   maintenance?: {
@@ -291,6 +292,14 @@ export type ConfigDocument = {
     suggestCompactIndexAboveLines?: number;
     backupBeforeCompact?: boolean;
   };
+};
+
+export type RenameReplayResult = {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+  queued: number;
+  clearedCandidates: number;
+  matchedThreadIds: string[];
 };
 
 export type ConfigView = {

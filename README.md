@@ -359,6 +359,20 @@ npm run tui -- --api-base http://127.0.0.1:42110
 
 如果你想让 rename 更贴近整段会话，而不是只看首尾摘要，可以在 Web/TUI 的 `Settings` 里切换更细粒度的 `Context strategy`。
 
+自动 rename 现在支持 AI 请求并发控制：
+
+- `[ai].max_concurrency`
+- 默认 `1`
+- 用于限制 daemon sweep 同时发起的命名请求数量
+
+如果你改了命名逻辑，Settings 里现在还有一个一次性动作：
+
+- 选择某个时间点
+- 选择比较基准：
+  - 会话更新时间
+  - 上次正式命名时间
+- 把命中范围内的会话重新放回命名队列，并清空旧 candidate
+
 Settings 界面里：
 
 - `j/k`：选择字段

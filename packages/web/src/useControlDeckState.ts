@@ -13,6 +13,7 @@ import {
   fetchSessionDetail,
   fetchSessions,
   freezeSession,
+  requeueRenamesSince,
   suggestSession,
   setSessionNamingStyle,
   toggleManualOverride,
@@ -729,6 +730,36 @@ export function useControlDeckState() {
     }
   };
 
+  const replayRenamesSince = async (params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }) => {
+    setError(null);
+    setNotice({
+      tone: "info",
+      text: "Re-queueing rename backlog..."
+    });
+    try {
+      const result = await requeueRenamesSince(params);
+      await loadResources(
+        mergeResources(["sessions", "overview", "preview"], panelResourcesForTab(latestUiStateRef.current.tab)),
+        {
+          threadId: latestUiStateRef.current.selectedId,
+          urgentPreview: true,
+          urgentPromptPreview: latestUiStateRef.current.tab === "settings"
+        }
+      );
+      setNotice({
+        tone: "success",
+        text: `Queued ${result.queued} sessions for rename replay.`
+      });
+      return result;
+    } catch (nextError) {
+      setFailure(nextError);
+      throw nextError;
+    }
+  };
+
   return {
     tab,
     setTab,
@@ -782,6 +813,7 @@ export function useControlDeckState() {
         urgentPreview: true
       }),
     saveConfig,
+    replayRenamesSince,
     actions: {
       suggest: () =>
         detail
