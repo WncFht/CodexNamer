@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 
@@ -35,13 +35,15 @@ import type {
   SessionTranscriptPage
 } from "./types.js";
 
-type InputMode = "normal" | "search" | "rename" | "edit-setting";
+type InputMode = "normal" | "search" | "transcript-search" | "rename" | "edit-setting";
 type FocusPane = "sessions" | "transcript";
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
 type ScreenMode = "browser" | "settings";
 type BrowserViewMode = "split" | "detail" | "sessions";
 
 const TRANSCRIPT_PAGE_SIZE = 18;
+const EVENTS_POLL_INTERVAL_MS = 5000;
+const ALL_WORKSPACES_ID = "__all_workspaces__";
 const THEME = {
   accent: "#c96442",
   text: "#efe6d8",
@@ -229,6 +231,7 @@ function TranscriptRow(props: {
   width: number;
   compact: boolean;
   uiLanguage: UiLanguage;
+  query?: string;
 }) {
   const header = [
     transcriptRoleLabel(props.entry.role, props.uiLanguage),
@@ -238,6 +241,7 @@ function TranscriptRow(props: {
     .filter(Boolean)
     .join(" · ");
   const content = compactWhitespace(props.entry.content) || inLanguage(props.uiLanguage, "(空)", "(empty)");
+  const truncatedContent = truncateDisplayText(content, props.width);
 
   return (
     <Box flexDirection="column" width={props.width} marginBottom={props.compact ? 0 : 1}>
@@ -253,11 +257,58 @@ function TranscriptRow(props: {
           {fitDisplayLine(formatUiWhen(props.entry.timestamp, props.uiLanguage), 11, "")}
         </Text>
       </Box>
-      <Text color={props.active ? THEME.bgDark : THEME.text} backgroundColor={props.active ? THEME.bgAccent : undefined} wrap="truncate-end">
-        {fitDisplayLine(content, props.width)}
+      <Text
+        color={props.active ? THEME.bgDark : THEME.text}
+        backgroundColor={props.active ? THEME.bgAccent : undefined}
+        wrap="truncate-end"
+      >
+        {renderHighlightedText({
+          content: truncatedContent,
+          query: props.query,
+          active: props.active
+        })}
       </Text>
     </Box>
   );
+}
+
+function renderHighlightedText(props: {
+  content: string;
+  query?: string;
+  active: boolean;
+}): ReactNode {
+  const query = props.query?.trim();
+  if (!query) {
+    return props.content;
+  }
+
+  const normalizedContent = props.content.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+  const fragments: ReactNode[] = [];
+  let cursor = 0;
+
+  while (cursor < props.content.length) {
+    const matchAt = normalizedContent.indexOf(normalizedQuery, cursor);
+    if (matchAt === -1) {
+      fragments.push(props.content.slice(cursor));
+      break;
+    }
+    if (matchAt > cursor) {
+      fragments.push(props.content.slice(cursor, matchAt));
+    }
+    fragments.push(
+      <Text
+        key={`${matchAt}-${normalizedQuery}`}
+        color={props.active ? THEME.bgDark : THEME.bgDark}
+        backgroundColor={props.active ? THEME.warning : THEME.warning}
+      >
+        {props.content.slice(matchAt, matchAt + normalizedQuery.length)}
+      </Text>
+    );
+    cursor = matchAt + normalizedQuery.length;
+  }
+
+  return fragments;
 }
 
 function PreviewRow(props: { item: AutoRenamePreviewResponse["items"][number]; width: number; uiLanguage: UiLanguage }) {
@@ -298,11 +349,26 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const { exit } = useApp();
   const [client] = useState(() => new LocalApiClient(props.apiBase));
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [workspaces, setWorkspaces] = useState<
+    Array<{
+      workspaceId: string;
+      workspaceLabel: string;
+      workspacePath?: string;
+      sessionCount: number;
+      dirtyCount: number;
+      frozenCount: number;
+      latestUpdatedAt?: string;
+      projects: string[];
+    }>
+  >([]);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(ALL_WORKSPACES_ID);
   const [dirtyOnly, setDirtyOnly] = useState(true);
   const [search, setSearch] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
+  const [transcriptQuery, setTranscriptQuery] = useState("");
+  const [transcriptQueryDraft, setTranscriptQueryDraft] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
   const [settingDraft, setSettingDraft] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("normal");
@@ -329,6 +395,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [settingsIndex, setSettingsIndex] = useState(0);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
   const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
+  const eventCursorRef = useRef(0);
   const metrics = useTerminalMetrics();
   const layout = computeTerminalLayout(metrics, {
     screenMode,
@@ -366,6 +433,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const previewSuggestCount = preview.filter((item) => item.status === "suggest").length;
   const previewApplyCount = preview.filter((item) => item.status === "apply").length;
   const previewSkipCount = preview.filter((item) => item.status === "skip").length;
+  const selectedWorkspace =
+    selectedWorkspaceId === ALL_WORKSPACES_ID
+      ? null
+      : workspaces.find((item) => item.workspaceId === selectedWorkspaceId) ?? null;
+  const selectedWorkspaceLabel =
+    selectedWorkspace?.workspaceLabel ??
+    inLanguage(uiLanguage, "全部工作区", "All workspaces");
 
   const settingsFields = useMemo(
     () =>
@@ -402,6 +476,16 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     });
   };
 
+  const cycleWorkspaceSelection = (direction: 1 | -1) => {
+    const orderedIds = [ALL_WORKSPACES_ID, ...workspaces.map((item) => item.workspaceId)];
+    if (orderedIds.length === 0) {
+      return;
+    }
+    const currentIndex = Math.max(0, orderedIds.indexOf(selectedWorkspaceId));
+    const nextIndex = (currentIndex + direction + orderedIds.length) % orderedIds.length;
+    setSelectedWorkspaceId(orderedIds[nextIndex] ?? ALL_WORKSPACES_ID);
+  };
+
   const reloadSessions = async (nextSelectedId?: string) => {
     setLoading(true);
     setError(null);
@@ -409,8 +493,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       const payload = await client.listSessions({
         dirtyOnly,
         search,
-        limit: 80
+        limit: 80,
+        workspace: selectedWorkspaceId !== ALL_WORKSPACES_ID ? selectedWorkspaceId : undefined
       });
+      const scopedWorkspace =
+        selectedWorkspaceId === ALL_WORKSPACES_ID
+          ? null
+          : payload.workspaces.find((item) => item.workspaceId === selectedWorkspaceId) ?? null;
+      setWorkspaces(payload.workspaces);
+      if (
+        selectedWorkspaceId !== ALL_WORKSPACES_ID &&
+        !payload.workspaces.some((item) => item.workspaceId === selectedWorkspaceId)
+      ) {
+        setSelectedWorkspaceId(ALL_WORKSPACES_ID);
+      }
       setSessions(payload.items);
       const nextIndex = nextSelectedId
         ? payload.items.findIndex((item) => item.threadId === nextSelectedId)
@@ -421,8 +517,12 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       setMessage(
         inLanguage(
           uiLanguage,
-          `已加载 ${payload.items.length} 个会话（dirty ${payload.counts.dirty} / 冻结 ${payload.counts.frozen}）`,
-          `Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`
+          selectedWorkspaceId === ALL_WORKSPACES_ID
+            ? `已加载 ${payload.items.length} 个会话（dirty ${payload.counts.dirty} / 冻结 ${payload.counts.frozen}）`
+            : `已加载 ${payload.items.length} 个会话（${scopedWorkspace?.workspaceLabel ?? "当前工作区"}，dirty ${scopedWorkspace?.dirtyCount ?? 0} / 冻结 ${scopedWorkspace?.frozenCount ?? 0}）`,
+          selectedWorkspaceId === ALL_WORKSPACES_ID
+            ? `Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`
+            : `Loaded ${payload.items.length} sessions (${scopedWorkspace?.workspaceLabel ?? "selected workspace"}, ${scopedWorkspace?.dirtyCount ?? 0} dirty / ${scopedWorkspace?.frozenCount ?? 0} frozen)`
         )
       );
     } catch (nextError) {
@@ -465,7 +565,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         page: 1,
         pageSize: TRANSCRIPT_PAGE_SIZE,
         includeHidden: showHiddenTranscript,
-        role: transcriptRole
+        role: transcriptRole,
+        query: transcriptQuery || undefined
       });
       setTranscriptPage(payload);
       setTranscriptItems(payload.items);
@@ -525,7 +626,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         page: transcriptPage.page + 1,
         pageSize: transcriptPage.pageSize,
         includeHidden: showHiddenTranscript,
-        role: transcriptRole
+        role: transcriptRole,
+        query: transcriptQuery || undefined
       });
       setTranscriptItems((previous) => [...payload.items, ...previous]);
       setTranscriptPage(payload);
@@ -647,7 +749,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   useEffect(() => {
     void reloadSessions();
     void reloadConfig();
-  }, [dirtyOnly, search]);
+  }, [dirtyOnly, search, selectedWorkspaceId]);
 
   useEffect(() => {
     void reloadDetail(selected?.threadId);
@@ -655,7 +757,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
   useEffect(() => {
     void reloadTranscript(selected?.threadId);
-  }, [selected?.threadId, showHiddenTranscript, transcriptRole]);
+  }, [selected?.threadId, showHiddenTranscript, transcriptRole, transcriptQuery]);
 
   useEffect(() => {
     void reloadPromptPreview(selected?.threadId, { silent: true });
@@ -681,6 +783,43 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     setExpandedTranscriptScroll(0);
   }, [selected?.threadId, transcriptIndex]);
 
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void client
+        .getEvents(eventCursorRef.current)
+        .then(async (payload) => {
+          eventCursorRef.current = payload.nextCursor;
+          if (payload.items.length === 0 || screenMode !== "browser") {
+            return;
+          }
+          await reloadSessions(selected?.threadId);
+          await reloadDetail(selected?.threadId);
+          await reloadTranscript(selected?.threadId);
+          await reloadPromptPreview(selected?.threadId, { silent: true });
+        })
+        .catch(async () => {
+          if (screenMode !== "browser") {
+            return;
+          }
+          await reloadSessions(selected?.threadId);
+        });
+    }, EVENTS_POLL_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [
+    client,
+    screenMode,
+    selected?.threadId,
+    dirtyOnly,
+    search,
+    selectedWorkspaceId,
+    showHiddenTranscript,
+    transcriptRole,
+    transcriptQuery
+  ]);
+
   useInput((input, key) => {
     if (!props.interactive) {
       return;
@@ -689,6 +828,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (inputMode === "search") {
       if (key.escape) {
         setSearchDraft(search);
+        setInputMode("normal");
+      }
+      return;
+    }
+
+    if (inputMode === "transcript-search") {
+      if (key.escape) {
+        setTranscriptQueryDraft(transcriptQuery);
         setInputMode("normal");
       }
       return;
@@ -815,9 +962,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       return;
     }
 
+    if (input === "[") {
+      cycleWorkspaceSelection(-1);
+      return;
+    }
+
+    if (input === "]") {
+      cycleWorkspaceSelection(1);
+      return;
+    }
+
     if (input === "/") {
       setSearchDraft(search);
       setInputMode("search");
+      return;
+    }
+
+    if (input === "?") {
+      setTranscriptQueryDraft(transcriptQuery);
+      setInputMode("transcript-search");
       return;
     }
 
@@ -1001,8 +1164,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     return `${transcriptItems.length}/${transcriptPage.totalItems} ${inLanguage(uiLanguage, "已加载", "loaded")} · ${transcriptRoleLabel(
       transcriptRole,
       uiLanguage
-    )} · ${showHiddenTranscript ? inLanguage(uiLanguage, "隐藏:开", "hidden:on") : inLanguage(uiLanguage, "隐藏:关", "hidden:off")}`;
-  }, [showHiddenTranscript, transcriptItems.length, transcriptPage, transcriptRole, uiLanguage]);
+    )} · ${
+      showHiddenTranscript ? inLanguage(uiLanguage, "隐藏:开", "hidden:on") : inLanguage(uiLanguage, "隐藏:关", "hidden:off")
+    } · ${transcriptQuery ? `${inLanguage(uiLanguage, "检索", "query")}:${truncateDisplayText(transcriptQuery, 14)}` : inLanguage(uiLanguage, "检索:无", "query:none")}`;
+  }, [showHiddenTranscript, transcriptItems.length, transcriptPage, transcriptQuery, transcriptRole, uiLanguage]);
 
   const selectedTranscript = transcriptItems[transcriptIndex];
   const expandedTranscriptLines = useMemo(() => {
@@ -1051,7 +1216,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       <Box justifyContent="space-between" width={layout.listWidth}>
         <Text color={focusPane === "sessions" ? THEME.accent : THEME.muted}>
           {focusPane === "sessions" ? inLanguage(uiLanguage, "归档 / ", "Archive / ") : ""}
-          {inLanguage(uiLanguage, "会话", "Sessions")} [{sessions.length}]
+          {inLanguage(uiLanguage, "会话", "Sessions")} [{sessions.length}] · {truncateDisplayText(selectedWorkspaceLabel, 18)}
         </Text>
         <Text color={THEME.muted}>
           {browserViewMode} {layout.columns}x{layout.rows}
@@ -1109,7 +1274,12 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         ))}
         <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
-            [detail?.projectName ?? detail?.cwd ?? "n/a", detail?.provider ?? "n/a", detail?.model ?? "n/a"].join(" | "),
+            [
+              detail?.workspaceLabel ?? selectedWorkspaceLabel,
+              detail?.projectName ?? detail?.cwd ?? "n/a",
+              detail?.provider ?? "n/a",
+              detail?.model ?? "n/a"
+            ].join(" | "),
             layout.detailInnerWidth
           )}
         </Text>
@@ -1179,6 +1349,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 width={layout.detailInnerWidth}
                 compact={layout.compact && browserViewMode !== "detail"}
                 uiLanguage={uiLanguage}
+                query={transcriptQuery}
               />
             ))}
         {expandedTranscript ? (
@@ -1342,7 +1513,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color={THEME.accent}>Codex Session Manager TUI</Text>
         <Text color={THEME.muted}>
           {screenMode === "browser"
-            ? `${dirtyOnly ? tt("dirtyOnly") : tt("all")} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
+            ? `${dirtyOnly ? tt("dirtyOnly") : tt("all")} | ws ${selectedWorkspaceLabel} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
             : `${tt("settings")} | api ${props.apiBase}`}
         </Text>
       </Box>
@@ -1365,6 +1536,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             onChange={setSearchDraft}
             onSubmit={(value) => {
               setSearch(value.trim());
+              setInputMode("normal");
+            }}
+          />
+        </Box>
+      ) : null}
+
+      {inputMode === "transcript-search" ? (
+        <Box marginTop={1}>
+          <Text color={THEME.accent}>{`${inLanguage(uiLanguage, "Transcript 检索", "Transcript query")}: `}</Text>
+          <TextInput
+            value={transcriptQueryDraft}
+            onChange={setTranscriptQueryDraft}
+            onSubmit={(value) => {
+              setTranscriptQuery(value.trim());
               setInputMode("normal");
             }}
           />
@@ -1478,8 +1663,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               {fitDisplayLine(
                 inLanguage(
                   uiLanguage,
-                  ", 设置  z 聚焦  enter 展开  h/l 面板  tab 切换  j/k 移动  g/G 首尾  o 更早  H 隐藏  1-5 角色",
-                  ", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  o older  H hidden  1-5 role"
+                  ", 设置  z 聚焦  enter 展开  h/l 面板  tab 切换  j/k 移动  g/G 首尾  [ ] 工作区  o 更早  H 隐藏  1-5 角色",
+                  ", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  [ ] workspace  o older  H hidden  1-5 role"
                 ),
                 layout.columns - 2,
                 ""
@@ -1489,8 +1674,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               {fitDisplayLine(
                 inLanguage(
                   uiLanguage,
-                  "/ 搜索  r 重命名  s 建议  a 应用  f 冻结  p 预览  A 批量应用  q 退出",
-                  "/ search  r rename  s suggest  a apply  f freeze  p preview  A batch  q quit"
+                  "/ 会话搜索  ? transcript 搜索  r 重命名  s 建议  a 应用  f 冻结  p 预览  A 批量应用  q 退出",
+                  "/ session search  ? transcript search  r rename  s suggest  a apply  f freeze  p preview  A batch  q quit"
                 ),
                 layout.columns - 2,
                 ""
