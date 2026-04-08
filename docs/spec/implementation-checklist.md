@@ -1,6 +1,8 @@
 # 实现 Checklist
 
-> 状态说明：这是一份历史过程清单，保留的是开发时阶段性判断，不保证逐项反映当前实现。当前代码能力请优先参考 [仓库总览](./repo-overview.md) 与测试。
+> 历史过程清单。更新时间：`2026-04-09`
+
+这份清单保留的是开发阶段的“做过什么”，不再逐项代表当前产品语义。为避免误读，下面只保留与当前代码仍一致的项目，并把已删除的旧行为移出清单。
 
 ## 0. 代码前准备
 
@@ -16,7 +18,6 @@
 - [x] 初始化 monorepo 结构
 - [x] 统一 TypeScript 配置
 - [x] 建立共享 DTO 与 schema 包
-- [ ] 建立日志与错误处理基础设施
 
 ## 2. 文件层能力
 
@@ -28,27 +29,28 @@
 
 ## 3. 领域模型
 
-- [x] 实现 session extractor
-- [x] 实现 revision builder
-- [x] 实现 dirty tracking
-- [x] 实现 rename state repository
+- [x] session extractor
+- [x] revision builder
+- [x] dirty tracking
+- [x] rename state repository
+- [x] AI request logs repository
 
 ## 4. rename engine
 
-- [x] 实现 heuristic summarizer
-- [x] 实现 template renderer
-- [x] 实现 length limiter
-- [x] 实现 duplicate suppression
-- [x] 定义 AI suggest 接口
+- [x] heuristic summarizer
+- [x] builder-first 结构化命名
+- [x] duplicate suppression
+- [x] AI suggest 接口
+- [x] prompt preview
 
 ## 5. 调度与自动化
 
-- [x] 实现 watcher
-- [x] 实现 periodic sweep
-- [x] 实现 candidate generation
-- [x] 实现 finalize apply
-- [x] 实现 manual override 检测
-- [x] 实现 freeze 逻辑
+- [x] watcher
+- [x] periodic sweep
+- [x] candidate generation
+- [x] finalize apply
+- [x] freeze 逻辑
+- [x] rename replay / requeue
 
 ## 6. CLI
 
@@ -57,7 +59,6 @@
 - [x] `suggest`
 - [x] `apply`
 - [x] `rename`
-- [ ] `batch suggest`
 - [x] `batch apply`
 - [x] `freeze`
 - [x] `unfreeze`
@@ -68,17 +69,17 @@
 
 ## 7. WebUI
 
-- [x] Session 列表页
-- [x] Session 详情页
-- [x] Batch rename / rename ops 页
-- [x] Settings / Rules / Naming policy
-- [x] Provider diagnostics
-- [x] Maintenance / Runtime 页
+- [x] Sessions
+- [x] Settings / Naming policy
+- [x] Rename Ops / 状态页
+- [x] Daemon 控制页
+- [x] provider diagnostics
+- [x] request log 分页与详情
 
 ## 8. AI provider
 
 - [x] `backend = none`
-- [x] `backend = codex`
+- [x] `backend = responses`
 - [x] `backend = openai-compatible`
 - [x] 从 Codex 配置继承 provider
 - [x] provider test
@@ -88,14 +89,13 @@
 - [x] writer 单元测试
 - [x] compact 单元测试
 - [x] revision 单元测试
-- [x] manual override 测试
 - [x] batch dirty rename 集成测试
+- [x] overview dedup 测试
+- [x] runtime display 测试
 - [ ] CLI smoke tests
 
-## 10. 发布前检查
+## 10. 当前仍需补强
 
-- [x] 文档与行为一致
-- [ ] 默认配置合理
-- [ ] 没有明文密钥输出
-- [ ] compact 有备份
-- [ ] 自动 rename 不会过频
+- [ ] provider 连通性相关的全量测试稳定性
+- [ ] auto-apply 稳定性 gate
+- [ ] `freeze_manual_name` 是否继续保留

@@ -1,145 +1,77 @@
 # 实现路线图
 
-> 状态说明：这是一份历史规划文档，用来保留项目早期分阶段实现思路。当前实际代码能力请优先以 [仓库总览](./repo-overview.md)、[README](../../README.md) 和对应实现文件为准。
+> 历史规划文档。更新时间：`2026-04-09`
 
-## 原则
+这份文档保留项目早期的阶段划分思路，但其中的具体能力项已经按当前代码做过一次清理：
 
-- 先把“读、判定、写回”闭环做稳
-- 再做界面
-- 再做高级自动化
+- `manual override` 已从当前运行逻辑中移除
+- `brief / detailed` 已不再是当前配置与 UI 的主语义
+- AI 后端当前是 `responses | openai-compatible | none`，并通过 `provider_source = codex-config | manual` 解析来源
 
-## v0.1 文档冻结
+当前真实能力请优先参考：
 
-交付物：
+- [README](../../README.md)
+- [仓库总览](./repo-overview.md)
+- [配置与 AI 后端](./config-and-ai.md)
+
+## 历史阶段划分
+
+### v0.1 文档冻结
 
 - 设计书
 - 数据模型
-- API/CLI/UI 规格
-- 维护与 compact 规格
-- 参考项目对照
+- API / CLI / UI 规格
+- compact 语义
 - ADR
 
-完成标准：
+### v0.2 核心后端
 
-- 开始编码前的关键决策基本不再反复摇摆
-
-## v0.2 核心后端
-
-交付物：
-
-- 项目脚手架
 - watcher
 - rollout extractor
 - SQLite 状态库
 - session_index writer
 - CLI 基础命令
 
-完成标准：
+### v0.3 批量与自动化
 
-- 可以列出 sessions
-- 可以识别 dirty
-- 可以单个 suggest / apply / rename
-
-## v0.3 批量与自动化
-
-交付物：
-
-- batch suggest / apply
-- automatic idle finalize
-- manual override / freeze
+- batch preview / apply
+- idle finalize auto-apply
+- freeze
 - rename history
 
-完成标准：
+### v0.4 WebUI
 
-- “rename 所有 dirty sessions” 可运行
-- 自动 rename 可控，不会过频
+- session 列表与详情
+- settings / naming policy
+- runtime / request logs
+- compact / replay / provider diagnostics
 
-## v0.4 WebUI
-
-交付物：
-
-- session 列表页
-- 详情页
-- 批量 rename 页
-- 规则配置页
-- provider 配置页
-- maintenance 页
-
-完成标准：
-
-- 用户无需 CLI 也能完成主要管理任务
-
-## v0.5 TUI
-
-交付物：
+### v0.5 TUI
 
 - session 浏览
-- 多选批处理
-- 快速 rename
-- compact / doctor
+- transcript
+- suggest / apply / freeze / manual rename
+- batch dirty apply
 
-完成标准：
+### v0.6 增强能力
 
-- 终端内可完成高频管理任务
+仍可继续演进的方向：
 
-## v0.6 增强能力
+- 更强的 auto-apply 稳定性 gate
+- ingest 增量信号真正进入调度核心
+- 请求日志导出 / 更细粒度排序
+- 更明确的 daemon / runtime 联动诊断
 
-候选项：
+## 当前里程碑口径
 
-- 启用 TUI session log 增强 clear/exit 判断
-- 更多命名 preset
-- 导入导出规则
-- AI prompt 版本管理
-- 批量操作撤销
+### 已落地
 
-## v1 范围建议
+- CLI / API / daemon / Web / TUI 都已可运行
+- 状态页请求日志已是后端分页
+- overview 统计已按会话去重
 
-v1 建议锁定在：
+### 仍在演进
 
-- daemon
-- SQLite 状态库
-- watcher + extractor
-- heuristic rename
-- optional AI rename
-- batch dirty rename
-- WebUI
-- compact-index
-
-这条建议已经过时。当前仓库内已经有可运行的 TUI 实现，实际能力请以当前代码和 `repo-overview.md` 为准。
-
-## 实施顺序
-
-建议实际开发顺序：
-
-1. 定义 TypeScript domain types
-2. 实现 session index reader/writer
-3. 实现 rollout extractor
-4. 实现 revision builder
-5. 实现 SQLite repository
-6. 实现 heuristic rename engine
-7. 实现 CLI
-8. 实现 daemon
-9. 实现 WebUI
-10. 补 AI backend
-
-## 里程碑验收
-
-### Milestone A
-
-- 能扫描现有 sessions
-- 能展示官方 name 和 dirty 状态
-
-### Milestone B
-
-- 能单个 rename
-- 能批量 rename dirty sessions
-
-### Milestone C
-
-- 能自动 idle finalize
-- 能 freeze/manual override
-
-### Milestone D
-
-- WebUI 可配置规则与 provider
-- 能 compact index
+- provider 测试链稳定性
+- `freeze_manual_name` 是否真正进入调度逻辑
+- auto-apply 是否增加“稳定一轮”保护

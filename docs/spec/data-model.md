@@ -1,10 +1,12 @@
 # 数据模型
 
+更新时间：`2026-04-09`
+
 ## 设计目标
 
-- 把“官方文件层”和“项目状态层”明确分开
-- 支持 dirty 检测、自动 rename、手动 override、历史回溯、批量预览
-- 保证 WebUI / TUI / CLI 共用同一套状态模型
+- 把 Codex 官方文件层与本项目状态层明确分开。
+- 支持 dirty 检测、rename history、freeze、request logs、overview 聚合。
+- 保证 Web / TUI / CLI 共用同一套状态模型。
 
 ## 官方文件层
 
@@ -17,7 +19,7 @@
 用途：
 
 - 发现 sessions
-- 解析消息、task_complete、token 使用、provider、cwd
+- 解析消息摘要、task_complete、token、provider、cwd
 
 ### session_index
 
@@ -27,8 +29,8 @@
 
 用途：
 
-- 最终可见 name 覆盖层
-- latest-wins
+- 用户可见 official name 的最终覆盖层
+- 语义是 latest-wins
 
 结构：
 
@@ -38,17 +40,13 @@
 
 ## 本地数据库
 
-建议使用 SQLite，文件路径：
+默认文件：
 
 - `~/.local/state/codex-session-manager/app.db`
 
-## 表设计
+## 当前表
 
 ### `sessions`
-
-每条记录对应一个 Codex thread。
-
-字段：
 
 - `thread_id TEXT PRIMARY KEY`
 - `rollout_path TEXT NOT NULL`
@@ -70,10 +68,6 @@
 
 ### `session_revisions`
 
-记录每个 session 当前解析出的内容版本。
-
-字段：
-
 - `thread_id TEXT PRIMARY KEY`
 - `current_revision TEXT NOT NULL`
 - `last_seen_rollout_size INTEGER`
@@ -84,36 +78,32 @@
 
 ### `rename_state`
 
-记录 rename 生命周期状态。
-
-字段：
-
 - `thread_id TEXT PRIMARY KEY`
 - `current_candidate_name TEXT`
 - `current_candidate_source TEXT`
 - `current_candidate_generated_at TEXT`
-- `current_candidate_style TEXT`
 - `last_auto_name TEXT`
 - `last_manual_name TEXT`
 - `last_applied_name TEXT`
 - `last_applied_source TEXT`
 - `last_applied_at TEXT`
-- `last_applied_style TEXT`
 - `last_applied_revision TEXT`
-- `preferred_style TEXT`
 - `dirty_since_rename INTEGER NOT NULL DEFAULT 0`
-- `manual_override INTEGER NOT NULL DEFAULT 0`
+- `force_rewrite INTEGER NOT NULL DEFAULT 0`
 - `frozen INTEGER NOT NULL DEFAULT 0`
 - `auto_apply_count INTEGER NOT NULL DEFAULT 0`
 - `last_auto_apply_attempt_at TEXT`
 - `last_auto_apply_success_at TEXT`
 - `last_skip_reason TEXT`
 
+兼容保留但当前运行逻辑不依赖的 legacy 列：
+
+- `current_candidate_style`
+- `last_applied_style`
+- `preferred_style`
+- `manual_override`
+
 ### `rename_history`
-
-记录每次 rename 行为。
-
-字段：
 
 - `id INTEGER PRIMARY KEY AUTOINCREMENT`
 - `thread_id TEXT NOT NULL`
@@ -121,18 +111,17 @@
 - `old_name TEXT`
 - `new_name TEXT NOT NULL`
 - `source TEXT NOT NULL`
-- `style TEXT`
 - `status TEXT NOT NULL`
 - `reason TEXT`
 - `applied_at TEXT NOT NULL`
 - `applied_revision TEXT`
 - `operator TEXT`
 
+兼容保留但当前不再作为调度输入的 legacy 列：
+
+- `style`
+
 ### `ingest_cursors`
-
-记录 rollout 的增量读取游标。
-
-字段：
 
 - `rollout_path TEXT PRIMARY KEY`
 - `last_offset INTEGER NOT NULL DEFAULT 0`
@@ -140,45 +129,62 @@
 - `last_mtime TEXT`
 - `last_scan_at TEXT`
 
-### `provider_profiles`
-
-记录 AI 命名后端配置。
-
-字段：
-
-- `profile_id TEXT PRIMARY KEY`
-- `backend_kind TEXT NOT NULL`
-- `display_name TEXT NOT NULL`
-- `provider_source TEXT NOT NULL`
-- `provider_ref TEXT`
-- `base_url TEXT`
-- `model TEXT`
-- `headers_json TEXT`
-- `extra_json TEXT`
-- `enabled INTEGER NOT NULL DEFAULT 1`
-- `is_default INTEGER NOT NULL DEFAULT 0`
-
 ### `maintenance_state`
-
-记录维护信息。
-
-字段：
 
 - `key TEXT PRIMARY KEY`
 - `value_json TEXT NOT NULL`
 
-## 状态枚举
+当前主要存放：
+
+- daemon runtime 快照
+- rename replay 历史
+- 其他维护态 JSON
+
+### `ai_request_logs`
+
+- `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- `thread_id TEXT NOT NULL`
+- `project_name TEXT`
+- `backend TEXT NOT NULL`
+- `transport TEXT NOT NULL`
+- `status TEXT NOT NULL`
+- `started_at TEXT NOT NULL`
+- `finished_at TEXT`
+- `duration_ms INTEGER`
+- `base_url TEXT`
+- `model TEXT`
+- `prompt_chars INTEGER`
+- `prompt_text TEXT`
+- `request_payload_json TEXT`
+- `response_chars INTEGER`
+- `response_text TEXT`
+- `response_payload_json TEXT`
+- `result_json TEXT`
+- `error TEXT`
+- `metadata_json TEXT`
+
+## 不在 DB 里的配置
+
+provider profile 与 AI 配置当前不落在 SQLite，而是来自：
+
+- 用户配置文件
+- 项目级 `.codex-session-manager.toml`
+- 继承的 Codex 配置
+
+## 关键枚举
 
 ### `status_estimate`
 
+- `discovered`
 - `active`
 - `candidate_ready`
 - `finalize_ready`
+- `applied`
 - `idle`
 - `archived_hint`
 - `missing`
 
-### `source`
+### `rename_history.source`
 
 - `heuristic`
 - `ai`
@@ -187,23 +193,36 @@
 - `batch`
 - `recovered`
 
-### `kind`
+### `rename_history.kind`
 
 - `auto`
 - `manual`
 - `batch`
 - `compact-rewrite`
 
-### `status`
+### `rename_history.status`
 
 - `applied`
 - `skipped`
 - `failed`
 - `preview_only`
 
+### `ai_request_logs.status`
+
+- `running`
+- `succeeded`
+- `failed`
+
+### `ai_request_logs.transport`
+
+- `responses`
+- `openai-compatible`
+
 ## Revision 语义
 
-`current_revision` 应根据会影响 name 的字段计算：
+当前仍按 `current_revision == last_applied_revision` 判定 dirty。
+
+`current_revision` 会综合：
 
 - `task_complete_count`
 - `first_user_message`
@@ -213,47 +232,37 @@
 - `cwd`
 - `model_provider`
 
-推荐算法：
+## Session DTO 约定
 
-- 归一化字段
-- 拼接为结构化 JSON
-- 计算 `sha256`
+当前 Session 详情不再暴露 `manualOverride` 作为活跃语义。
 
-规则：
-
-- `current_revision == last_applied_revision` -> 非 dirty
-- `current_revision != last_applied_revision` -> dirty
-
-## Session 详情 DTO
-
-WebUI/TUI/CLI 应统一读取如下聚合结构：
+典型结构：
 
 ```json
 {
   "threadId": "019d....",
   "cwd": "/path/to/project",
-  "projectName": "project",
-  "updatedAt": "2026-04-04T12:00:00Z",
-  "officialName": "共享 provider 设计",
-  "candidateName": "0404-1200 feat(provider): 共享 provider 设计",
+  "projectName": "codex-session-manager",
+  "updatedAt": "2026-04-09T03:02:00Z",
+  "officialName": "JI",
+  "candidateName": "docs · feat · update status page docs",
   "dirty": true,
   "frozen": false,
-  "manualOverride": false,
   "taskCompleteCount": 4,
   "provider": "OpenAI",
   "model": "gpt-5.4",
-  "firstUserMessage": "...",
-  "lastAgentMessage": "...",
-  "lastAppliedAt": "2026-04-03T08:00:00Z",
+  "lastAppliedAt": "2026-04-08T20:00:00Z",
   "lastAppliedRevision": "sha256:..."
 }
 ```
 
-## 约束
+## 统计口径
 
-- `thread_id` 是唯一真主键
-- 不允许用 name 当主键
-- 同一个 name 可以对应多个不同 thread
-- 一个 thread 可以有多次 rename 历史
-- `rename_state.last_applied_name` 必须与 `rename_history` 中最近一次成功记录一致
-- `rename_state.last_applied_style` 必须与该次成功记录的 `style` 一致
+overview 的 rename 统计当前按**会话去重**：
+
+- `renameHistory.applied / aiApplied / manualApplied / autoApplied`
+  - 取每个 thread 最新一条 accepted applied 记录
+- `activity.buckets`
+  - 取每个 thread 最新一条 rename activity 记录
+
+这意味着同一会话多次命名不会在 overview 图表里重复累计。

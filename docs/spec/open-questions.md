@@ -1,106 +1,103 @@
 # 开放问题
 
-这些问题不阻塞 v1 开工，但需要在实现早期尽快收敛。
+更新时间：`2026-04-09`
+
+这份文档只保留**当前代码仍未完全定稿**的问题；已经被代码移除的旧方案（如 `manual override`、`backend = "codex"`、`codex exec` fallback）不再作为待决事项记录。
 
 ## 1. AI 默认后端到底选什么
 
-候选：
+当前可选项：
 
-- `backend = codex`
-- `backend = openai-compatible`
-- `backend = none`
+- `backend = "responses"`
+- `backend = "openai-compatible"`
+- `backend = "none"`
 
-当前建议：
+当前默认实现：
 
-- 默认 `codex`
-- 但其含义更新为：
-  - 优先继承 Codex 的 provider / model / auth
-  - 优先直连 HTTP
-  - 必要时才回退 `codex exec`
+- `backend = "responses"`
+- `provider_source = "codex-config"`
 
-## 2. TUI 是否在 v1 内完成
+仍待确认的问题：
 
-当前现状：
+- 是否继续把 `responses + codex-config` 作为最优默认组合
+- 是否要在 provider 连通性失败时更主动地引导用户切到 `manual`
 
-- TUI 已经在仓库中实现并可运行。
-
-当前更合理的问题是：
-
-- 是否要继续把 TUI 保持为高密度运维视图
-- 是否要拆成更明确的 `Browser / Transcript / Rename / Settings` 模式
-- 是否要和 WebUI 的默认阅读路径进一步对齐
-
-## 3. project name 如何定义
-
-候选：
-
-- `basename(cwd)`
-- git repo 根目录名
-- 用户手动映射
-
-当前建议：
-
-- 优先 git repo 根目录名
-- 回退到 `basename(cwd)`
-
-## 4. dirty 的严格定义是否需要更多字段
-
-当前 revision 只考虑内容与结果字段，不考虑外部名字变化。
-
-待确认：
-
-- 是否应把 token_total 纳入 dirty 判定
-- 是否应忽略非常短的 agent message 波动
-
-## 5. 批量 rename 是否需要事务式回滚
-
-当前建议：
-
-- v1 不做强事务回滚
-- 记录每项成功/失败
-- 提供失败重试
-
-## 6. `codex exec` fallback 的 prompt 和输出约束
-
-需要后续定稿：
-
-- prompt 模板
-- JSON 输出约束
-- 超时与失败回退
-
-## 9. auto-rename 在正式 apply 之后还缺什么保护
+## 2. auto-apply 在正式落盘前是否要增加“稳定一轮”保护
 
 当前现状：
 
-- daemon 已经可以在 `idle-finalize` 下正式 auto-apply
+- `evaluateAutoRename()` 只基于 `dirty + idle + frozen + cooldown + max_auto_renames`
+- `finalize_ready` 会映射成 `apply`
+- 当 `rename.auto_apply = "idle-finalize"` 且 daemon 正在运行时，会真正写回
 
-当前更合理的问题是：
+仍待确认的问题：
 
-- 是否要增加“候选稳定一轮 scan 后再 apply”
-- 是否要把 `growthBytes / taskCompleteDelta` 引入正式 apply 判定
+- 是否要求候选名连续一轮 sweep 保持稳定后再自动 apply
+- 是否要把“最近一次候选与本次候选完全一致”作为额外 gate
 
-## 10. “实质更新”阈值何时进入调度核心
+## 3. ingest 增量信号何时进入调度核心
 
 当前现状：
 
-- 配置里已有 `min_rollout_growth_bytes` / `min_task_complete_delta`
-- 但调度逻辑还没有真正消费这些信号
+- 配置里已经有：
+  - `min_rollout_growth_bytes`
+  - `min_task_complete_delta`
+- 但当前 `evaluateAutoRename()` 并未直接消费这些信号
 
-当前建议：
+仍待确认的问题：
 
-- 下一阶段把 ingest 增量信号持久化进 DB
-- 再让 auto-rename 判定依赖这些字段，而不只依赖 revision/idle
+- 是否把 `growthBytes / taskCompleteDelta / lastAgentChanged` 持久化进 DB
+- 是否让自动调度从“revision + idle”升级为“增量信号 + idle”
 
-## 7. 是否需要导入已有手工名字为“受保护状态”
+## 4. `rename.freeze_manual_name` 的真实职责
 
-当前建议：
+当前现状：
 
-- 只要检测到最新官方名不是本项目上次写入的结果
-- 就视为 manual override
+- Settings 和配置文件里仍然保留 `rename.freeze_manual_name`
+- 但当前调度保护态实际只有**会话级 `freeze`**
+- 运行时不再有独立的 `manual override` 分支
 
-## 8. 是否支持 rename undo
+仍待确认的问题：
 
-当前建议：
+- 这个开关是否应该真正参与调度
+- 如果要参与，是落到“手动 rename 后自动 freeze”还是别的行为
+- 如果短期不会生效，是否应该从 UI/配置里移除
 
-- v1 不提供完整 undo 栈
-- 只支持“恢复到上一条成功 name”
+## 5. TUI 是否继续保持“高密度运维视图”
+
+当前现状：
+
+- TUI 已实现并可用
+- 支持浏览、搜索、transcript、suggest/apply、freeze、manual rename、batch dirty apply、settings 编辑
+
+仍待确认的问题：
+
+- 是否要继续保持现在这种高密度单屏布局
+- 是否要进一步对齐 Web 的阅读路径
+- 是否要把“状态 / daemon / 请求日志”里的更多运行态信息带进 TUI
+
+## 6. 请求日志是否继续停留在“表格 + 分页”
+
+当前现状：
+
+- 状态页请求日志已经改成后端分页
+- UI 每页显示 10 条
+- 支持搜索、项目、状态、传输过滤，以及直接跳页
+
+仍待确认的问题：
+
+- 是否要继续增加导出能力
+- 是否要支持更细的排序
+- 是否要为明细区增加“复制字段 / 打开关联会话”等操作
+
+## 7. 是否需要“恢复到上一条正式名”
+
+当前现状：
+
+- `rename_history` 已保留完整历史
+- 但当前没有单独的 undo 命令或 Web 操作
+
+仍待确认的问题：
+
+- 是否提供一个显式的 “restore previous applied name” 操作
+- 如果提供，是否只允许恢复到“上一条 accepted official name”

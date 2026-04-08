@@ -1,222 +1,122 @@
 # 系统设计
 
+更新时间：`2026-04-09`
+
 ## 设计摘要
 
 Codex Session Manager 的主线路如下：
 
-1. 监听并解析 Codex rollout 文件。
-2. 将 session 内容抽取成结构化状态。
-3. 用 heuristic 或 AI 生成候选 name。
-4. 依据“dirty + idle + cooldown + policy”决定是否正式应用。
-5. 通过向 `~/.codex/session_index.jsonl` 追加记录写回最终 name。
-6. 用本地数据库承载 UI、批处理、历史记录和自动化状态。
+1. 扫描 Codex rollout 文件并抽取会话事实。
+2. 将会话状态写入本地 SQLite。
+3. 基于 rename context + naming builder 生成 candidate。
+4. 用 `evaluateAutoRename()` 把会话判成 `skip / suggest / apply`。
+5. 在需要时向 `~/.codex/session_index.jsonl` 追加正式 rename。
+6. 通过 CLI、Local API、Web、TUI、daemon 暴露统一操作入口。
 
 ## 架构分层
 
 ```text
-Codex Filesystem
+Codex filesystem
   |- ~/.codex/sessions/**/rollout-*.jsonl
   |- ~/.codex/session_index.jsonl
-  |- ~/.codex/config.toml
+  |- ~/.codex/config.toml / auth.json
           |
           v
-Watcher / Scanner
+scanner / ingest
           |
           v
-Extractor / Revision Builder
+SQLite state DB
           |
-          v
-State DB (SQLite)
-          |
-          +--> Rename Engine
+          +--> naming + provider
+          |       |- context builder
           |       |- heuristic
-          |       |- AI provider
-          |       `- template renderer
+          |       `- AI provider
           |
-          +--> Writer
+          +--> writeback
           |       |- append session_index
-          |       `- compact-index
+          |       `- compact
           |
-          `--> Local API
+          `--> local API
                   |- CLI
-                  |- WebUI
-                  `- TUI
+                  |- Web
+                  |- TUI
+                  `- daemon controls
 ```
 
-## 组件说明
+## 组件职责
 
-### Watcher / Scanner
+### scanner / ingest
 
-职责：
+- 扫描 rollout 文件
+- 增量解析消息摘要、provider、cwd、token、task_complete
+- 计算 revision 与 dirty
 
-- 监听 rollout 文件增长
-- 监听 `session_index.jsonl` 外部变化
-- 定时全量 reconcile，避免只依赖文件系统事件
+### SQLite state DB
 
-触发源：
+- 存放 sessions / revisions / rename state / rename history / maintenance state / AI request logs
+- 为 Web、TUI、CLI 提供统一视图
 
-- 文件创建
-- 文件内容追加
-- mtime / size 变化
-- 周期性轮询
+### naming + provider
 
-### Extractor
+- 构建 rename context
+- 运行 heuristic 或 AI rename
+- 按 `naming.builder` 拼装最终标题
+- 执行重名规避
 
-职责：
+### writeback
 
-- 增量解析 rollout JSONL
-- 抽取：
-  - `thread_id`
-  - `cwd`
-  - `created_at`
-  - `updated_at`
-  - `first_user_message`
-  - `last_user_message`
-  - `last_agent_message`
-  - `task_complete_count`
-  - `token_total`
-  - `model_provider`
-  - `model`
-
-输出：
-
-- session 快照
-- revision hash
-- 实质更新信号
-
-### State DB
-
-职责：
-
-- 作为本项目唯一 source of truth
-- 记录 rename 状态、历史、dirty、manual override、freeze
-- 承接 WebUI/TUI 的筛选和批量操作
-
-### Rename Engine
-
-职责：
-
-- 生成候选 name
-- 管理命名模板和风格
-- 调用 AI 或 heuristic
-- 负责长度限制、去重、回退规则
-
-### Writer
-
-职责：
-
-- 在满足 apply 条件时向 `session_index.jsonl` 追加一条记录
-- 做幂等检查，避免重复写
+- 只在 apply 时向 `session_index.jsonl` 追加记录
+- 保持 latest-wins 语义
 - 提供离线 compact
 
-## 文件与数据流
+### local API / UI
 
-### 输入文件
-
-- `~/.codex/sessions/**/rollout-*.jsonl`
-- `~/.codex/session_index.jsonl`
-- `~/.codex/config.toml`
-
-### 输出文件
-
-- `~/.codex/session_index.jsonl`
-- `~/.local/state/codex-session-manager/app.db`
-- `~/.local/state/codex-session-manager/backups/*`
-- `~/.local/state/codex-session-manager/logs/*`
+- CLI：单次查询、rename、batch apply、doctor、provider test
+- Web：Sessions / Settings / 状态 / Daemon 四个主视图
+- TUI：浏览、搜索、transcript、suggest/apply、freeze、manual rename、batch dirty apply
 
 ## 关键设计选择
 
-### 1. 不使用 SQLite 作为 rename 写回层
+### 1. 不直接改 Codex SQLite
 
-原因：
+- 用户可见 rename 的正式持久化层是 `session_index.jsonl`
+- SQLite 的内部 title 不是本项目的真 source of truth
 
-- 官方用户可见 rename 最终落在 `session_index.jsonl`
-- SQLite 的 `threads.title` 对应的是内部抽取 title，不是用户 rename name
-- 直接改 SQLite 风险更高，且与官方语义不对齐
+### 2. builder-first 命名
 
-### 2. 不依赖 wrapper
+- 当前最终标题结构由 `naming.builder` 决定
+- `components / component_separator` 只保留兼容读取/写回
+- `brief / detailed` 不再是当前 UI / 配置的主语义
 
-原因：
+### 3. 保护态只保留 `freeze`
 
-- 用户明确不希望修改 Codex 启动方式
-- 我们接受“默认无法精确知道每次 clear/exit 边界”，转而使用 idle finalize + 可选 session log 增强
+- 调度层当前没有独立的 `manual override`
+- 自动流程的高优先级保护态只有 `frozen`
 
-### 3. 本地 DB 与官方文件分层
+### 4. accepted official name 归一化
 
-原因：
+- 当前只把 `ai` 和 `manual` 视为 accepted official rename source
+- 非 accepted source 的 official name 会被视为待重写过渡态
+- overview 统计会按这个口径统一
 
-- 官方文件只承担“最终可见名字”
-- 本项目状态远多于官方 index，需要自己维护
-- 这样 compact、dirty tracking、AI 配置、批量选择都能独立演进
+### 5. 请求日志内建到状态面板
 
-## 服务模式
-
-### daemon
-
-职责：
-
-- 常驻监控
-- 处理自动 rename
-- 提供本地 HTTP/Unix socket API
-
-### CLI
-
-职责：
-
-- 单次查询、重命名、批处理、compact、诊断
-
-### WebUI
-
-职责：
-
-- 可视化查看 sessions
-- 配置规则和 provider
-- 批量管理
-
-### TUI
-
-职责：
-
-- 终端环境下快速筛选与批处理
+- 所有 AI rename 请求都会写入 `ai_request_logs`
+- 状态页通过后端分页读取，不再只拉固定 40 条到前端
 
 ## 运行模式
 
-### 模式 A: 纯手动
+### 纯手动
 
-- 用户只使用 CLI / WebUI / TUI
-- 不启用自动 rename
+- 用户通过 CLI / Web / TUI 手动 `suggest`、`apply`、`rename`
 
-### 模式 B: 观察 + 手动 apply
+### preview-only
 
-- daemon 持续计算候选名
-- 用户手动决定何时 apply
+- daemon 或状态页会给出 `skip / suggest / apply`
+- 但不会自动写回
 
-### 模式 C: 自动 finalize
+### auto-apply
 
-- daemon 在 idle 条件满足时自动 apply
-- 仍保留 manual override 和 freeze
-
-## 兼容性
-
-目标兼容：
-
-- 当前本机现有 Codex 数据目录结构
-- 已经存在的 `session_index.jsonl`
-- 没有 session log 的默认环境
-- 继承 `~/.codex/config.toml` 中已有 provider/model 定义
-
-非强兼容：
-
-- 不承诺兼容未来 Codex 对 rollout 内部事件字段的所有变化
-- 不承诺在所有版本上使用同一套“增强信号”逻辑
-
-## 观测与诊断
-
-项目需要内建：
-
-- 文件扫描统计
-- session 数量统计
-- dirty / frozen / manual 数量
-- 自动 rename 成功率
-- compact 建议
-- AI 调用失败率与回退原因
+- daemon 运行
+- `rename.auto_apply = "idle-finalize"`
+- `finalize_ready` 会话会真正落盘

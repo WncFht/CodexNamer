@@ -1,191 +1,90 @@
 # Codex Session Manager
 
-Codex Session Manager 是一个独立于 `openai/codex` 的外置项目，用来管理
-本地 Codex session 的命名、批量重命名、自动重命名、规则配置、AI 命名后端、
-以及 `session_index.jsonl` 的维护与压缩。
+Codex Session Manager 是一个独立于 `openai/codex` 的本地工具，用来管理 Codex 会话命名、自动重命名、批量 apply、运行态排障，以及 `session_index.jsonl` 的维护与压缩。
 
-这个项目明确不修改 Codex 的启动方式，也不依赖改动 Codex 源码。它通过读取
-`~/.codex/sessions/**/rollout-*.jsonl` 理解 session 内容，并通过向
-`~/.codex/session_index.jsonl` 追加 rename 记录来写回最终名称。
+它不修改 Codex 源码，也不接管 Codex 启动方式。当前实现通过读取 `~/.codex/sessions/**/rollout-*.jsonl` 理解会话内容，并通过向 `~/.codex/session_index.jsonl` 追加记录写回最终名称。
 
-## 当前阶段
+## 当前状态
 
-当前仓库已经完成 v1 第一阶段后端骨架，已具备这些能力：
+当前仓库已经具备完整的本地闭环：
 
-- 扫描 `~/.codex/sessions/**/rollout-*.jsonl`
-- 维护本地 SQLite 状态库
-- 读取 / 追加 / compact `~/.codex/session_index.jsonl`
-- 计算 revision 与 dirty 状态
-- 单个与批量 rename
-- rename history、freeze、manual override
-- 默认命名风格版本与单会话风格切换
-- AI rename backend:
-  - `none`
-  - `openai-compatible`
-  - `codex`
+- 扫描 rollout 并维护本地 SQLite 状态库
+- 计算 revision、dirty、status estimate
+- 单个 `suggest / apply / rename / freeze`
+- dirty 批量 apply
+- daemon auto-rename 与 auto-apply
+- builder-first 命名配置与 prompt preview
+- Local API、Web、TUI、CLI 四套入口
+- AI 请求日志、overview 图表、daemon 控制页
+- `session_index.jsonl` compact
 
-其中 `backend = "codex"` 的当前语义是：
+当前运行逻辑有几条重要约定：
 
-- 优先继承 `~/.codex/config.toml` 的 provider/model
-- 优先继承 `~/.codex/auth.json` 的认证
-- 优先直接走 Responses / Chat Completions
-- 只有直连不可用时才回退 `codex exec`
+- `evaluateAutoRename()` 统一输出 `skip / suggest / apply`
+- `apply` 只表示“允许正式应用”，不等于已经落盘
+- 真正是否自动落盘，要同时看：
+  - `rename.auto_apply`
+  - daemon 是否运行
+  - runtime `actualExecution`
+- 当前调度保护态只保留 `freeze`
+- `brief / detailed` 不再是当前配置与 UI 的主语义
+- overview 中“近期重命名活动”和“应用来源分布”已按会话去重
 
-当前自动重命名的运行态需要明确区分“评估结果”和“实际落盘”：
+## AI backend 现状
 
-- `evaluateAutoRename()` 统一给出 `skip / suggest / apply`
-- `candidate_ready` 会在 UI 里显示为 `suggest`
-- `finalize_ready` 会在 UI 里显示为 `apply`
-- daemon 现在会根据 `rename.auto_apply` 决定是否真正写回：
-  - `idle-finalize`：对 `finalize_ready` 自动落盘
-  - `disabled`：仍然只做 preview
-- 因此前端里看到的 `apply` 表示“允许应用”；是否已自动应用，要看运行态里的：
-  - `actualExecution`
-  - `daemonStatus`
-  - `lastSweepAt / lastSweepSummary`
+当前后端是：
 
-当前“正式命名”还有一条新的约定：
+- `none`
+- `responses`
+- `openai-compatible`
 
-- 只把 `AI` 和 `手动命名` 视为正式名字
-- 旧的 heuristic 命名会被当作“待 AI 重写”的过渡态
-- 因此它们不会计入 `named`，后续也会重新进入 rename 队列
+当前 provider 来源是：
 
-当前还有一条重名约定：
+- `codex-config`
+- `manual`
 
-- 新的候选名或手动名在落盘前会先做重名检查
-- 如果和别的 session 正式名重复，会自动追加 ` (2) / (3) ...` 后缀
-- 已经历史上形成的重复正式名，也会把后出现的那几个重新打回待处理队列
+这意味着：
 
-当前命名还有一条新的风格版本约定：
+- `responses + codex-config` 会直接读取当前 Codex 配置与鉴权
+- `manual` 会读取当前用户配置里的 `[provider.<profile>]`
+- 不再维护 `backend = "codex"` 或 `codex exec` fallback
 
-- 全局默认风格由 `naming.default_style` 控制
-- 当前支持：
-  - `detailed`
-  - `brief`
-- 单会话可以单独切换“跟随默认 / 详细 / 简略”
-- `rename_history` 现在会记录每次 rename 对应的风格版本
+## 命名结构现状
 
-当前命名还有一条新的“组件组合”约定：
+当前最终标题结构由 `naming.builder` 决定。
 
-- 默认模式是 `structured`
-- AI 会先返回 `kind / summary / scope / tagId`
-- 后端再按 `naming.builder` 里的 token 顺序拼装最终标题
-- builder 当前支持：
-  - `timestamp`
-  - `workspace`
-  - `project`
-  - `tag`
-  - `kind`
-  - `scope`
-  - `summary`
-- `timestamp` 组件支持多个固定格式下拉预设
-- tag 目录现在是 AI 命名规则预设，可以在 Settings 里编辑
-- 高级用户也可以切到 `prompt-override`，给 AI 一段自定义命名覆写 prompt
-- AI Prompt 的指令语言跟随界面语言：
-  - 中文界面 -> 中文 Prompt
-  - 英文界面 -> 英文 Prompt
-  - 最终标题输出语言仍由 `naming.language` 控制
+builder 支持的 component：
 
-Local API、WebUI 与 TUI 都已经有第一版可运行实现：
+- `timestamp`
+- `workspace`
+- `project`
+- `tag`
+- `kind`
+- `scope`
+- `summary`
 
-- Local API：会话列表、详情、history、suggest/apply/rename、freeze/manual override、batch apply、provider diagnostics、doctor、compact、config writeback、events polling
-- WebUI：本地 session dashboard，支持 workspace 浏览、transcript、suggest/apply/freeze/manual override、Settings 表单配置、context 策略与字符预算配置、运行态面板；旧的 `rename.mode` 已不再在设置页暴露
-- Settings 的 `Naming policy` 现在已经内置 token builder 和 Prompt Preview；`Runtime` 区只保留 provider 解析与配置路径
-- 运行态面板现在还会显示 AI 请求日志，包含活跃请求、最近请求状态、传输方式、耗时与错误
-- Settings / 运行态现在都会展示“平均标题字数”
-- TUI：终端版 browser/settings 双界面，支持搜索、detail 全屏、settings 编辑、单个 suggest/apply/manual rename、freeze/manual override、batch preview/apply
+AI 或 heuristic 先产出结构化信息，后端再按 builder 组装最终标题。`components / component_separator` 只作为兼容层存在。
 
 ## 文档导航
 
 - [文档总览](./docs/README.md)
 - [仓库总览](./docs/spec/repo-overview.md)
-
 - [系统设计](./docs/spec/system-design.md)
-- [产品范围](./docs/spec/product-scope.md)
-- [数据模型](./docs/spec/data-model.md)
-- [触发与生命周期](./docs/spec/trigger-and-lifecycle.md)
+- [配置与 AI 后端](./docs/spec/config-and-ai.md)
 - [Auto Rename 评估与 Context 构建](./docs/spec/rename-evaluation-and-context.md)
+- [状态页说明](./docs/spec/status-page-guide.md)
 - [CLI / API / UI 设计](./docs/spec/cli-api-ui.md)
 - [WebUI / TUI / Local API 详细设计](./docs/spec/web-tui-local-api-design.md)
-- [Claude 设计系统接入说明](./docs/design/claude/ADOPTION.md)
-- [Claude 设计系统原始文档](./docs/design/claude/DESIGN.md)
-- [当前状态与 Pipeline 审查](./docs/spec/status-and-pipeline-review.md)
-- [配置与 AI 后端](./docs/spec/config-and-ai.md)
-- [维护与压缩](./docs/spec/maintenance-and-compaction.md)
-- [实现路线图](./docs/spec/implementation-roadmap.md)
-- [开放问题](./docs/spec/open-questions.md)
-- [参考项目对照](./docs/research/reference-review.md)
-- [ADR 0001: 写回层选择](./docs/adr/0001-writeback-via-session-index.md)
-- [ADR 0002: 非 wrapper 架构](./docs/adr/0002-no-wrapper-architecture.md)
-
-说明：
-
-- `README.md` 负责项目入口与快速上手。
-- `docs/README.md` 负责整套文档的阅读路径。
-- `docs/spec/repo-overview.md` 负责描述当前代码仓库的真实结构与实现边界。
-- `implementation-roadmap.md` 与 `implementation-checklist.md` 主要用于保留历史规划，不应单独当作当前实现真相源。
-
-## 设计原则
-
-1. 不碰 Codex SQLite。用户 rename 层与内部抽取 title 层必须分离。
-2. 主写回层使用 `session_index.jsonl`，因为这就是官方 rename 的最终持久化层。
-3. 自动 rename 不追求“每次更新都改名”，而是用“实质更新 + idle finalize”控制频率。
-4. AI 命名不是强依赖。没有 AI 时系统仍会回退 heuristic 生成临时候选，但 tag 预设只由 AI 负责选择。
-5. WebUI / TUI / CLI 必须复用同一套后端状态与 rename 引擎，避免分叉逻辑。
-6. 先让“最终名字正确落盘”，再考虑“当前活跃界面立刻刷新”。
-
-## 预期成果
-
-v1 完成后，项目至少应支持：
-
-- 查看本机 Codex sessions 列表与当前官方名称
-- 标记“自上次 rename 以来已变化”的 dirty sessions
-- 单个 session rename
-- 批量 rename 选中 sessions
-- 批量 rename 所有 dirty sessions
-- 配置模板、规则和 AI 后端
-- 自动 rename 的 idle/finalize 策略
-- `session_index.jsonl` 的体积监控与离线 compact
-
-## 已有命令
-
-当前 CLI 已有：
-
-- `codex-session list`
-- `codex-session show --id <thread-id>`
-- `codex-session suggest --id <thread-id>`
-- `codex-session apply --id <thread-id>`
-- `codex-session rename --id <thread-id> --name "..."`
-- `codex-session history --id <thread-id>`
-- `codex-session freeze --id <thread-id>`
-- `codex-session unfreeze --id <thread-id>`
-- `codex-session manual-override --id <thread-id>`
-- `codex-session clear-manual-override --id <thread-id>`
-- `codex-session batch apply --dirty`
-- `codex-session compact-index --dry-run`
-- `codex-session doctor`
-- `codex-session config print`
-- `codex-session provider test`
-
-当前还可通过本地 API 启动命令运行服务：
-
-- `npm run api -- --host 127.0.0.1 --port 42110`
-
-当前前端入口：
-
-- `npm run web`
-- `npm run tui`
 
 ## 安装
 
-### 前置要求
+前置要求：
 
 - Node.js `20+`
 - npm `10+`
 - 本机已有可读取的 Codex 目录，默认是 `~/.codex`
-- 如果要用 `backend = "codex"` 或继承 Codex provider，确保 `~/.codex/config.toml` 与 `~/.codex/auth.json` 可用
 
-### 克隆与依赖安装
+安装：
 
 ```bash
 git clone <your-repo-url> codex-session-manager
@@ -194,34 +93,34 @@ npm install
 npm run build
 ```
 
-### 可选：初始化用户配置
+## 最小配置示例
 
-默认配置文件路径：
+默认用户配置路径：
 
 - `~/.config/codex-session-manager/config.toml`
-
-如果你什么都不写，项目会直接继承：
-
-- `~/.codex/config.toml`
-- `~/.codex/auth.json`
-
-最小示例：
 
 ```toml
 [general]
 codex_home = "~/.codex"
 state_dir = "~/.local/state/codex-session-manager"
+ui_language = "zh-CN"
 
-[ai]
-backend = "codex"
-provider_source = "inherit-codex"
-profile = "default"
+[rename]
+auto_apply = "disabled"
+freeze_manual_name = true
+
+[watch]
+scan_interval_seconds = 300
+candidate_idle_seconds = 120
+finalize_idle_seconds = 600
+rename_cooldown_seconds = 900
+min_rollout_growth_bytes = 4096
+min_task_complete_delta = 1
+max_auto_renames_per_session = 2
 
 [naming]
-template = "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"
 max_length = 72
 language = "zh-CN"
-default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 composition_mode = "structured"
@@ -233,35 +132,36 @@ builder = [
   { type = "component", component = "summary" }
 ]
 
-[[naming.tags]]
-id = "settings"
-description = "配置、设置、保存、语言、provider 相关会话。"
-prompt_hint = "setting settings config save language provider"
+[ai]
+backend = "responses"
+provider_source = "codex-config"
+profile = "default"
+timeout_seconds = 45
+temperature = 0.2
+max_concurrency = 1
 ```
 
-如果你想显式指定 URL + API key：
+如果你想显式指定 provider：
 
 ```toml
 [ai]
 backend = "openai-compatible"
-provider_source = "explicit"
+provider_source = "manual"
 profile = "default"
 
 [provider.default]
-backend_kind = "openai-compatible"
-display_name = "default"
-provider_source = "explicit"
+request_type = "openai-compatible"
+display_name = "Default"
 base_url = "http://127.0.0.1:23141/v1"
 model = "gpt-5.4"
 api_key = "your-api-key"
-wire_api = "responses"
 enabled = true
 is_default = true
 ```
 
-## 使用
+## 启动方式
 
-### 1. 启动 Local API
+### Local API
 
 ```bash
 npm run api -- --host 127.0.0.1 --port 42110
@@ -273,66 +173,43 @@ npm run api -- --host 127.0.0.1 --port 42110
 curl http://127.0.0.1:42110/api/v1/health
 ```
 
-### 2. 启动 WebUI
+### Web
 
 ```bash
 npm run web
 ```
 
-现在 `npm run web` 会自动：
+当前 Web 有四个主视图：
 
-- 查找并关闭当前 repo 之前残留的旧 Web / API / launcher 实例
-- 复用一个健康的本地 API
-- 或者在 `42110+` 范围内找可用端口启动 API
-- 然后把 Vite 代理指向对应 API
+- `Sessions`
+- `Settings`
+- `状态 / Rename Ops`
+- `Daemon`
 
-默认 Vite 地址：
+当前 Web 支持：
 
-- `http://127.0.0.1:43110`
+- workspace 浏览
+- session 详情 / transcript / rename history
+- 会话级 `Suggest / Apply / Freeze`
+- settings 写回
+- overview 图表
+- AI 请求日志
+- daemon start / stop / log tail
 
-WebUI 当前包含 3 个主视图：
+请求日志当前行为：
 
-- `Sessions`：workspace 分组、session 列表、transcript、rename history、rename 操作
-- `Settings`：默认命名风格、context 策略与 `context_max_chars`、结构化命名组件、tag 目录、prompt override、watch 阈值、AI backend/profile/default provider 配置、界面语言切换、AI prompt preview，并直接写回 `~/.config/codex-session-manager/config.toml`
-- `Rename Ops / 运行态`：自动重命名运行态、近期应用活动、命名来源分布、工作区 token 压力、平均标题字数、预览队列与原始 doctor 信息
+- 后端分页
+- 状态页每页 10 条
+- 支持搜索、项目、状态、传输过滤
+- 支持直接跳页
 
-运行态页现在会明确展示：
-
-- 当前是否检测到 daemon 心跳
-- 最近一轮 daemon sweep 时间
-- 最近一轮 sweep 的 `suggest / apply / skip / autoApplied`
-- 当前自动应用是否真的在生效，而不只是配置里打开了 `idle-finalize`
-
-`Rename Ops / 运行态` 页当前默认只拉取状态级 preview：
-
-- 默认只展示 `skip / suggest / apply` 状态与原因
-- 候选名改成按需载入，避免页面一打开就触发全量 AI 命名
-- 图表使用与 `ccLoad` 趋势页同一实现家族的 ECharts canvas 方案，按主题色自动取值，并用 `ResizeObserver` 适配容器尺寸
-
-Web/TUI 现在都支持两种界面语言：
-
-- `en-US`
-- `zh-CN`
-
-对应配置项为：
-
-```toml
-[general]
-ui_language = "zh-CN"
-```
-
-当前 WebUI 的视觉系统已开始按上游 `awesome-design-md/claude` 重构，参考文件位于：
-
-- `docs/design/claude/`
-- `docs/design/claude/ADOPTION.md`
-
-### 3. 启动 TUI
+### TUI
 
 ```bash
 npm run tui
 ```
 
-如果你要显式指定一个已有 API，也可以：
+也可以显式指定已有 API：
 
 ```bash
 npm run tui -- --api-base http://127.0.0.1:42110
@@ -340,195 +217,66 @@ npm run tui -- --api-base http://127.0.0.1:42110
 
 常用快捷键：
 
-- `j/k`：移动
-- `tab`：在 session 列表与 transcript 之间切换焦点
-- `/`：搜索
-- `,`：打开 / 关闭 settings 界面
-- `z`：当前焦点 pane 全屏 / 还原
-- `v`：detail / transcript 直接全屏
-- `o`：加载更早的 transcript
-- `h`：显示 / 隐藏 hidden transcript
-- `1-5`：切换 transcript role 过滤
-- `s`：suggest
-- `a`：apply
-- `r`：manual rename
-- `f`：freeze / unfreeze
-- `m`：manual override / clear
-- `p`：预览 dirty auto-rename
-- `A`：批量 apply dirty
-- `q`：退出
+- `j/k` 移动
+- `/` 搜索
+- `s` suggest
+- `a` apply
+- `r` manual rename
+- `f` freeze / unfreeze
+- `p` 预览 dirty auto-rename
+- `A` 批量 apply dirty
+- `q` 退出
 
-命名 context 现在支持多种策略：
+## CLI
 
-- `summary-signals`：只使用 `firstUserMessage / lastUserMessage / lastAgentMessage`
-- `last-user-last-assistant`：只使用最后一条用户消息和最后一条助手消息
-- `user-assistant-transcript`：读取完整 transcript，但只保留 `user` 和 `assistant` 的 message 内容，自动去掉 tool call/output 和隐藏 bootstrap，再按 `context_max_chars` 截断后提供给 heuristic / AI
-- `user-only-transcript`：只读取可见用户消息
-- `assistant-only-transcript`：只读取可见助手消息
-- `user-transcript-last-assistant`：读取可见用户消息，并追加最后一条助手消息
-- `paired-user-turns`：按 user turn 组织上下文；对每个后续 user，只挂它前一段 assistant cluster 里最后一条有效 assistant，不会跨过更早 user 回溯旧上下文
+当前命令：
 
-如果你想让 rename 更贴近整段会话，而不是只看首尾摘要，可以在 Web/TUI 的 `Settings` 里切换更细粒度的 `Context strategy`。
+- `codex-session list`
+- `codex-session show --id <thread-id>`
+- `codex-session suggest --id <thread-id>`
+- `codex-session apply --id <thread-id>`
+- `codex-session rename --id <thread-id> --name "..."`
+- `codex-session history --id <thread-id>`
+- `codex-session freeze --id <thread-id>`
+- `codex-session unfreeze --id <thread-id>`
+- `codex-session batch apply --dirty`
+- `codex-session compact-index --dry-run`
+- `codex-session doctor`
+- `codex-session config print`
+- `codex-session provider test`
 
-自动 rename 现在支持 AI 请求并发控制：
-
-- `[ai].max_concurrency`
-- 默认 `1`
-- 用于限制 daemon sweep 同时发起的命名请求数量
-
-如果你改了命名逻辑，Settings 里现在还有一个一次性动作：
-
-- 选择某个时间点
-- 选择比较基准：
-  - 会话更新时间
-  - 上次正式命名时间
-- 把命中范围内的会话重新放回命名队列，并清空旧 candidate
-
-Settings 界面里：
-
-- `j/k`：选择字段
-- `e`：编辑当前字段
-- `space`：对枚举字段循环切换
-- `s`：保存到用户配置
-- `p`：刷新当前 AI prompt preview
-- `R`：从磁盘重新加载
-
-自动命名预览现在显式区分三种状态：
-
-- `skip`
-- `suggest`：表示 `candidate_ready`
-- `apply`：表示 `finalize_ready`
-
-### 4. 使用 CLI
-
-列出 dirty sessions：
+示例：
 
 ```bash
 npm run cli -- list --dirty
-```
-
-查看详情：
-
-```bash
 npm run cli -- show --id <thread-id>
-```
-
-生成候选标题：
-
-```bash
 npm run cli -- suggest --id <thread-id>
-```
-
-应用候选标题：
-
-```bash
 npm run cli -- apply --id <thread-id>
-```
-
-手动 rename：
-
-```bash
-npm run cli -- rename --id <thread-id> --name "feat(api): add events polling"
-```
-
-批量处理 dirty sessions：
-
-```bash
+npm run cli -- rename --id <thread-id> --name "feat(api): add config writeback"
 npm run cli -- batch apply --dirty --preview
 npm run cli -- batch apply --dirty
 ```
 
-### 5. 使用 Local API
-
-会话列表：
+## Local API 示例
 
 ```bash
 curl 'http://127.0.0.1:42110/api/v1/sessions?dirty=true&search=api'
-```
-
-单个 suggest：
-
-```bash
 curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/suggest
-```
-
-单个 apply：
-
-```bash
 curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/apply
-```
-
-手动 rename：
-
-```bash
 curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/rename \
   -H 'content-type: application/json' \
   -d '{"name":"feat(api): add config writeback"}'
-```
-
-获取配置视图：
-
-```bash
-curl http://127.0.0.1:42110/api/v1/config
-```
-
-获取当前 AI prompt preview：
-
-```bash
-curl 'http://127.0.0.1:42110/api/v1/ai/prompt-preview?threadId=<thread-id>'
-```
-
-写回用户配置：
-
-```bash
-curl -X PUT http://127.0.0.1:42110/api/v1/config \
-  -H 'content-type: application/json' \
-  -d '{
-    "naming": {
-      "template": "{{summary}}",
-      "maxLength": 48
-    },
-    "watch": {
-      "candidateIdleSeconds": 90
-    }
-  }'
-```
-
-轮询事件流：
-
-```bash
+curl 'http://127.0.0.1:42110/api/v1/ai/request-logs?page=1&pageSize=10&project=codex-session-manager'
 curl 'http://127.0.0.1:42110/api/v1/events/since?cursor=0'
 ```
 
-事件流是轻量 polling 接口，适合 WebUI/TUI 在本地环境做增量刷新。当前不会直接上 WebSocket。
+## 当前不再使用的旧语义
 
-## 本地运行说明
+下面这些现在只应当被视为历史兼容信息，而不是当前行为：
 
-默认推荐直接用一条命令启动：
-
-```bash
-npm run web
-# 或
-npm run tui
-```
-
-如果你想单独调 API，再手动连接 WebUI 或 TUI，也可以这样：
-
-```bash
-npm run api -- --host 127.0.0.1 --port 42110
-npm run web
-# 或
-npm run tui -- --api-base http://127.0.0.1:42110
-```
-
-说明：
-
-- `npm run api` / `npm run cli` / `npm run daemon` 会先自动补齐 runtime 相关包的编译产物
-- `npm run clean` 会同时清掉 `dist` 和 `tsbuildinfo`，避免增量构建把 runtime 包留在不完整状态
-- `npm run web` / `npm run tui` 现在会优先复用健康 API；如果默认端口被其他非 CSM 进程占用，会自动换到下一个可用端口
-- `npm run web:raw` 只启动 Vite，不会自动起 API
-- `npm run tui:raw` 只启动 TUI，不会自动起 API
-- `npm run tui` 在真实 TTY 下支持快捷键；非交互环境下会退化成只读渲染
-- Web Settings 表单保存会走 `PUT /api/v1/config`；当前运行中的 API 不支持热切换 `general.stateDir`
-- `PUT /api/v1/config` 只写 `codex-session-manager` 自己的用户配置，不会回写 Codex 自身配置
-- 当前不支持在运行中的 API 进程里热切换 `general.stateDir`；这个字段如果要改，建议停服务后修改配置再重启
+- `manual override`
+- `naming.default_style`
+- `brief / detailed`
+- `backend = "codex"`
+- `provider_source = "inherit-codex"`
+- `codex exec` fallback
