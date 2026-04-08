@@ -14,7 +14,6 @@ export function deriveRuntimeDisplay(
   const configuredAutoApply = overview?.runtime.configuredAutoApply;
   const baseExecution = overview?.runtime.actualExecution ?? "preview-only";
   const baseDaemonStatus = overview?.runtime.daemonStatus ?? "not_seen";
-  const baseExplain = overview?.runtime.explain ?? "";
   const controllerRunning = Boolean(daemon?.running);
   const sweepRunning =
     controllerRunning && configuredAutoApply === "idle-finalize" && baseExecution !== "auto-apply";

@@ -19,7 +19,6 @@ import {
   QUICK_SEPARATOR_OPTIONS,
   renderNamingStructurePreview,
   renderTagLabel,
-  SettingsTagDraft,
   tagToneClass,
   TIMESTAMP_PRESET_OPTIONS,
   type AiBackend,
@@ -32,6 +31,7 @@ import {
   type NamingTimestampPreset,
   type ProviderSource,
   type RenameAutoApply,
+  type SettingsTagDraft,
   type SettingsDraft,
   useSettingsDraft,
   updateSelectedProfile
@@ -757,11 +757,11 @@ function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("AI tag presets", "AI tag presets")}</p>
-              <h4>{props.text.inline("像 SubLinkPro 一样把规则做成可编辑预设", "Make rules editable presets, like SubLinkPro")}</h4>
+              <h4>{props.text.inline("把规则做成可编辑预设", "Make rules editable presets")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "Tag 现在不是 heuristic 分类，而是 AI 命名时可选的预设规则。你可以给 AI 明确的选择条件和输出含义，而不需要自己手写整段 prompt。",
-                  "Tags are no longer heuristic classifications. They are AI-selectable presets with explicit selection criteria and output meaning, so you do not have to hand-write a full prompt."
+                  "Tag 是 AI 命名时可选的预设规则。你可以直接定义适用场景和含义，不用自己手写整段 prompt。",
+                  "Tags are presets the AI can choose while naming. You only need to define when each one applies and what it means."
                 )}
               </p>
             </div>
@@ -1045,10 +1045,10 @@ function AiProviderSection(props: {
     ) ?? props.text.tt("nA");
   const resolvedRequestedBackend = firstNonEmptyString(resolvedProvider.requestedBackend, props.draft.aiBackend) ?? props.text.tt("nA");
   const resolvedTransport = firstNonEmptyString(resolvedProvider.preferredTransport, resolvedProvider.transport) ?? props.text.tt("nA");
-  const resolvedCredential = Boolean(resolvedProvider.hasCredential)
+  const resolvedCredential = resolvedProvider.hasCredential
     ? firstNonEmptyString(resolvedProvider.credentialSource, resolvedProvider.credentialKind) ?? props.text.inline("已配置", "Configured")
     : props.text.inline("未配置", "Missing");
-  const directHttpLabel = Boolean(resolvedProvider.canDirectHttp)
+  const directHttpLabel = resolvedProvider.canDirectHttp
     ? props.text.inline("可直接 HTTP", "Direct HTTP ready")
     : props.text.inline("配置不完整", "Configuration incomplete");
   const requestPath = [props.draft.aiBackend, props.draft.aiProviderSource, selectedProfileLabel, resolvedTransport].filter(Boolean);
@@ -1220,7 +1220,7 @@ function AiProviderSection(props: {
             </div>
             <div>
               <dt>{props.text.inline("requires auth", "Requires auth")}</dt>
-              <dd>{Boolean(resolvedProvider.requiresOpenaiAuth) ? props.text.inline("是", "Yes") : props.text.inline("否", "No")}</dd>
+              <dd>{resolvedProvider.requiresOpenaiAuth ? props.text.inline("是", "Yes") : props.text.inline("否", "No")}</dd>
             </div>
           </dl>
           <details className="settings-disclosure">

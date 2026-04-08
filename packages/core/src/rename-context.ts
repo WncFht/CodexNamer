@@ -135,22 +135,6 @@ function formatContextText(segments: RenameContextSegment[]): string {
   return segments.map((segment) => `${linePrefix(segment)}${segment.content}`).join("\n");
 }
 
-function dedupeConsecutiveSegments(segments: RenameContextSegment[]): RenameContextSegment[] {
-  const output: RenameContextSegment[] = [];
-  for (const segment of segments) {
-    const previous = output[output.length - 1];
-    if (
-      previous &&
-      previous.role === segment.role &&
-      previous.content === segment.content
-    ) {
-      continue;
-    }
-    output.push(segment);
-  }
-  return output;
-}
-
 function dedupeConsecutiveMessages(messages: VisibleTranscriptMessage[]): VisibleTranscriptMessage[] {
   const output: VisibleTranscriptMessage[] = [];
   for (const message of messages) {

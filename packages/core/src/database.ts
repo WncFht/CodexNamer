@@ -1159,48 +1159,135 @@ export class StateDatabase {
       }
     }
 
-    const renameStatsRow = this.db
-      .prepare(
-        `SELECT
-            COUNT(*) AS total,
-            SUM(CASE WHEN status = 'applied' AND source IN (${acceptedAppliedSources.map(() => "?").join(", ")}) THEN 1 ELSE 0 END) AS applied,
-            SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
-            SUM(CASE WHEN status = 'preview_only' THEN 1 ELSE 0 END) AS preview_only,
-            SUM(CASE WHEN status = 'applied' AND source = 'ai' THEN 1 ELSE 0 END) AS ai_applied,
-            SUM(CASE WHEN status = 'applied' AND source = 'manual' THEN 1 ELSE 0 END) AS manual_applied,
-            SUM(CASE WHEN status = 'applied' AND kind = 'auto' AND source = 'ai' THEN 1 ELSE 0 END) AS auto_applied,
-            MAX(CASE WHEN status = 'applied' AND source IN (${acceptedAppliedSources.map(() => "?").join(", ")}) THEN applied_at END) AS last_applied_at
-         FROM rename_history`
-      )
-      .get(...acceptedAppliedSources, ...acceptedAppliedSources) as Record<string, unknown>;
-
     const activityWindowDays = 14;
     const bucketStart = new Date();
     bucketStart.setUTCHours(0, 0, 0, 0);
     bucketStart.setUTCDate(bucketStart.getUTCDate() - (activityWindowDays - 1));
-    const activityRows = this.db
+    const renameHistoryRows = this.db
       .prepare(
-        `SELECT
-            substr(applied_at, 1, 10) AS day,
-            SUM(CASE WHEN status = 'applied' AND source IN (${acceptedAppliedSources.map(() => "?").join(", ")}) THEN 1 ELSE 0 END) AS applied,
-            SUM(CASE WHEN status = 'preview_only' THEN 1 ELSE 0 END) AS preview_only,
-            SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
-            SUM(CASE WHEN status = 'applied' AND kind = 'auto' AND source = 'ai' THEN 1 ELSE 0 END) AS auto_applied,
-            SUM(CASE WHEN status = 'applied' AND kind = 'manual' THEN 1 ELSE 0 END) AS manual_applied,
-            SUM(CASE WHEN status = 'applied' AND source = 'ai' THEN 1 ELSE 0 END) AS ai_applied
+        `SELECT id, thread_id, kind, source, status, applied_at
          FROM rename_history
-         WHERE applied_at >= ?
-         GROUP BY day
-         ORDER BY day`
+         ORDER BY applied_at DESC, id DESC`
       )
-      .all(...acceptedAppliedSources, bucketStart.toISOString()) as Array<Record<string, unknown>>;
-    const activityByDate = new Map<string, Record<string, unknown>>();
-    for (const row of activityRows) {
-      if (typeof row.day === "string") {
-        activityByDate.set(row.day, row);
+      .all() as Array<Record<string, unknown>>;
+    const acceptedAppliedSourceSet = new Set(acceptedAppliedSources);
+    const latestHistoryByThread = new Map<string, Record<string, unknown>>();
+    const latestAcceptedAppliedByThread = new Map<string, Record<string, unknown>>();
+
+    for (const row of renameHistoryRows) {
+      const threadId = typeof row.thread_id === "string" ? row.thread_id : undefined;
+      if (!threadId) {
+        continue;
       }
+      if (!latestHistoryByThread.has(threadId)) {
+        latestHistoryByThread.set(threadId, row);
+      }
+      if (
+        !latestAcceptedAppliedByThread.has(threadId) &&
+        row.status === "applied" &&
+        typeof row.source === "string" &&
+        acceptedAppliedSourceSet.has(row.source as RenameSource)
+      ) {
+        latestAcceptedAppliedByThread.set(threadId, row);
+      }
+    }
+
+    const renameHistorySummary = {
+      total: latestHistoryByThread.size,
+      applied: latestAcceptedAppliedByThread.size,
+      skipped: 0,
+      failed: 0,
+      previewOnly: 0,
+      aiApplied: 0,
+      manualApplied: 0,
+      autoApplied: 0,
+      lastAppliedAt: undefined as string | undefined
+    };
+
+    for (const row of latestHistoryByThread.values()) {
+      switch (row.status) {
+        case "skipped":
+          renameHistorySummary.skipped += 1;
+          break;
+        case "failed":
+          renameHistorySummary.failed += 1;
+          break;
+        case "preview_only":
+          renameHistorySummary.previewOnly += 1;
+          break;
+        default:
+          break;
+      }
+    }
+
+    const activityByDate = new Map<
+      string,
+      {
+        applied: number;
+        previewOnly: number;
+        skipped: number;
+        failed: number;
+        autoApplied: number;
+        manualApplied: number;
+        aiApplied: number;
+      }
+    >();
+
+    for (const row of latestAcceptedAppliedByThread.values()) {
+      if (row.source === "ai") {
+        renameHistorySummary.aiApplied += 1;
+      }
+      if (row.source === "manual") {
+        renameHistorySummary.manualApplied += 1;
+      }
+      if (row.kind === "auto" && row.source === "ai") {
+        renameHistorySummary.autoApplied += 1;
+      }
+      if (typeof row.applied_at === "string") {
+        if (!renameHistorySummary.lastAppliedAt || row.applied_at > renameHistorySummary.lastAppliedAt) {
+          renameHistorySummary.lastAppliedAt = row.applied_at;
+        }
+      }
+    }
+
+    for (const row of latestHistoryByThread.values()) {
+      const appliedAt = typeof row.applied_at === "string" ? row.applied_at : undefined;
+      if (!appliedAt || appliedAt < bucketStart.toISOString()) {
+        continue;
+      }
+      const day = appliedAt.slice(0, 10);
+      const bucket = activityByDate.get(day) ?? {
+        applied: 0,
+        previewOnly: 0,
+        skipped: 0,
+        failed: 0,
+        autoApplied: 0,
+        manualApplied: 0,
+        aiApplied: 0
+      };
+      if (
+        row.status === "applied" &&
+        typeof row.source === "string" &&
+        acceptedAppliedSourceSet.has(row.source as RenameSource)
+      ) {
+        bucket.applied += 1;
+        if (row.source === "ai") {
+          bucket.aiApplied += 1;
+        }
+        if (row.kind === "auto" && row.source === "ai") {
+          bucket.autoApplied += 1;
+        }
+        if (row.kind === "manual") {
+          bucket.manualApplied += 1;
+        }
+      } else if (row.status === "preview_only") {
+        bucket.previewOnly += 1;
+      } else if (row.status === "skipped") {
+        bucket.skipped += 1;
+      } else if (row.status === "failed") {
+        bucket.failed += 1;
+      }
+      activityByDate.set(day, bucket);
     }
 
     const activityBuckets: OverviewReport["activity"]["buckets"] = [];
@@ -1215,12 +1302,12 @@ export class StateDatabase {
           date.getUTCDate()
         ).padStart(2, "0")}`,
         applied: Number(row?.applied ?? 0),
-        previewOnly: Number(row?.preview_only ?? 0),
+        previewOnly: Number(row?.previewOnly ?? 0),
         skipped: Number(row?.skipped ?? 0),
         failed: Number(row?.failed ?? 0),
-        autoApplied: Number(row?.auto_applied ?? 0),
-        manualApplied: Number(row?.manual_applied ?? 0),
-        aiApplied: Number(row?.ai_applied ?? 0)
+        autoApplied: Number(row?.autoApplied ?? 0),
+        manualApplied: Number(row?.manualApplied ?? 0),
+        aiApplied: Number(row?.aiApplied ?? 0)
       });
     }
 
@@ -1281,15 +1368,15 @@ export class StateDatabase {
       },
       pipeline,
       renameHistory: {
-        total: Number(renameStatsRow.total ?? 0),
-        applied: Number(renameStatsRow.applied ?? 0),
-        skipped: Number(renameStatsRow.skipped ?? 0),
-        failed: Number(renameStatsRow.failed ?? 0),
-        previewOnly: Number(renameStatsRow.preview_only ?? 0),
-        aiApplied: Number(renameStatsRow.ai_applied ?? 0),
-        manualApplied: Number(renameStatsRow.manual_applied ?? 0),
-        autoApplied: Number(renameStatsRow.auto_applied ?? 0),
-        lastAppliedAt: (renameStatsRow.last_applied_at as string | null) ?? undefined
+        total: renameHistorySummary.total,
+        applied: renameHistorySummary.applied,
+        skipped: renameHistorySummary.skipped,
+        failed: renameHistorySummary.failed,
+        previewOnly: renameHistorySummary.previewOnly,
+        aiApplied: renameHistorySummary.aiApplied,
+        manualApplied: renameHistorySummary.manualApplied,
+        autoApplied: renameHistorySummary.autoApplied,
+        lastAppliedAt: renameHistorySummary.lastAppliedAt
       },
       replay: {
         lastRunAt: undefined,

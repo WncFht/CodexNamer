@@ -21,7 +21,6 @@ import {
   type SessionDetail,
   type SessionIndexSnapshot,
   type SessionSummary,
-  type SessionStatusEstimate,
   type WorkspaceSummary
 } from "@codexnamer/shared";
 

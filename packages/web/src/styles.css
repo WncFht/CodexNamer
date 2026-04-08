@@ -2071,6 +2071,16 @@ pre {
   flex-direction: column;
 }
 
+.detail-view-switch {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .naming-drawer {
   display: flex;
   flex-direction: column;
