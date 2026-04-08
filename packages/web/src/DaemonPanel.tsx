@@ -1,6 +1,12 @@
 import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
+import {
+  deriveRuntimeDisplay,
+  runtimeDaemonStatusLabel,
+  runtimeExecutionLabel,
+  runtimeProgressExplanation
+} from "./runtime-display.js";
 import type { AutoRenamePreviewResponse, DaemonControlStatus, OverviewResponse } from "./types.js";
 
 function chipTone(running: boolean): "success" | "manual" {
@@ -12,28 +18,6 @@ function daemonStatusLabel(status: DaemonControlStatus | null, language: "en-US"
     return status?.running ? "已启动" : "未启动";
   }
   return status?.running ? "running" : "stopped";
-}
-
-function runtimeStatusLabel(
-  status: OverviewResponse["runtime"]["daemonStatus"] | undefined,
-  language: "en-US" | "zh-CN"
-): string {
-  if (language === "zh-CN") {
-    if (status === "running") {
-      return "运行中";
-    }
-    if (status === "stale") {
-      return "心跳过期";
-    }
-    return "未检测到";
-  }
-  if (status === "running") {
-    return "running";
-  }
-  if (status === "stale") {
-    return "stale";
-  }
-  return "not seen";
 }
 
 export function DaemonPanel(props: {
@@ -53,6 +37,7 @@ export function DaemonPanel(props: {
   const previewApplyCount = props.preview?.items.filter((item) => item.status === "apply").length ?? 0;
   const previewSuggestCount = props.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
   const lastSweep = props.overview?.runtime.lastSweepSummary;
+  const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
 
   return (
     <section className="settings-layout daemon-layout">
@@ -98,8 +83,15 @@ export function DaemonPanel(props: {
           {inline("自动应用", "Auto apply")}:{" "}
           {props.overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
         </span>
-        <span className={`chip ${props.overview?.runtime.daemonStatus === "running" ? "success" : "warning"}`}>
-          {inline("运行态心跳", "Runtime heartbeat")}: {runtimeStatusLabel(props.overview?.runtime.daemonStatus, props.uiLanguage)}
+        <span
+          className={`chip ${
+            runtimeDisplay.daemonStatus === "running" || runtimeDisplay.daemonStatus === "controller-running"
+              ? "success"
+              : "warning"
+          }`}
+        >
+          {inline("运行态心跳", "Runtime heartbeat")}:{" "}
+          {runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.uiLanguage)}
         </span>
       </div>
 
@@ -152,7 +144,7 @@ export function DaemonPanel(props: {
             </div>
             <div>
               <dt>{inline("实际执行", "Execution")}</dt>
-              <dd>{props.overview?.runtime.actualExecution ?? "--"}</dd>
+              <dd>{runtimeExecutionLabel(runtimeDisplay.execution, props.uiLanguage)}</dd>
             </div>
             <div>
               <dt>{inline("最近 sweep", "Last sweep")}</dt>
@@ -160,7 +152,11 @@ export function DaemonPanel(props: {
             </div>
             <div>
               <dt>{inline("说明", "Explanation")}</dt>
-              <dd className="daemon-copy">{props.overview?.runtime.explain ?? "--"}</dd>
+              <dd className="daemon-copy">
+                {(runtimeDisplay.sweepRunning ? runtimeProgressExplanation(props.uiLanguage) : "") ||
+                  props.overview?.runtime.explain ||
+                  "--"}
+              </dd>
             </div>
           </dl>
         </article>

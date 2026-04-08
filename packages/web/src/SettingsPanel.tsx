@@ -3,6 +3,12 @@ import { startTransition, type ReactNode, useEffect, useMemo, useRef, useState }
 import { parseCodexProvider, testProvider } from "./api.js";
 import { formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import {
+  deriveRuntimeDisplay,
+  runtimeDaemonStatusLabel,
+  runtimeExecutionLabel,
+  runtimeProgressExplanation
+} from "./runtime-display.js";
+import {
   asRecord,
   blankTagDraft,
   DEFAULT_TIMESTAMP_PRESET,
@@ -33,6 +39,7 @@ import {
 import type {
   ConfigDocument,
   ConfigView,
+  DaemonControlStatus,
   OverviewResponse,
   PromptPreviewResponse,
   ProviderProfile,
@@ -1727,10 +1734,12 @@ function RuntimeSection(props: {
 
 function OverviewSection(props: {
   overview: OverviewResponse | null;
+  daemon: DaemonControlStatus | null;
   previewApplyCount: number;
   previewSuggestCount: number;
   text: TextTools;
 }) {
+  const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("controlState")}
@@ -1809,11 +1818,11 @@ function OverviewSection(props: {
             </div>
             <div>
               <dt>{props.text.inline("实际执行", "Actual execution")}</dt>
-              <dd>{props.overview?.runtime.actualExecution ?? props.text.tt("nA")}</dd>
+              <dd>{runtimeExecutionLabel(runtimeDisplay.execution, props.text.uiLanguage)}</dd>
             </div>
             <div>
               <dt>{props.text.inline("Daemon", "Daemon")}</dt>
-              <dd>{props.overview?.runtime.daemonStatus ?? props.text.tt("nA")}</dd>
+              <dd>{runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.text.uiLanguage)}</dd>
             </div>
             <div>
               <dt>{props.text.inline("最近 sweep", "Last sweep")}</dt>
@@ -1828,6 +1837,7 @@ function OverviewSection(props: {
 
 export function SettingsPanel(props: {
   configView: ConfigView | null;
+  daemon: DaemonControlStatus | null;
   overview: OverviewResponse | null;
   previewApplyCount: number;
   previewSuggestCount: number;
@@ -1854,6 +1864,7 @@ export function SettingsPanel(props: {
   const uiLanguage = draft?.uiLanguage ?? normalizeUiLanguage(props.configView);
   const tt: Translate = (key) => t(uiLanguage, key);
   const inline: InlineText = (zh, en) => (uiLanguage === "zh-CN" ? zh : en);
+  const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
   const previewDraft = useMemo(() => (draft ? encodeDraft(draft) : null), [draft]);
   const previewDraftKey = useMemo(() => (previewDraft ? encodedConfigKey(previewDraft) : ""), [previewDraft]);
   const refreshPromptPreviewRef = useRef(props.onRefreshPromptPreview);
@@ -1970,6 +1981,7 @@ export function SettingsPanel(props: {
       case "overview":
         return (
           <OverviewSection
+            daemon={props.daemon}
             overview={props.overview}
             previewApplyCount={props.previewApplyCount}
             previewSuggestCount={props.previewSuggestCount}
@@ -2037,9 +2049,13 @@ export function SettingsPanel(props: {
             value={formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}
           />
           <SettingsHeroMetric
-            detail={props.overview?.runtime.explain ?? tt("nA")}
+            detail={
+              (runtimeDisplay.sweepRunning ? runtimeProgressExplanation(uiLanguage) : "") ||
+              props.overview?.runtime.explain ||
+              tt("nA")
+            }
             label={inline("当前执行态", "Execution")}
-            value={props.overview?.runtime.actualExecution ?? tt("nA")}
+            value={runtimeExecutionLabel(runtimeDisplay.execution, uiLanguage)}
           />
         </div>
       </header>

@@ -111,10 +111,10 @@ export function writeUiStateToUrl(state: UrlUiState): void {
 
 export function panelResourcesForTab(tab: TabId): DataResource[] {
   if (tab === "settings") {
-    return ["config", "providers", "overview", "prompt-preview"];
+    return ["config", "providers", "overview", "daemon", "prompt-preview"];
   }
   if (tab === "maintenance") {
-    return ["overview", "doctor", "ai-request-logs", "preview"];
+    return ["overview", "daemon", "doctor", "ai-request-logs", "preview"];
   }
   if (tab === "daemon") {
     return ["overview", "daemon", "preview"];
@@ -130,14 +130,14 @@ export function liveRefreshResourcesForTab(
 ): DataResource[] {
   const resources: DataResource[] = ["sessions", "preview"];
   if (tab === "settings") {
-    resources.push("overview");
+    resources.push("overview", "daemon");
     if (options?.includePromptPreview) {
       resources.push("prompt-preview");
     }
     return resources;
   }
   if (tab === "maintenance") {
-    resources.push("overview", "doctor", "ai-request-logs");
+    resources.push("overview", "daemon", "doctor", "ai-request-logs");
     return resources;
   }
   if (tab === "daemon") {

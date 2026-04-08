@@ -414,6 +414,7 @@ export function App() {
               <AppViewTransition default="none" enter="slide-up">
                 <SettingsPanel
                   configView={state.configView}
+                  daemon={state.daemon}
                   overview={state.overview}
                   onReload={() => void state.refreshSettings()}
                   onSave={(patch) => state.saveConfig(patch)}
@@ -447,6 +448,7 @@ export function App() {
                 <RenameOpsPanel
                   aiRequestLogs={state.aiRequestLogs}
                   aiRequestLogDetail={state.aiRequestLogDetail}
+                  daemon={state.daemon}
                   doctor={state.doctor}
                   onReplayRenames={(params) => state.replayRenamesSince(params)}
                   onRefreshRuntime={() => state.refreshMaintenance()}

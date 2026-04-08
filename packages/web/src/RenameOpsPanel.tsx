@@ -3,7 +3,22 @@ import * as React from "react";
 import { fetchAiRequestLogs } from "./api.js";
 import { formatWhen } from "./browser-utils.js";
 import { autoRenameReasonLabel, autoRenameStatusLabel, formatUiNumber, t, type UiLanguage } from "./i18n.js";
-import type { AiRequestLogDetailResponse, AiRequestLogResponse, AutoRenamePreviewResponse, DoctorResponse, OverviewResponse } from "./types.js";
+import {
+  deriveRuntimeDisplay,
+  runtimeDaemonStatusLabel,
+  runtimeDaemonStatusTone,
+  runtimeExecutionLabel,
+  runtimeExecutionTone,
+  runtimeProgressExplanation
+} from "./runtime-display.js";
+import type {
+  AiRequestLogDetailResponse,
+  AiRequestLogResponse,
+  AutoRenamePreviewResponse,
+  DaemonControlStatus,
+  DoctorResponse,
+  OverviewResponse
+} from "./types.js";
 
 type ChartTheme = {
   text: string;
@@ -171,46 +186,6 @@ function ChartCard(props: {
   );
 }
 
-function runtimeBadgeTone(label: string): "success" | "warning" | "manual" {
-  if (label === "preview-only") {
-    return "warning";
-  }
-  if (label === "disabled") {
-    return "manual";
-  }
-  return "success";
-}
-
-function daemonStatusTone(status: string | undefined): "success" | "warning" | "manual" {
-  if (status === "running") {
-    return "success";
-  }
-  if (status === "stale") {
-    return "warning";
-  }
-  return "manual";
-}
-
-function daemonStatusLabel(status: string | undefined, language: UiLanguage): string {
-  if (language === "zh-CN") {
-    if (status === "running") {
-      return "运行中";
-    }
-    if (status === "stale") {
-      return "心跳过期";
-    }
-    return "未检测到";
-  }
-
-  if (status === "running") {
-    return "running";
-  }
-  if (status === "stale") {
-    return "stale";
-  }
-  return "not seen";
-}
-
 function aiRequestStatusTone(status: string | undefined): "success" | "warning" | "danger" | "manual" {
   if (status === "succeeded") {
     return "success";
@@ -274,6 +249,7 @@ export function RenameOpsPanel(props: {
   aiRequestLogs: AiRequestLogResponse | null;
   aiRequestLogDetail: AiRequestLogDetailResponse | null;
   overview: OverviewResponse | null;
+  daemon: DaemonControlStatus | null;
   preview: AutoRenamePreviewResponse | null;
   previewRefreshing: boolean;
   doctor: DoctorResponse | null;
@@ -308,6 +284,7 @@ export function RenameOpsPanel(props: {
   const manualSourceLabel = isChinese ? "手动" : "Manual";
   const noDataLabel = isChinese ? "暂无数据" : "No data";
   const overview = props.overview;
+  const runtimeDisplay = deriveRuntimeDisplay(overview, props.daemon);
   const aiRequestLogs = requestLogReport ?? props.aiRequestLogs;
   const previewItems = props.preview?.items ?? [];
   const previewApplyCount = previewItems.filter((item) => item.status === "apply").length;
@@ -879,7 +856,8 @@ export function RenameOpsPanel(props: {
             <p className="panel-kicker">{inline("执行状态", "Execution")}</p>
             <h3>{inline("自动重命名运行态", "Auto rename runtime")}</h3>
             <p className="settings-copy">
-              {overview?.runtime.explain ??
+              {(runtimeDisplay.sweepRunning ? runtimeProgressExplanation(props.uiLanguage) : "") ||
+                overview?.runtime.explain ||
                 inline(
                   "当前 daemon 只做 scan + preview。`finalize_ready` 表示允许应用，不表示已经自动落盘。",
                   "The current daemon only scans and previews. `finalize_ready` means eligible to apply, not already auto-applied."
@@ -911,14 +889,14 @@ export function RenameOpsPanel(props: {
         </div>
 
         <div className="ops-runtime-badges">
-          <span className={`chip ${runtimeBadgeTone(overview?.runtime.actualExecution ?? "preview-only")}`}>
-            {inline("实际执行", "Execution")}: {overview?.runtime.actualExecution ?? "preview-only"}
+          <span className={`chip ${runtimeExecutionTone(runtimeDisplay.execution)}`}>
+            {inline("实际执行", "Execution")}: {runtimeExecutionLabel(runtimeDisplay.execution, props.uiLanguage)}
           </span>
           <span className="chip manual">
             {inline("配置策略", "Configured policy")}: {overview?.runtime.configuredAutoApply ?? tt("nA")}
           </span>
-          <span className={`chip ${daemonStatusTone(overview?.runtime.daemonStatus)}`}>
-            {inline("Daemon 状态", "Daemon status")}: {daemonStatusLabel(overview?.runtime.daemonStatus, props.uiLanguage)}
+          <span className={`chip ${runtimeDaemonStatusTone(runtimeDisplay.daemonStatus)}`}>
+            {inline("Daemon 状态", "Daemon status")}: {runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.uiLanguage)}
           </span>
           <span className={`chip ${overview?.runtime.daemonAutoApply ? "success" : "warning"}`}>
             {inline("Daemon 自动应用", "Daemon auto apply")}: {overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
