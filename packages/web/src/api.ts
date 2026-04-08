@@ -6,6 +6,7 @@ import type {
   ConfigDocument,
   ConfigUpdateResponse,
   ConfigView,
+  DaemonControlStatus,
   DoctorResponse,
   OverviewResponse,
   PromptPreviewResponse,
@@ -160,6 +161,23 @@ export async function fetchOverview(): Promise<OverviewResponse> {
   return requestJson<OverviewResponse>("/api/v1/overview");
 }
 
+export async function fetchDaemonStatus(): Promise<DaemonControlStatus> {
+  return requestJson<DaemonControlStatus>("/api/v1/daemon");
+}
+
+export async function startDaemon(intervalSeconds?: number): Promise<DaemonControlStatus> {
+  return requestJson<DaemonControlStatus>("/api/v1/daemon/start", {
+    method: "POST",
+    body: JSON.stringify(typeof intervalSeconds === "number" ? { intervalSeconds } : {})
+  });
+}
+
+export async function stopDaemon(): Promise<DaemonControlStatus> {
+  return requestJson<DaemonControlStatus>("/api/v1/daemon/stop", {
+    method: "POST"
+  });
+}
+
 export async function fetchAutoRenamePreview(params?: {
   includeCandidateNames?: boolean;
   limit?: number;
@@ -194,10 +212,33 @@ export async function fetchPromptPreview(
   return requestJson<PromptPreviewResponse>(url.toString());
 }
 
-export async function fetchAiRequestLogs(limit = 40): Promise<AiRequestLogResponse> {
+export async function fetchAiRequestLogs(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  project?: string;
+  status?: "running" | "succeeded" | "failed";
+  transport?: "responses" | "openai-compatible";
+}): Promise<AiRequestLogResponse> {
   const url = new URL("/api/v1/ai/request-logs", window.location.origin);
-  if (limit > 0) {
-    url.searchParams.set("limit", String(limit));
+  const pageSize = params?.pageSize ?? 40;
+  if (pageSize > 0) {
+    url.searchParams.set("pageSize", String(pageSize));
+  }
+  if ((params?.page ?? 1) > 1) {
+    url.searchParams.set("page", String(params?.page));
+  }
+  if (params?.search) {
+    url.searchParams.set("search", params.search);
+  }
+  if (params?.project) {
+    url.searchParams.set("project", params.project);
+  }
+  if (params?.status) {
+    url.searchParams.set("status", params.status);
+  }
+  if (params?.transport) {
+    url.searchParams.set("transport", params.transport);
   }
   return requestJson<AiRequestLogResponse>(url.toString());
 }

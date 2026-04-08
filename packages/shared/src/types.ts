@@ -485,6 +485,16 @@ export interface AiRequestLogDetail extends AiRequestLogRecord {
 export interface AiRequestLogReport {
   activeCount: number;
   lastFinishedAt?: string;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  statusCounts: {
+    running: number;
+    succeeded: number;
+    failed: number;
+  };
+  projects: string[];
   items: AiRequestLogRecord[];
 }
 

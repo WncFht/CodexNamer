@@ -932,8 +932,15 @@ export class CodexSessionManager {
     };
   }
 
-  getAiRequestLogReport(limit?: number): AiRequestLogReport {
-    return this.db.getAiRequestLogReport(limit);
+  getAiRequestLogReport(options?: {
+    limit?: number;
+    page?: number;
+    search?: string;
+    project?: string;
+    status?: "running" | "succeeded" | "failed";
+    transport?: "responses" | "openai-compatible";
+  }): AiRequestLogReport {
+    return this.db.getAiRequestLogReport(options);
   }
 
   getAiRequestLogDetail(id: number): AiRequestLogDetail | undefined {

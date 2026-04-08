@@ -882,16 +882,92 @@ export class StateDatabase {
       );
   }
 
-  getAiRequestLogReport(limit = 40): AiRequestLogReport {
+  getAiRequestLogReport(options?: {
+    limit?: number;
+    page?: number;
+    search?: string;
+    project?: string;
+    status?: AiRequestStatus;
+    transport?: AiRequestTransport;
+  }): AiRequestLogReport {
+    const limit = Math.max(1, Math.trunc(options?.limit ?? 40));
+    const page = Math.max(1, Math.trunc(options?.page ?? 1));
+    const offset = (page - 1) * limit;
+    const whereClauses: string[] = [];
+    const whereParams: unknown[] = [];
+    const facetClauses: string[] = [];
+    const facetParams: unknown[] = [];
+
+    const search = options?.search?.trim().toLowerCase();
+    if (search) {
+      const pattern = `%${search}%`;
+      const searchClause = `LOWER(COALESCE(project_name, '') || ' ' || thread_id || ' ' || COALESCE(model, '') || ' ' || backend || ' ' || transport || ' ' || COALESCE(base_url, '') || ' ' || COALESCE(error, '') || ' ' || COALESCE(metadata_json, '')) LIKE ?`;
+      whereClauses.push(searchClause);
+      whereParams.push(pattern);
+      facetClauses.push(searchClause);
+      facetParams.push(pattern);
+    }
+
+    if (options?.project) {
+      if (options.project === "__none__") {
+        whereClauses.push(`COALESCE(NULLIF(TRIM(project_name), ''), '__none__') = '__none__'`);
+      } else {
+        whereClauses.push(`project_name = ?`);
+        whereParams.push(options.project);
+      }
+    }
+
+    if (options?.status) {
+      whereClauses.push(`status = ?`);
+      whereParams.push(options.status);
+      facetClauses.push(`status = ?`);
+      facetParams.push(options.status);
+    }
+
+    if (options?.transport) {
+      whereClauses.push(`transport = ?`);
+      whereParams.push(options.transport);
+      facetClauses.push(`transport = ?`);
+      facetParams.push(options.transport);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const facetWhereSql = facetClauses.length > 0 ? `WHERE ${facetClauses.join(" AND ")}` : "";
     const rows = this.db
       .prepare(
         `SELECT id, thread_id, project_name, backend, transport, status, started_at, finished_at, duration_ms,
                 base_url, model, prompt_chars, response_chars, error, metadata_json
          FROM ai_request_logs
+         ${whereSql}
          ORDER BY started_at DESC, id DESC
-         LIMIT ?`
+         LIMIT ? OFFSET ?`
       )
-      .all(Math.max(1, Math.trunc(limit))) as Array<Record<string, unknown>>;
+      .all(...whereParams, limit, offset) as Array<Record<string, unknown>>;
+    const total = Number(
+      (
+        this.db
+          .prepare(`SELECT COUNT(*) AS count FROM ai_request_logs ${whereSql}`)
+          .get(...whereParams) as Record<string, unknown>
+      ).count ?? 0
+    );
+    const statusCountsRow = this.db
+      .prepare(
+        `SELECT
+            SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running,
+            SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+         FROM ai_request_logs
+         ${whereSql}`
+      )
+      .get(...whereParams) as Record<string, unknown>;
+    const projectRows = this.db
+      .prepare(
+        `SELECT DISTINCT COALESCE(NULLIF(TRIM(project_name), ''), '') AS project_name
+         FROM ai_request_logs
+         ${facetWhereSql}
+         ORDER BY project_name COLLATE NOCASE ASC`
+      )
+      .all(...facetParams) as Array<Record<string, unknown>>;
     const activeCount = Number(
       (
         this.db
@@ -908,6 +984,16 @@ export class StateDatabase {
     return {
       activeCount,
       lastFinishedAt,
+      total,
+      page,
+      pageSize: limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      statusCounts: {
+        running: Number(statusCountsRow.running ?? 0),
+        succeeded: Number(statusCountsRow.succeeded ?? 0),
+        failed: Number(statusCountsRow.failed ?? 0)
+      },
+      projects: projectRows.map((row) => ((row.project_name as string | null) ?? "")),
       items: rows.map((row) => ({
         id: Number(row.id ?? 0),
         threadId: (row.thread_id as string | null) ?? "",

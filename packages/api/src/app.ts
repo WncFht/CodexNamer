@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { CodexSessionManager } from "@codex-session-manager/core";
 import type { ConfigDocument, SessionSummary } from "@codex-session-manager/shared";
 
+import { DaemonProcessController } from "./daemon-controller.js";
 import { ApiEventLog } from "./event-log.js";
 
 const API_VERSION = "0.1.0";
@@ -180,12 +181,16 @@ export async function buildApiServer(options?: {
     : await CodexSessionManager.create({ operator: options?.operator ?? "api" });
   const manager = options?.manager ?? ownedManager!;
   const eventLog = new ApiEventLog();
+  const daemonController = new DaemonProcessController({
+    defaultIntervalSeconds: () => manager.config.watch.scanIntervalSeconds
+  });
 
-  if (ownedManager) {
-    app.addHook("onClose", async () => {
+  app.addHook("onClose", async () => {
+    await daemonController.dispose();
+    if (ownedManager) {
       await ownedManager.close();
-    });
-  }
+    }
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     const payload = toErrorPayload(error);
@@ -267,7 +272,20 @@ export async function buildApiServer(options?: {
 
   app.get("/api/v1/ai/request-logs", async (request) => {
     const query = (request.query as Record<string, unknown> | undefined) ?? {};
-    return manager.getAiRequestLogReport(parseNumberQuery(query.limit));
+    return manager.getAiRequestLogReport({
+      limit: parseNumberQuery(query.pageSize ?? query.limit),
+      page: parseNumberQuery(query.page),
+      search: typeof query.search === "string" ? query.search : undefined,
+      project: typeof query.project === "string" ? query.project : undefined,
+      status:
+        query.status === "running" || query.status === "succeeded" || query.status === "failed"
+          ? query.status
+          : undefined,
+      transport:
+        query.transport === "responses" || query.transport === "openai-compatible"
+          ? query.transport
+          : undefined
+    });
   });
 
   app.get("/api/v1/ai/request-logs/:id", async (request, reply) => {
@@ -283,6 +301,15 @@ export async function buildApiServer(options?: {
   });
 
   app.get("/api/v1/overview", async () => manager.overview());
+
+  app.get("/api/v1/daemon", async () => daemonController.getStatus());
+
+  app.post("/api/v1/daemon/start", async (request) => {
+    const body = (request.body as { intervalSeconds?: number } | undefined) ?? {};
+    return daemonController.start(body.intervalSeconds);
+  });
+
+  app.post("/api/v1/daemon/stop", async () => daemonController.stop());
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
     const params = request.params as { id: string };

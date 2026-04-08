@@ -121,6 +121,29 @@ export type ProviderResponse = {
   };
 };
 
+export type DaemonControlStatus = {
+  running: boolean;
+  pid?: number;
+  startedAt?: string;
+  stoppedAt?: string;
+  intervalSeconds?: number;
+  apiProcessId: number;
+  command: {
+    cwd: string;
+    executable: string;
+    scriptPath: string;
+    args: string[];
+  };
+  recentLogs: Array<{
+    at: string;
+    stream: "stdout" | "stderr";
+    line: string;
+  }>;
+  lastExitCode?: number;
+  lastExitSignal?: string;
+  lastError?: string;
+};
+
 export type OverviewResponse = {
   sessions: {
     total: number;
@@ -374,6 +397,16 @@ export type PromptPreviewResponse = {
 export type AiRequestLogResponse = {
   activeCount: number;
   lastFinishedAt?: string;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  statusCounts: {
+    running: number;
+    succeeded: number;
+    failed: number;
+  };
+  projects: string[];
   items: Array<{
     id: number;
     threadId: string;
