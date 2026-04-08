@@ -4,6 +4,7 @@ import {
   applySession,
   freezeSession,
   requeueRenamesSince,
+  suggestSession,
   updateConfig
 } from "./api.js";
 import {
@@ -20,6 +21,7 @@ import type {
   ConfigDocument,
   RenameApplyResponse,
   RenameFreezeResponse,
+  RenameSuggestResponse,
   SessionDetail,
   SessionSummary
 } from "./types.js";
@@ -277,6 +279,20 @@ export function useControlDeckState() {
     saveConfig,
     replayRenamesSince,
     actions: {
+      suggest: () =>
+        resources.detail
+          ? runAction<RenameSuggestResponse>({
+              threadId: resources.detail.threadId,
+              actionName: "Suggesting rename",
+              action: () => suggestSession(resources.detail!.threadId),
+              onSuccess: (result) => ({
+                message: `Candidate ready: ${result.name}`,
+                patch: {
+                  candidateName: result.name
+                }
+              })
+            })
+          : Promise.resolve(),
       apply: () =>
         resources.detail
           ? runAction<RenameApplyResponse>({

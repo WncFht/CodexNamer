@@ -96,6 +96,7 @@ export function SessionBrowser(props: {
   onToggleSessionPane: () => void;
   onSessionPaneWidthChange: (delta: number) => void;
   onStartSessionResize: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onSuggest: () => void | Promise<void>;
   onApply: () => void | Promise<void>;
   onToggleFreeze: () => void | Promise<void>;
 }) {
@@ -281,6 +282,9 @@ export function SessionBrowser(props: {
                   ) : null}
                   {props.detail.dirty ? <span className="chip danger">{tt("dirty")}</span> : <span className="chip success">{tt("clean")}</span>}
                   {props.detail.frozen ? <span className="chip warning">{tt("frozen")}</span> : null}
+                  <button className="btn-sm" disabled={props.actioning} onClick={props.onSuggest} type="button">
+                    {props.actioning && props.actionLabel?.includes("Suggest") ? tt("suggesting") : tt("suggest")}
+                  </button>
                   <button className="btn-sm" disabled={props.actioning} onClick={props.onApply} type="button">
                     {props.actioning && props.actionLabel?.includes("Applying") ? tt("applying") : tt("apply")}
                   </button>

@@ -386,6 +386,7 @@ export function App() {
               onToggleSessionPane={toggleSessionPane}
               onSessionPaneWidthChange={adjustSessionPaneWidth}
               onStartSessionResize={startSessionResize}
+              onSuggest={() => state.actions.suggest()}
               onApply={() => state.actions.apply()}
               onToggleFreeze={() => state.actions.toggleFreeze()}
             />
