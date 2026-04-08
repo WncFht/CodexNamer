@@ -263,6 +263,16 @@ export function RenameOpsPanel(props: {
     basis: "session-updated-at" | "last-applied-at";
   }) => Promise<unknown> | unknown;
 }) {
+  const {
+    aiRequestLogs: initialAiRequestLogs,
+    overview,
+    daemon,
+    preview,
+    uiLanguage,
+    selectedRequestLogId,
+    onSelectRequestLog,
+    onReplayRenames
+  } = props;
   const LOGS_PER_PAGE = 10;
   const [logQuery, setLogQuery] = React.useState("");
   const [logProjectFilter, setLogProjectFilter] = React.useState("all");
@@ -270,23 +280,22 @@ export function RenameOpsPanel(props: {
   const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "openai-compatible">("all");
   const [logPage, setLogPage] = React.useState(1);
   const [logPageInput, setLogPageInput] = React.useState("1");
-  const [requestLogReport, setRequestLogReport] = React.useState<AiRequestLogResponse | null>(props.aiRequestLogs);
+  const [requestLogReport, setRequestLogReport] = React.useState<AiRequestLogResponse | null>(initialAiRequestLogs);
   const [requestLogLoading, setRequestLogLoading] = React.useState(false);
   const [replaySince, setReplaySince] = React.useState("");
   const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const [replaying, setReplaying] = React.useState(false);
-  const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
-  const isChinese = props.uiLanguage === "zh-CN";
-  const inline = (zh: string, en: string) => (props.uiLanguage === "zh-CN" ? zh : en);
+  const tt = React.useCallback((key: Parameters<typeof t>[1]) => t(uiLanguage, key), [uiLanguage]);
+  const isChinese = uiLanguage === "zh-CN";
+  const inline = React.useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]);
   const appliedLabel = isChinese ? "已应用" : "Applied";
   const previewLabel = isChinese ? "仅预览" : "Preview";
   const skippedLabel = isChinese ? "已跳过" : "Skipped";
   const manualSourceLabel = isChinese ? "手动" : "Manual";
   const noDataLabel = isChinese ? "暂无数据" : "No data";
-  const overview = props.overview;
-  const runtimeDisplay = deriveRuntimeDisplay(overview, props.daemon);
-  const aiRequestLogs = requestLogReport ?? props.aiRequestLogs;
-  const previewItems = props.preview?.items ?? [];
+  const runtimeDisplay = deriveRuntimeDisplay(overview, daemon);
+  const aiRequestLogs = requestLogReport ?? initialAiRequestLogs;
+  const previewItems = React.useMemo(() => preview?.items ?? [], [preview?.items]);
   const previewApplyCount = previewItems.filter((item) => item.status === "apply").length;
   const previewSuggestCount = previewItems.filter((item) => item.status === "suggest").length;
   const previewSkipCount = previewItems.filter((item) => item.status === "skip").length;
@@ -315,21 +324,21 @@ export function RenameOpsPanel(props: {
   const stateGuide = [
     {
       key: "skip",
-      title: autoRenameStatusLabel("skip", props.uiLanguage),
+      title: autoRenameStatusLabel("skip", uiLanguage),
       count: previewSkipCount,
       tone: "warning" as const,
       copy: inline("被活跃中、冻结或冷却等保护条件挡住。", "Blocked by guards such as active updates, frozen state, or cooldown.")
     },
     {
       key: "suggest",
-      title: autoRenameStatusLabel("suggest", props.uiLanguage),
+      title: autoRenameStatusLabel("suggest", uiLanguage),
       count: previewSuggestCount,
       tone: "manual" as const,
       copy: inline("已经达到候选阈值，会先生成候选名，但还不到正式落盘时机。", "Past the candidate threshold, so a candidate title is generated, but it is not ready to land yet.")
     },
     {
       key: "apply",
-      title: autoRenameStatusLabel("apply", props.uiLanguage),
+      title: autoRenameStatusLabel("apply", uiLanguage),
       count: previewApplyCount,
       tone: "success" as const,
       copy: inline("已经达到最终应用阈值；如果 daemon 正在 auto-apply，就会正式写回。", "Past the finalize threshold; if the daemon is auto-applying, this is eligible to land as the official title.")
@@ -376,9 +385,9 @@ export function RenameOpsPanel(props: {
         value: project.trim() ? project : "__none__",
         label: project.trim() ? project : noDataLabel
       }))
-      .sort((left, right) => left.label.localeCompare(right.label, props.uiLanguage));
-  }, [aiRequestLogs?.projects, noDataLabel, props.uiLanguage]);
-  const visibleAiRequests = aiRequestLogs?.items ?? [];
+      .sort((left, right) => left.label.localeCompare(right.label, uiLanguage));
+  }, [aiRequestLogs?.projects, noDataLabel, uiLanguage]);
+  const visibleAiRequests = React.useMemo(() => aiRequestLogs?.items ?? [], [aiRequestLogs?.items]);
   const totalFilteredAiRequests = aiRequestLogs?.total ?? 0;
   const totalLogPages = Math.max(
     1,
@@ -397,14 +406,14 @@ export function RenameOpsPanel(props: {
   }, [logPage]);
 
   React.useEffect(() => {
-    if (!aiRequestLogs || !props.selectedRequestLogId) {
+    if (!aiRequestLogs || !selectedRequestLogId) {
       return;
     }
-    const stillVisible = visibleAiRequests.some((item) => item.id === props.selectedRequestLogId);
+    const stillVisible = visibleAiRequests.some((item) => item.id === selectedRequestLogId);
     if (!stillVisible) {
-      props.onSelectRequestLog(undefined);
+      onSelectRequestLog(undefined);
     }
-  }, [aiRequestLogs, visibleAiRequests, props.onSelectRequestLog, props.selectedRequestLogId]);
+  }, [aiRequestLogs, onSelectRequestLog, selectedRequestLogId, visibleAiRequests]);
 
   const handleReplay = async () => {
     if (!replaySince || replaying) {
@@ -412,7 +421,7 @@ export function RenameOpsPanel(props: {
     }
     setReplaying(true);
     try {
-      await props.onReplayRenames({
+      await onReplayRenames({
         since: new Date(replaySince).toISOString(),
         basis: replayBasis
       });

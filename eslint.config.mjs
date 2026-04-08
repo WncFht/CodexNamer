@@ -78,6 +78,12 @@ export default tseslint.config(
     }
   },
   {
+    files: ["packages/web/src/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/exhaustive-deps": "error"
+    }
+  },
+  {
     files: ["test/**/*.{ts,tsx}"],
     languageOptions: {
       globals: testGlobals
@@ -86,7 +92,8 @@ export default tseslint.config(
   {
     files: ["packages/web/src/useControlDeckResources.ts"],
     rules: {
-      "react-hooks/rules-of-hooks": "off"
+      "react-hooks/rules-of-hooks": "off",
+      "react-hooks/exhaustive-deps": "off"
     }
   }
 );
