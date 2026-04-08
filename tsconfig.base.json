@@ -16,10 +16,10 @@
     "composite": true,
     "baseUrl": ".",
     "paths": {
-      "@codex-session-manager/shared": [
+      "@codexnamer/shared": [
         "packages/shared/src/index.ts"
       ],
-      "@codex-session-manager/core": [
+      "@codexnamer/core": [
         "packages/core/src/index.ts"
       ]
     }

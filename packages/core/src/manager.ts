@@ -23,7 +23,7 @@ import {
   type SessionSummary,
   type SessionStatusEstimate,
   type WorkspaceSummary
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "./config.js";
 import { StateDatabase } from "./database.js";
@@ -145,7 +145,7 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export class CodexSessionManager {
+export class CodexNamer {
   private inferenceService;
   private sessionIndexCache?: {
     size: number;
@@ -188,14 +188,14 @@ export class CodexSessionManager {
     configPath?: string;
     overrides?: Partial<EffectiveConfig>;
     operator?: string;
-  }): Promise<CodexSessionManager> {
+  }): Promise<CodexNamer> {
     const config = await loadEffectiveConfig({
       cwd: options?.cwd,
       configPath: options?.configPath,
       overrides: options?.overrides
     });
     const db = await StateDatabase.create(path.join(config.general.stateDir, "app.db"));
-    return new CodexSessionManager(config, db, options?.operator, {
+    return new CodexNamer(config, db, options?.operator, {
       cwd: options?.cwd,
       configPath: options?.configPath,
       overrides: options?.overrides
@@ -1466,3 +1466,5 @@ export class CodexSessionManager {
     }
   }
 }
+
+export { CodexNamer as CodexSessionManager };

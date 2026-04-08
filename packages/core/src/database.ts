@@ -23,7 +23,7 @@ import type {
   SessionSummary,
   SessionStatusEstimate,
   WorkspaceSummary
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { isDirtySinceRename } from "./revision.js";
 import { workspaceIdForCwd, workspaceLabelForCwd } from "./util.js";

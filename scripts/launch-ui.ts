@@ -34,7 +34,10 @@ function parseArgs(argv: string[]): {
   const apiBaseFromFlag = explicitFlag ? explicitFlag.slice("--api-base=".length) : undefined;
   const apiBaseIndex = rest.findIndex((value) => value === "--api-base");
   const apiBase =
-    apiBaseFromFlag ?? (apiBaseIndex >= 0 ? rest[apiBaseIndex + 1] : undefined) ?? process.env.CSM_API_BASE;
+    apiBaseFromFlag ??
+    (apiBaseIndex >= 0 ? rest[apiBaseIndex + 1] : undefined) ??
+    process.env.CODEXNAMER_API_BASE ??
+    process.env.CSM_API_BASE;
 
   return {
     mode: modeArg,
@@ -308,7 +311,7 @@ async function terminateProcesses(processes: ManagedProcessSnapshot[]): Promise<
   }
 
   for (const processInfo of unique.values()) {
-    console.error(`[csm] Closing stale ${processInfo.kind} process pid=${processInfo.pid}`);
+    console.error(`[codexnamer] Closing stale ${processInfo.kind} process pid=${processInfo.pid}`);
     try {
       process.kill(processInfo.pid, "SIGTERM");
     } catch {
@@ -329,7 +332,7 @@ async function terminateProcesses(processes: ManagedProcessSnapshot[]): Promise<
     if (!isProcessAlive(processInfo.pid)) {
       continue;
     }
-    console.error(`[csm] Force killing stale ${processInfo.kind} process pid=${processInfo.pid}`);
+    console.error(`[codexnamer] Force killing stale ${processInfo.kind} process pid=${processInfo.pid}`);
     try {
       process.kill(processInfo.pid, "SIGKILL");
     } catch {
@@ -405,7 +408,7 @@ async function ensureApi(baseUrlOverride?: string): Promise<{
         };
       }
       console.error(
-        `[csm] Skipping healthy API at ${baseUrl} because it is bound to ${apiCwd ?? "<unknown cwd>"}.`
+        `[codexnamer] Skipping healthy API at ${baseUrl} because it is bound to ${apiCwd ?? "<unknown cwd>"}.`
       );
     }
 
@@ -445,15 +448,15 @@ function withApiBaseArgs(mode: UiMode, passthrough: string[], apiBase: string): 
 async function main(): Promise<void> {
   const { mode, passthrough, explicitApiBase } = parseArgs(process.argv.slice(2));
   const repoCwd = process.cwd();
-  const webPort = process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT);
+  const webPort = process.env.CODEXNAMER_WEB_PORT ?? process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT);
   const legacyRepoPath = detectLegacyRepoPath(repoCwd);
-  console.error(`[csm] Launch mode: ${mode}`);
-  console.error(`[csm] Repo cwd: ${repoCwd}`);
+  console.error(`[codexnamer] Launch mode: ${mode}`);
+  console.error(`[codexnamer] Repo cwd: ${repoCwd}`);
   if (mode === "web") {
-    console.error(`[csm] Requested web URL: http://127.0.0.1:${webPort}/`);
+    console.error(`[codexnamer] Requested web URL: http://127.0.0.1:${webPort}/`);
   }
   if (legacyRepoPath && (await pathExists(legacyRepoPath))) {
-    console.error(`[csm] Legacy same-name repo still exists at: ${legacyRepoPath}`);
+    console.error(`[codexnamer] Legacy same-name repo still exists at: ${legacyRepoPath}`);
   }
   await cleanupStaleManagedProcesses(mode, explicitApiBase);
   const api = await ensureApi(explicitApiBase);
@@ -467,22 +470,23 @@ async function main(): Promise<void> {
       env:
         mode === "web"
           ? {
-              CSM_API_BASE: api.baseUrl,
-              CSM_WEB_PORT: process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT)
+              CODEXNAMER_API_BASE: api.baseUrl,
+              CODEXNAMER_WEB_PORT:
+                process.env.CODEXNAMER_WEB_PORT ?? process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT)
             }
           : {
-              CSM_API_BASE: api.baseUrl
+              CODEXNAMER_API_BASE: api.baseUrl
             }
     }
   );
 
   if (api.reused) {
-    console.error(`[csm] Reusing API at ${api.baseUrl} for repo ${repoCwd}`);
+    console.error(`[codexnamer] Reusing API at ${api.baseUrl} for repo ${repoCwd}`);
   } else {
-    console.error(`[csm] Started API at ${api.baseUrl} for repo ${repoCwd}`);
+    console.error(`[codexnamer] Started API at ${api.baseUrl} for repo ${repoCwd}`);
   }
   if (mode === "web") {
-    console.error(`[csm] Launching web dev server on http://127.0.0.1:${webPort}/ via API ${api.baseUrl}`);
+    console.error(`[codexnamer] Launching web dev server on http://127.0.0.1:${webPort}/ via API ${api.baseUrl}`);
   }
 
   const terminate = (signal: NodeJS.Signals) => {
@@ -514,7 +518,7 @@ function isMainModule(): boolean {
 
 if (isMainModule()) {
   void main().catch((error) => {
-    console.error(`[csm] ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`[codexnamer] ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   });
 }

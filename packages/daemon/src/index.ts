@@ -4,7 +4,7 @@ import path from "node:path";
 
 import chokidar from "chokidar";
 
-import { CodexSessionManager } from "@codex-session-manager/core";
+import { CodexNamer } from "@codexnamer/core";
 
 function parseArgs(argv: string[]): { once: boolean; intervalSeconds: number } {
   const once = argv.includes("--once");
@@ -27,7 +27,7 @@ export class SessionSweepDaemon {
   private rerunRequested = false;
 
   constructor(
-    private readonly manager: CodexSessionManager,
+    private readonly manager: CodexNamer,
     private readonly intervalSeconds: number
   ) {}
 
@@ -120,7 +120,7 @@ export class SessionSweepDaemon {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const manager = await CodexSessionManager.create({ operator: "daemon" });
+  const manager = await CodexNamer.create({ operator: "daemon" });
   const daemon = new SessionSweepDaemon(manager, args.intervalSeconds);
 
   if (args.once) {

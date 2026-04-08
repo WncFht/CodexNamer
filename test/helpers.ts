@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type { EffectiveConfig } from "@codex-session-manager/shared";
-import { buildConfigForTests, CodexSessionManager } from "@codex-session-manager/core";
+import type { EffectiveConfig } from "@codexnamer/shared";
+import { buildConfigForTests, CodexNamer } from "@codexnamer/core";
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
@@ -154,8 +154,8 @@ export async function writeRolloutFixture(params: {
 export async function createManagerForTest(overrides: DeepPartial<EffectiveConfig> & {
   codexHome: string;
   stateDir: string;
-}): Promise<CodexSessionManager> {
-  const manager = await CodexSessionManager.create({
+}): Promise<CodexNamer> {
+  const manager = await CodexNamer.create({
     overrides: buildConfigForTests({
       general: {
         codexHome: overrides.codexHome,

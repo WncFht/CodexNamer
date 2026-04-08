@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSessionRevision, isDirtySinceRename } from "@codex-session-manager/core";
+import { buildSessionRevision, isDirtySinceRename } from "@codexnamer/core";
 
 describe("revision and dirty tracking", () => {
   it("changes revision when last agent message changes", () => {

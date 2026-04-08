@@ -7,8 +7,8 @@ import {
   buildConfigForTests,
   createRenameInferenceService,
   probeRenameProvider
-} from "@codex-session-manager/core";
-import type { SessionTranscript } from "@codex-session-manager/shared";
+} from "@codexnamer/core";
+import type { SessionTranscript } from "@codexnamer/shared";
 
 describe("provider backends", () => {
   it("uses openai-compatible responses API and parses structured JSON", async () => {
@@ -142,7 +142,7 @@ describe("provider backends", () => {
       buildConfigForTests({
         general: {
           codexHome: "~/.codex",
-          stateDir: "~/.local/state/codex-session-manager",
+          stateDir: "~/.local/state/codexnamer",
           uiLanguage: "zh-CN"
         },
         naming: {
@@ -210,7 +210,7 @@ describe("provider backends", () => {
     const config = buildConfigForTests({
       general: {
         codexHome: "~/.codex",
-        stateDir: "~/.local/state/codex-session-manager",
+        stateDir: "~/.local/state/codexnamer",
         uiLanguage: "zh-CN"
       },
       naming: {

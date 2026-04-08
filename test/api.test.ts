@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CodexSessionManager } from "@codex-session-manager/core";
+import { CodexNamer } from "@codexnamer/core";
 import { buildApiServer } from "../packages/api/src/app.ts";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
@@ -258,7 +258,7 @@ describe("local api", () => {
     expect(overriddenPromptPreview.statusCode).toBe(200);
     expect(overriddenPromptPreview.json().renameContext.requestedStrategy).toBe("paired-user-turns");
     expect(overriddenPromptPreview.json().renameContext.strategy).toBe("paired-user-turns");
-    expect(overriddenPromptPreview.json().prompt).toContain("你要为 Codex Session Manager 生成一个用于会话列表的命名建议");
+    expect(overriddenPromptPreview.json().prompt).toContain("你要为 CodexNamer 生成一个用于会话列表的命名建议");
   });
 
   it("returns paginated session transcript details", async () => {
@@ -322,7 +322,7 @@ describe("local api", () => {
       "utf8"
     );
 
-    const manager = await CodexSessionManager.create({
+    const manager = await CodexNamer.create({
       cwd: workspace.root,
       configPath,
       operator: "api-test"

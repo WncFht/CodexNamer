@@ -7,19 +7,20 @@ import {
 
 describe("useControlDeckState resource planning", () => {
   it("loads only settings-specific resources for the settings tab", () => {
-    expect(panelResourcesForTab("settings")).toEqual(["config", "providers", "overview", "prompt-preview"]);
+    expect(panelResourcesForTab("settings")).toEqual(["config", "providers", "overview", "daemon", "prompt-preview"]);
   });
 
   it("loads only runtime resources for the maintenance tab", () => {
-    expect(panelResourcesForTab("maintenance")).toEqual(["overview", "doctor", "ai-request-logs", "preview"]);
+    expect(panelResourcesForTab("maintenance")).toEqual(["overview", "daemon", "doctor", "ai-request-logs", "preview"]);
   });
 
   it("keeps live refresh narrow on the settings tab", () => {
-    expect(liveRefreshResourcesForTab("settings")).toEqual(["sessions", "preview", "overview"]);
+    expect(liveRefreshResourcesForTab("settings")).toEqual(["sessions", "preview", "overview", "daemon"]);
     expect(liveRefreshResourcesForTab("settings", { includePromptPreview: true })).toEqual([
       "sessions",
       "preview",
       "overview",
+      "daemon",
       "prompt-preview"
     ]);
   });
@@ -29,6 +30,7 @@ describe("useControlDeckState resource planning", () => {
       "sessions",
       "preview",
       "overview",
+      "daemon",
       "doctor",
       "ai-request-logs"
     ]);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildConfigForTests, buildRenamePrompt, suggestNameHeuristically } from "@codex-session-manager/core";
+import { buildConfigForTests, buildRenamePrompt, suggestNameHeuristically } from "@codexnamer/core";
 
 describe("naming specificity", () => {
   it("builds a more specific heuristic summary from settings and rename logic topics", () => {
@@ -16,8 +16,8 @@ describe("naming specificity", () => {
       {
         threadId: "t-settings",
         rolloutPath: "/tmp/r.jsonl",
-        cwd: "/tmp/codex-session-manager",
-        projectName: "codex-session-manager",
+        cwd: "/tmp/codexnamer",
+        projectName: "codexnamer",
         taskCompleteCount: 0,
         tokenTotal: 0,
         firstUserMessage:
@@ -97,7 +97,7 @@ describe("naming specificity", () => {
       config
     );
 
-    expect(prompt).toContain("你要为 Codex Session Manager 生成一个用于会话列表的命名建议。");
+    expect(prompt).toContain("你要为 CodexNamer 生成一个用于会话列表的命名建议。");
     expect(prompt).toContain("Prompt 语言：中文。");
     expect(prompt).toContain("## 命名构建器");
     expect(prompt).toContain("## Tag 预设");

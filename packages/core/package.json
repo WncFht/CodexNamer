@@ -1,5 +1,5 @@
 {
-  "name": "@codex-session-manager/core",
+  "name": "@codexnamer/core",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "@codex-session-manager/shared": "0.1.0",
+    "@codexnamer/shared": "0.1.0",
     "@iarna/toml": "^2.2.5",
     "better-sqlite3": "^12.4.1",
     "fast-glob": "^3.3.3"

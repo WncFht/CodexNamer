@@ -8,7 +8,7 @@ import type {
   SessionTranscriptPage,
   SessionTranscriptEntry,
   SessionTranscriptRole
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { basenameSafe, excerpt, normalizeWhitespace, stripControl } from "./util.js";
 

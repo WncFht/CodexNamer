@@ -7,7 +7,7 @@ import {
   appendSessionIndexRename,
   compactSessionIndex,
   readSessionIndex
-} from "@codex-session-manager/core";
+} from "@codexnamer/core";
 
 import { createTempWorkspace } from "./helpers.js";
 

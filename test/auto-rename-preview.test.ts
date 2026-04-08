@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSessionRevision } from "@codex-session-manager/core";
+import { buildSessionRevision } from "@codexnamer/core";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 

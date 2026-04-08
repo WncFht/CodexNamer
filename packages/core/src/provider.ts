@@ -8,7 +8,7 @@ import type {
   RenameContext,
   RenameMode,
   RenameSuggestion
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import {
   composeConfiguredSuggestionName,
@@ -344,7 +344,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
         : "";
 
     return [
-      "你要为 Codex Session Manager 生成一个用于会话列表的命名建议。",
+      "你要为 CodexNamer 生成一个用于会话列表的命名建议。",
       "只返回一个 JSON 对象，键包括：name, kind, summary, scope, tagId。",
       "不要查看文件，不要运行命令，也不要依赖仓库外部信息。",
       "只能使用下面给出的会话上下文。",
@@ -408,7 +408,7 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
       : "";
 
   return [
-    "You generate a session rename suggestion for Codex Session Manager.",
+    "You generate a session rename suggestion for CodexNamer.",
     "Return only a JSON object with keys: name, kind, summary, scope, tagId.",
     "Do not inspect files, do not run shell commands, and do not rely on repository context.",
     "Use only the session context provided below.",

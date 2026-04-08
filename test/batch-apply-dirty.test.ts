@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readSessionIndex } from "@codex-session-manager/core";
+import { readSessionIndex } from "@codexnamer/core";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 

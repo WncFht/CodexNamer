@@ -6,6 +6,9 @@ import {
   DEFAULT_CONFIG_RELATIVE_PATH,
   DEFAULT_STATE_RELATIVE_PATH,
   DEFAULT_WATCH,
+  LEGACY_CONFIG_RELATIVE_PATH,
+  LEGACY_PROJECT_CONFIG_FILENAME,
+  LEGACY_STATE_RELATIVE_PATH,
   PROJECT_CONFIG_FILENAME,
   REDACTED_SECRET,
   type CodexInheritedAuth,
@@ -13,7 +16,7 @@ import {
   type ConfigView,
   type InheritedCodexProvider,
   type EffectiveConfig
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { deepMerge, ensureTrailingNewline, expandHome } from "./util.js";
 
@@ -370,6 +373,37 @@ async function readTomlFile(filePath: string): Promise<Record<string, unknown> |
   }
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolvePreferredPath(primaryPath: string, legacyPath: string): Promise<string> {
+  if (await pathExists(primaryPath)) {
+    return primaryPath;
+  }
+  if (await pathExists(legacyPath)) {
+    return legacyPath;
+  }
+  return primaryPath;
+}
+
+async function resolveDefaultStateDir(): Promise<string> {
+  const primary = expandHome(`~/${DEFAULT_STATE_RELATIVE_PATH}`);
+  const legacy = expandHome(`~/${LEGACY_STATE_RELATIVE_PATH}`);
+  if (await pathExists(primary)) {
+    return primary;
+  }
+  if (await pathExists(legacy)) {
+    return legacy;
+  }
+  return primary;
+}
+
 function normalizeProviderProfileRecords(records: Record<string, unknown>): EffectiveConfig["providerProfiles"] {
   return Object.entries(records).map(([profileId, value]) => {
     const record = value as Record<string, unknown>;
@@ -665,13 +699,21 @@ function redactConfigDocument(document: ConfigDocument): ConfigDocument {
   };
 }
 
-export function resolveConfigPaths(options?: {
+export async function resolveConfigPaths(options?: {
   cwd?: string;
   configPath?: string;
-}): { cwd: string; userConfigPath: string; projectConfigPath: string } {
+}): Promise<{ cwd: string; userConfigPath: string; projectConfigPath: string }> {
   const cwd = options?.cwd ?? process.cwd();
-  const userConfigPath = options?.configPath ?? path.join(process.env.HOME ?? "", DEFAULT_CONFIG_RELATIVE_PATH);
-  const projectConfigPath = path.join(cwd, PROJECT_CONFIG_FILENAME);
+  const userConfigPath =
+    options?.configPath ??
+    (await resolvePreferredPath(
+      path.join(process.env.HOME ?? "", DEFAULT_CONFIG_RELATIVE_PATH),
+      path.join(process.env.HOME ?? "", LEGACY_CONFIG_RELATIVE_PATH)
+    ));
+  const projectConfigPath = await resolvePreferredPath(
+    path.join(cwd, PROJECT_CONFIG_FILENAME),
+    path.join(cwd, LEGACY_PROJECT_CONFIG_FILENAME)
+  );
   return {
     cwd,
     userConfigPath,
@@ -686,7 +728,7 @@ export async function loadConfigView(options?: {
   effectiveConfig?: EffectiveConfig;
   effectiveConfigView?: Record<string, unknown>;
 }): Promise<ConfigView> {
-  const paths = resolveConfigPaths(options);
+  const paths = await resolveConfigPaths(options);
   const userConfig = normalizeConfigDocumentInput((await readTomlFile(paths.userConfigPath)) ?? {});
   const projectOverride = normalizeConfigDocumentInput((await readTomlFile(paths.projectConfigPath)) ?? {});
   const effective =
@@ -733,7 +775,7 @@ export async function writeUserConfig(options: {
   configPath?: string;
   patch: ConfigDocument;
 }): Promise<{ userConfigPath: string; userConfig: ConfigDocument }> {
-  const paths = resolveConfigPaths(options);
+  const paths = await resolveConfigPaths(options);
   const existing = normalizeConfigDocumentInput((await readTomlFile(paths.userConfigPath)) ?? {});
   const merged = mergeConfigDocuments(existing, options.patch);
   await fs.mkdir(path.dirname(paths.userConfigPath), { recursive: true });
@@ -811,7 +853,7 @@ export async function loadEffectiveConfig(options?: {
   configPath?: string;
   overrides?: Partial<EffectiveConfig>;
 }): Promise<EffectiveConfig> {
-  const paths = resolveConfigPaths(options);
+  const paths = await resolveConfigPaths(options);
   const userRaw = normalizeConfigDocumentInput((await readTomlFile(paths.userConfigPath)) ?? {});
   const mergedGeneral = deepMerge(DEFAULT_CONFIG.general, userRaw.general ?? {});
   const projectRaw = normalizeConfigDocumentInput((await readTomlFile(paths.projectConfigPath)) ?? {});
@@ -820,9 +862,11 @@ export async function loadEffectiveConfig(options?: {
   effective = deepMerge(effective, projectRaw as Partial<EffectiveConfig>);
   effective = deepMerge(effective, options?.overrides ?? {});
 
+  const explicitStateDir =
+    options?.overrides?.general?.stateDir ?? projectRaw.general?.stateDir ?? userRaw.general?.stateDir;
   effective.general = {
     codexHome: expandHome(effective.general.codexHome ?? mergedGeneral.codexHome),
-    stateDir: expandHome(effective.general.stateDir ?? mergedGeneral.stateDir),
+    stateDir: explicitStateDir ? expandHome(explicitStateDir) : await resolveDefaultStateDir(),
     uiLanguage: effective.general.uiLanguage ?? mergedGeneral.uiLanguage ?? DEFAULT_CONFIG.general.uiLanguage
   };
 

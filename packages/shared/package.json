@@ -1,5 +1,5 @@
 {
-  "name": "@codex-session-manager/shared",
+  "name": "@codexnamer/shared",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",

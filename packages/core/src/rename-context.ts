@@ -6,7 +6,7 @@ import type {
   RenameContextSegmentSource,
   RenameContextStrategy,
   SessionTranscript
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { excerpt, normalizeWhitespace, stripControl } from "./util.js";
 

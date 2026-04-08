@@ -250,7 +250,7 @@ export function App() {
         <div className="sidebar-header">
           <div>
             <p className="sidebar-kicker">Claude Design MD</p>
-            <h1 className="home-link">Codex Session Manager</h1>
+            <h1 className="home-link">CodexNamer</h1>
             <p className="sidebar-copy">{tt("warmEditorial")}</p>
           </div>
           <div className="pane-controls">

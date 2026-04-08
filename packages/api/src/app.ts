@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 
-import { CodexSessionManager } from "@codex-session-manager/core";
-import type { ConfigDocument, SessionSummary } from "@codex-session-manager/shared";
+import { CodexNamer } from "@codexnamer/core";
+import type { ConfigDocument, SessionSummary } from "@codexnamer/shared";
 
 import { DaemonProcessController } from "./daemon-controller.js";
 import { ApiEventLog } from "./event-log.js";
@@ -169,7 +169,7 @@ function toErrorPayload(error: unknown): { statusCode: number; body: Record<stri
 }
 
 export async function buildApiServer(options?: {
-  manager?: CodexSessionManager;
+  manager?: CodexNamer;
   operator?: string;
 }): Promise<FastifyInstance> {
   const app = Fastify({
@@ -178,7 +178,7 @@ export async function buildApiServer(options?: {
 
   const ownedManager = options?.manager
     ? undefined
-    : await CodexSessionManager.create({ operator: options?.operator ?? "api" });
+    : await CodexNamer.create({ operator: options?.operator ?? "api" });
   const manager = options?.manager ?? ownedManager!;
   const eventLog = new ApiEventLog();
   const daemonController = new DaemonProcessController({

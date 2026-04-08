@@ -6,7 +6,7 @@ import {
   type CompactIndexResult,
   type SessionIndexEntry,
   type SessionIndexSnapshot
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { ensureTrailingNewline, toUtcIso } from "./util.js";
 

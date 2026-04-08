@@ -1,4 +1,4 @@
-import type { MaterializedSession, SessionRevision } from "@codex-session-manager/shared";
+import type { MaterializedSession, SessionRevision } from "@codexnamer/shared";
 
 import { sha256, stripControl, toUtcIso } from "./util.js";
 

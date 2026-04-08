@@ -3,7 +3,7 @@ import type {
   RenameStateRecord,
   SessionDetail,
   SessionStatusEstimate
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 export interface AutoRenameEvaluation {
   threadId: string;

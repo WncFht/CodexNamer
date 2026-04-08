@@ -1,14 +1,14 @@
 {
-  "name": "@codex-session-manager/daemon",
+  "name": "@codexnamer/daemon",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "codex-session-daemon": "./dist/index.js"
+    "codexnamer-daemon": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "dependencies": {
-    "@codex-session-manager/core": "0.1.0",
+    "@codexnamer/core": "0.1.0",
     "chokidar": "^4.0.3"
   }
 }

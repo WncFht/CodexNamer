@@ -6,7 +6,7 @@ import type {
   NamingTagDefinition,
   NamingTimestampPreset,
   RenameSuggestion
-} from "@codex-session-manager/shared";
+} from "@codexnamer/shared";
 
 import { buildRenameContext } from "./rename-context.js";
 import { basenameSafe, excerpt, normalizeWhitespace, stripControl, toUtcIso, workspaceLabelForCwd } from "./util.js";

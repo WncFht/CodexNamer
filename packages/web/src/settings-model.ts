@@ -502,7 +502,7 @@ export function renderNamingStructurePreview(draft: SettingsDraft, uiLanguage: "
   const componentMap: Record<NamingComponent, string> = {
     timestamp: formatPreviewTimestamp(timestampBuilderItem?.format ?? DEFAULT_TIMESTAMP_PRESET),
     workspace: "ai-tools",
-    project: "codex-session-manager",
+    project: "codexnamer",
     tag: previewTag,
     kind: "fix",
     scope: "settings",

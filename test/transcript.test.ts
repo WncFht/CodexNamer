@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readSessionTranscript, readSessionTranscriptPage } from "@codex-session-manager/core";
+import { readSessionTranscript, readSessionTranscriptPage } from "@codexnamer/core";
 
 import { createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 

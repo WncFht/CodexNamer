@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildConfigForTests, evaluateAutoRename } from "@codex-session-manager/core";
-import type { RenameStateRecord, SessionDetail } from "@codex-session-manager/shared";
+import { buildConfigForTests, evaluateAutoRename } from "@codexnamer/core";
+import type { RenameStateRecord, SessionDetail } from "@codexnamer/shared";
 
 function makeDetail(overrides?: Partial<SessionDetail>): SessionDetail {
   return {

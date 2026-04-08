@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { classifyManagedProcess, detectLegacyRepoPath } from "../scripts/launch-ui.ts";
 
 describe("classifyManagedProcess", () => {
-  const repoCwd = "/tmp/codex-session-manager";
+  const repoCwd = "/tmp/codexnamer";
 
   it("classifies stale web launcher and API processes for the same repo", () => {
     expect(
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/tsx", "scripts/launch-ui.ts", "web"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/tsx", "scripts/launch-ui.ts", "web"]
         },
         repoCwd,
         "web"
@@ -21,7 +21,7 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/tsx", "packages/api/src/index.ts"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/tsx", "packages/api/src/index.ts"]
         },
         repoCwd,
         "web"
@@ -34,7 +34,7 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: `${repoCwd}/packages/web`,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/.bin/vite"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/vite"]
         },
         repoCwd,
         "web"
@@ -45,7 +45,7 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codex-session-manager/node_modules/vite/bin/vite.js", "build"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/vite/bin/vite.js", "build"]
         },
         repoCwd,
         "web"
@@ -67,12 +67,12 @@ describe("classifyManagedProcess", () => {
 
 describe("detectLegacyRepoPath", () => {
   it("detects the pre-migration sibling repo for ai-tools workspaces", () => {
-    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager")).toBe(
-      "/home/fanghaotian/Desktop/src/codex-session-manager"
+    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/ai-tools/codexnamer")).toBe(
+      "/home/fanghaotian/Desktop/src/codexnamer"
     );
   });
 
   it("ignores repos that are not under ai-tools", () => {
-    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/codex-session-manager")).toBeUndefined();
+    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/codexnamer")).toBeUndefined();
   });
 });

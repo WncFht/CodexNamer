@@ -4,10 +4,11 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "@codex-session-manager/core";
-import { REDACTED_SECRET } from "@codex-session-manager/shared";
+import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "@codexnamer/core";
+import { REDACTED_SECRET } from "@codexnamer/shared";
 
 const tempDirs: string[] = [];
+const originalHome = process.env.HOME;
 
 async function makeTempDir(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "csm-config-"));
@@ -16,6 +17,7 @@ async function makeTempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  process.env.HOME = originalHome;
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -164,5 +166,33 @@ describe("config loading", () => {
     expect(written).toContain('components = [ "tag", "summary" ]');
     expect(written).toContain('component_separator = " / "');
     expect(written).toContain('custom_prompt = "Always classify the session before naming it."');
+  });
+
+  it("falls back to legacy codex-session-manager config and state paths when present", async () => {
+    const root = await makeTempDir();
+    process.env.HOME = root;
+
+    const codexHome = path.join(root, ".codex");
+    const legacyUserConfigPath = path.join(root, ".config", "codex-session-manager", "config.toml");
+    const legacyProjectConfigPath = path.join(root, ".codex-session-manager.toml");
+    const legacyStateDir = path.join(root, ".local", "state", "codex-session-manager");
+
+    await fs.mkdir(path.dirname(legacyUserConfigPath), { recursive: true });
+    await fs.mkdir(legacyStateDir, { recursive: true });
+    await fs.mkdir(codexHome, { recursive: true });
+    await fs.writeFile(path.join(codexHome, "config.toml"), 'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n', "utf8");
+    await fs.writeFile(legacyUserConfigPath, ['[general]', `codex_home = "${codexHome}"`].join("\n"), "utf8");
+    await fs.writeFile(legacyProjectConfigPath, ['[naming]', 'language = "en-US"'].join("\n"), "utf8");
+
+    const effective = await loadEffectiveConfig({ cwd: root });
+    const view = await loadConfigView({
+      cwd: root,
+      effectiveConfig: effective
+    });
+
+    expect(effective.general.stateDir).toBe(legacyStateDir);
+    expect(view.paths.userConfigPath).toBe(legacyUserConfigPath);
+    expect(view.paths.projectConfigPath).toBe(legacyProjectConfigPath);
+    expect(view.projectOverride.naming?.language).toBe("en-US");
   });
 });

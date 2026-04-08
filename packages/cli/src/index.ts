@@ -2,14 +2,14 @@
 
 import { cac } from "cac";
 
-import { CodexSessionManager } from "@codex-session-manager/core";
+import { CodexNamer } from "@codexnamer/core";
 
 type IdOptions = { id?: string };
 type RenameOptions = { id?: string; name?: string };
 type BatchApplyOptions = { dirty?: boolean; preview?: boolean };
 
-async function withManager<T>(fn: (manager: CodexSessionManager) => Promise<T>): Promise<T> {
-  const manager = await CodexSessionManager.create({ operator: "cli" });
+async function withManager<T>(fn: (manager: CodexNamer) => Promise<T>): Promise<T> {
+  const manager = await CodexNamer.create({ operator: "cli" });
   try {
     return await fn(manager);
   } finally {
@@ -32,7 +32,7 @@ function normalizeArgv(argv: string[]): string[] {
 
 const normalizedArgv = normalizeArgv(process.argv);
 
-const cli = cac("codex-session");
+const cli = cac("codexnamer");
 
 cli
   .command("list", "List known sessions")

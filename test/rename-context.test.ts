@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { SessionTranscript } from "@codex-session-manager/shared";
-import { buildConfigForTests, buildRenameContext } from "@codex-session-manager/core";
+import type { SessionTranscript } from "@codexnamer/shared";
+import { buildConfigForTests, buildRenameContext } from "@codexnamer/core";
 
 describe("rename context", () => {
   it("builds summary-signals context from first and last messages", () => {

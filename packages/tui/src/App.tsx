@@ -1882,7 +1882,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   return (
     <Box flexDirection="column" width={layout.columns}>
       <Box justifyContent="space-between">
-        <Text color={THEME.accent}>Codex Session Manager TUI</Text>
+        <Text color={THEME.accent}>CodexNamer TUI</Text>
         <Text color={THEME.muted}>
           {screenMode === "browser"
             ? `${dirtyOnly ? tt("dirtyOnly") : tt("all")} | ws ${selectedWorkspaceLabel} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
