@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { fetchAiRequestLogs } from "./api.js";
 import { formatWhen } from "./browser-utils.js";
 import { autoRenameReasonLabel, autoRenameStatusLabel, formatUiNumber, t, type UiLanguage } from "./i18n.js";
 import type { AiRequestLogDetailResponse, AiRequestLogResponse, AutoRenamePreviewResponse, DoctorResponse, OverviewResponse } from "./types.js";
@@ -292,6 +293,9 @@ export function RenameOpsPanel(props: {
   const [logStatusFilter, setLogStatusFilter] = React.useState<"all" | "running" | "succeeded" | "failed">("all");
   const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "openai-compatible">("all");
   const [logPage, setLogPage] = React.useState(1);
+  const [logPageInput, setLogPageInput] = React.useState("1");
+  const [requestLogReport, setRequestLogReport] = React.useState<AiRequestLogResponse | null>(props.aiRequestLogs);
+  const [requestLogLoading, setRequestLogLoading] = React.useState(false);
   const [replaySince, setReplaySince] = React.useState("");
   const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const [replaying, setReplaying] = React.useState(false);
@@ -304,7 +308,7 @@ export function RenameOpsPanel(props: {
   const manualSourceLabel = isChinese ? "手动" : "Manual";
   const noDataLabel = isChinese ? "暂无数据" : "No data";
   const overview = props.overview;
-  const aiRequestLogs = props.aiRequestLogs;
+  const aiRequestLogs = requestLogReport ?? props.aiRequestLogs;
   const previewItems = props.preview?.items ?? [];
   const previewApplyCount = previewItems.filter((item) => item.status === "apply").length;
   const previewSuggestCount = previewItems.filter((item) => item.status === "suggest").length;
@@ -330,6 +334,7 @@ export function RenameOpsPanel(props: {
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
   const latestAiRequest = aiRequestLogs?.items[0];
   const replayRuns = overview?.replay.recentRuns ?? [];
+  const requestLogRequestIdRef = React.useRef(0);
   const stateGuide = [
     {
       key: "skip",
@@ -353,79 +358,76 @@ export function RenameOpsPanel(props: {
       copy: inline("已经达到最终应用阈值；如果 daemon 正在 auto-apply，就会正式写回。", "Past the finalize threshold; if the daemon is auto-applying, this is eligible to land as the official title.")
     }
   ];
-  const filteredAiRequests = React.useMemo(() => {
-    const query = logQuery.trim().toLowerCase();
-    return (aiRequestLogs?.items ?? []).filter((item) => {
-      const projectKey = item.projectName?.trim() || "__none__";
-      if (logProjectFilter !== "all" && projectKey !== logProjectFilter) {
-        return false;
+  const loadRequestLogPage = React.useCallback(async () => {
+    const requestId = ++requestLogRequestIdRef.current;
+    setRequestLogLoading(true);
+    try {
+      const payload = await fetchAiRequestLogs({
+        page: logPage,
+        pageSize: LOGS_PER_PAGE,
+        search: logQuery.trim() || undefined,
+        project:
+          logProjectFilter === "all"
+            ? undefined
+            : logProjectFilter === "__none__"
+              ? "__none__"
+              : logProjectFilter,
+        status: logStatusFilter === "all" ? undefined : logStatusFilter,
+        transport: logTransportFilter === "all" ? undefined : logTransportFilter
+      });
+      if (requestId !== requestLogRequestIdRef.current) {
+        return;
       }
-      if (logStatusFilter !== "all" && item.status !== logStatusFilter) {
-        return false;
+      setRequestLogReport(payload);
+      if (payload.page !== logPage) {
+        setLogPage(payload.page);
       }
-      if (logTransportFilter !== "all" && item.transport !== logTransportFilter) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-      const haystack = [
-        item.projectName,
-        item.threadId,
-        item.model,
-        item.backend,
-        item.transport,
-        item.baseUrl,
-        item.error,
-        item.metadata ? Object.values(item.metadata).join(" ") : undefined
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [aiRequestLogs?.items, logProjectFilter, logQuery, logStatusFilter, logTransportFilter]);
-  const projectOptions = React.useMemo(() => {
-    const labels = new Map<string, string>();
-    for (const item of aiRequestLogs?.items ?? []) {
-      const label = item.projectName?.trim() || noDataLabel;
-      const key = item.projectName?.trim() || "__none__";
-      if (!labels.has(key)) {
-        labels.set(key, label);
+    } finally {
+      if (requestId === requestLogRequestIdRef.current) {
+        setRequestLogLoading(false);
       }
     }
-    return Array.from(labels.entries())
-      .map(([value, label]) => ({ value, label }))
+  }, [LOGS_PER_PAGE, logPage, logProjectFilter, logQuery, logStatusFilter, logTransportFilter]);
+
+  React.useEffect(() => {
+    void loadRequestLogPage();
+  }, [loadRequestLogPage]);
+
+  const projectOptions = React.useMemo(() => {
+    return (aiRequestLogs?.projects ?? [])
+      .map((project) => ({
+        value: project.trim() ? project : "__none__",
+        label: project.trim() ? project : noDataLabel
+      }))
       .sort((left, right) => left.label.localeCompare(right.label, props.uiLanguage));
-  }, [aiRequestLogs?.items, noDataLabel, props.uiLanguage]);
-  const totalLogPages = Math.max(1, Math.ceil(filteredAiRequests.length / LOGS_PER_PAGE));
-  const pagedAiRequests = React.useMemo(() => {
-    const startIndex = (logPage - 1) * LOGS_PER_PAGE;
-    return filteredAiRequests.slice(startIndex, startIndex + LOGS_PER_PAGE);
-  }, [filteredAiRequests, logPage]);
-  const filteredRunningCount = filteredAiRequests.filter((item) => item.status === "running").length;
-  const filteredFailedCount = filteredAiRequests.filter((item) => item.status === "failed").length;
-  const filteredSucceededCount = filteredAiRequests.filter((item) => item.status === "succeeded").length;
+  }, [aiRequestLogs?.projects, noDataLabel, props.uiLanguage]);
+  const visibleAiRequests = aiRequestLogs?.items ?? [];
+  const totalFilteredAiRequests = aiRequestLogs?.total ?? 0;
+  const totalLogPages = Math.max(
+    1,
+    aiRequestLogs?.totalPages ?? (Math.ceil(totalFilteredAiRequests / LOGS_PER_PAGE) || 1)
+  );
+  const filteredRunningCount = aiRequestLogs?.statusCounts.running ?? 0;
+  const filteredFailedCount = aiRequestLogs?.statusCounts.failed ?? 0;
+  const filteredSucceededCount = aiRequestLogs?.statusCounts.succeeded ?? 0;
 
   React.useEffect(() => {
     setLogPage(1);
   }, [logProjectFilter, logQuery, logStatusFilter, logTransportFilter]);
 
   React.useEffect(() => {
-    if (logPage > totalLogPages) {
-      setLogPage(totalLogPages);
-    }
-  }, [logPage, totalLogPages]);
+    setLogPageInput(String(logPage));
+  }, [logPage]);
 
   React.useEffect(() => {
     if (!aiRequestLogs || !props.selectedRequestLogId) {
       return;
     }
-    const stillVisible = filteredAiRequests.some((item) => item.id === props.selectedRequestLogId);
+    const stillVisible = visibleAiRequests.some((item) => item.id === props.selectedRequestLogId);
     if (!stillVisible) {
       props.onSelectRequestLog(undefined);
     }
-  }, [aiRequestLogs, filteredAiRequests, props.onSelectRequestLog, props.selectedRequestLogId]);
+  }, [aiRequestLogs, visibleAiRequests, props.onSelectRequestLog, props.selectedRequestLogId]);
 
   const handleReplay = async () => {
     if (!replaySince || replaying) {
@@ -440,6 +442,17 @@ export function RenameOpsPanel(props: {
     } finally {
       setReplaying(false);
     }
+  };
+
+  const handleLogPageJump = () => {
+    const parsed = Number(logPageInput);
+    if (!Number.isFinite(parsed)) {
+      setLogPageInput(String(logPage));
+      return;
+    }
+    const nextPage = Math.max(1, Math.min(totalLogPages, Math.trunc(parsed)));
+    setLogPage(nextPage);
+    setLogPageInput(String(nextPage));
   };
 
   const activityOption = React.useMemo(() => {
@@ -1247,14 +1260,20 @@ export function RenameOpsPanel(props: {
               <option value="openai-compatible">openai-compatible</option>
             </select>
           </label>
-          <button className="btn-sm" onClick={() => void props.onRefreshRuntime()} type="button">
+          <button
+            className="btn-sm"
+            onClick={() => {
+              void Promise.all([Promise.resolve(props.onRefreshRuntime()), loadRequestLogPage()]);
+            }}
+            type="button"
+          >
             {tt("refresh")}
           </button>
         </div>
 
         <div className="ops-log-summary-row">
           <span className="ops-log-summary-chip">
-            {inline("筛选结果", "Filtered")}: {formatUiNumber(filteredAiRequests.length, props.uiLanguage)}
+            {inline("筛选结果", "Filtered")}: {formatUiNumber(totalFilteredAiRequests, props.uiLanguage)}
           </span>
           <span className="ops-log-summary-chip">
             {inline("页码", "Page")}: {formatUiNumber(logPage, props.uiLanguage)} / {formatUiNumber(totalLogPages, props.uiLanguage)}
@@ -1271,15 +1290,18 @@ export function RenameOpsPanel(props: {
           <span className="ops-log-summary-chip">
             {inline("最近完成", "Last finished")}: {formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}
           </span>
+          {requestLogLoading ? (
+            <span className="ops-log-summary-chip">{inline("日志加载中...", "Loading logs...")}</span>
+          ) : null}
         </div>
 
-        {filteredAiRequests.length > 0 ? (
+        {totalFilteredAiRequests > 0 ? (
           <div className="ops-log-pagination">
             <span className="ops-log-pagination-copy">
               {inline("每页 10 条", "10 rows per page")} · {inline("当前显示", "Showing")}{" "}
               {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + 1, props.uiLanguage)}-
-              {formatUiNumber(Math.min(logPage * LOGS_PER_PAGE, filteredAiRequests.length), props.uiLanguage)} /{" "}
-              {formatUiNumber(filteredAiRequests.length, props.uiLanguage)}
+              {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + visibleAiRequests.length, props.uiLanguage)} /{" "}
+              {formatUiNumber(totalFilteredAiRequests, props.uiLanguage)}
             </span>
             <div className="ops-log-pagination-actions">
               <button className="btn-sm" disabled={logPage <= 1} onClick={() => setLogPage(1)} type="button">
@@ -1294,6 +1316,24 @@ export function RenameOpsPanel(props: {
               <button className="btn-sm" disabled={logPage >= totalLogPages} onClick={() => setLogPage(totalLogPages)} type="button">
                 {inline("末页", "Last")}
               </button>
+              <div className="ops-log-page-jump">
+                <input
+                  min={1}
+                  onChange={(event) => setLogPageInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleLogPageJump();
+                    }
+                  }}
+                  step={1}
+                  type="number"
+                  value={logPageInput}
+                />
+                <button className="btn-sm" onClick={handleLogPageJump} type="button">
+                  {inline("跳转", "Go")}
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
@@ -1430,14 +1470,14 @@ export function RenameOpsPanel(props: {
               </tr>
             </thead>
             <tbody>
-              {filteredAiRequests.length === 0 ? (
+              {visibleAiRequests.length === 0 ? (
                 <tr>
                   <td className="ops-log-empty" colSpan={10}>
                     {aiRequestLogs ? inline("当前筛选条件下没有日志。", "No logs matched the current filters.") : inline("还没有 AI 请求日志。", "No AI request logs yet.")}
                   </td>
                 </tr>
               ) : null}
-              {pagedAiRequests.map((item) => (
+              {visibleAiRequests.map((item) => (
                 <tr
                   className="ops-log-row"
                   data-selected={props.selectedRequestLogId === item.id ? "true" : undefined}

@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import {
+  fetchDaemonStatus,
   fetchAiRequestLogDetail,
   fetchAiRequestLogs,
   fetchAutoRenamePreview,
@@ -29,6 +30,7 @@ import type {
   AutoRenamePreviewResponse,
   ConfigDocument,
   ConfigView,
+  DaemonControlStatus,
   DoctorResponse,
   OverviewResponse,
   PromptPreviewResponse,
@@ -58,6 +60,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const [configView, setConfigView] = useState<ConfigView | null>(null);
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [daemon, setDaemon] = useState<DaemonControlStatus | null>(null);
   const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
   const [aiRequestLogDetail, setAiRequestLogDetail] = useState<AiRequestLogDetailResponse | null>(null);
   const [preview, setPreview] = useState<AutoRenamePreviewResponse | null>(null);
@@ -83,6 +86,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const providersRequestIdRef = useRef(0);
   const overviewRequestIdRef = useRef(0);
   const doctorRequestIdRef = useRef(0);
+  const daemonRequestIdRef = useRef(0);
   const aiRequestLogsRequestIdRef = useRef(0);
   const aiRequestLogDetailRequestIdRef = useRef(0);
   const previewRequestIdRef = useRef(0);
@@ -151,6 +155,15 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       return;
     }
     setDoctor(doctorPayload);
+  };
+
+  const reloadDaemon = async () => {
+    const requestId = ++daemonRequestIdRef.current;
+    const daemonPayload = await fetchDaemonStatus();
+    if (requestId !== daemonRequestIdRef.current) {
+      return;
+    }
+    setDaemon(daemonPayload);
   };
 
   const reloadAiRequestLogs = async () => {
@@ -267,6 +280,9 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     }
     if (resources.includes("doctor")) {
       tasks.push(reloadDoctor());
+    }
+    if (resources.includes("daemon")) {
+      tasks.push(reloadDaemon());
     }
     if (resources.includes("ai-request-logs")) {
       tasks.push(reloadAiRequestLogs());
@@ -395,7 +411,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       reportFailure(error);
     });
 
-    if (options.tab !== "maintenance") {
+    if (options.tab !== "maintenance" && options.tab !== "daemon") {
       return;
     }
 
@@ -516,6 +532,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     setConfigView,
     doctor,
     overview,
+    daemon,
     aiRequestLogs,
     aiRequestLogDetail,
     preview,
@@ -543,6 +560,10 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       }),
     refreshMaintenance: () =>
       loadResources(panelResourcesForTab("maintenance"), {
+        threadId: latestUiStateRef.current.selectedId
+      }),
+    refreshDaemon: () =>
+      loadResources(panelResourcesForTab("daemon"), {
         threadId: latestUiStateRef.current.selectedId
       }),
     loadResources,

@@ -4,6 +4,8 @@ import {
   applySession,
   freezeSession,
   requeueRenamesSince,
+  startDaemon,
+  stopDaemon,
   suggestSession,
   updateConfig
 } from "./api.js";
@@ -19,6 +21,7 @@ import {
 import { useControlDeckResources } from "./useControlDeckResources.js";
 import type {
   ConfigDocument,
+  DaemonControlStatus,
   RenameApplyResponse,
   RenameFreezeResponse,
   RenameSuggestResponse,
@@ -45,6 +48,7 @@ export function useControlDeckState() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<UiNotice | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [daemonActioning, setDaemonActioning] = useState<"start" | "stop" | null>(null);
 
   const setFailure = (nextError: unknown) => {
     const message = nextError instanceof Error ? nextError.message : "Unknown error";
@@ -229,6 +233,38 @@ export function useControlDeckState() {
     }
   };
 
+  const updateDaemonState = async (
+    action: "start" | "stop",
+    request: () => Promise<DaemonControlStatus>
+  ): Promise<DaemonControlStatus> => {
+    setDaemonActioning(action);
+    setError(null);
+    setNotice({
+      tone: "info",
+      text: action === "start" ? "Starting daemon..." : "Stopping daemon..."
+    });
+    try {
+      const result = await request();
+      await resources.loadResources(resources.mergeCurrentTabResources(["daemon", "overview", "preview"]), {
+        threadId: selectedId,
+        urgentPreview: true
+      });
+      setNotice({
+        tone: "success",
+        text:
+          action === "start"
+            ? `Daemon started${result.pid ? ` (pid ${result.pid})` : ""}.`
+            : "Daemon stopped."
+      });
+      return result;
+    } catch (nextError) {
+      setFailure(nextError);
+      throw nextError;
+    } finally {
+      setDaemonActioning(null);
+    }
+  };
+
   return {
     tab,
     setTab,
@@ -245,6 +281,7 @@ export function useControlDeckState() {
     configView: resources.configView,
     doctor: resources.doctor,
     overview: resources.overview,
+    daemon: resources.daemon,
     aiRequestLogs: resources.aiRequestLogs,
     aiRequestLogDetail: resources.aiRequestLogDetail,
     preview: resources.preview,
@@ -270,14 +307,18 @@ export function useControlDeckState() {
     promptPreview: resources.promptPreview,
     promptPreviewRefreshing: resources.promptPreviewRefreshing,
     savingConfig,
+    daemonActioning,
     selectedSummary: resources.selectedSummary,
     refreshSessions: resources.refreshSessions,
     refreshPreview: resources.refreshPreview,
     refreshPromptPreview: resources.refreshPromptPreview,
     refreshSettings: resources.refreshSettings,
     refreshMaintenance: resources.refreshMaintenance,
+    refreshDaemon: resources.refreshDaemon,
     saveConfig,
     replayRenamesSince,
+    startDaemon: () => updateDaemonState("start", () => startDaemon()),
+    stopDaemon: () => updateDaemonState("stop", () => stopDaemon()),
     actions: {
       suggest: () =>
         resources.detail

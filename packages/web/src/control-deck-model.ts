@@ -1,4 +1,4 @@
-export type TabId = "sessions" | "settings" | "maintenance";
+export type TabId = "sessions" | "settings" | "maintenance" | "daemon";
 export type UiNotice = {
   tone: "info" | "success" | "error";
   text: string;
@@ -9,6 +9,7 @@ export type DataResource =
   | "config"
   | "providers"
   | "overview"
+  | "daemon"
   | "doctor"
   | "ai-request-logs"
   | "preview"
@@ -35,7 +36,7 @@ function parseUrlBoolean(value: string | null, fallback: boolean): boolean {
 }
 
 function parseUrlTab(value: string | null): TabId {
-  if (value === "settings" || value === "maintenance") {
+  if (value === "settings" || value === "maintenance" || value === "daemon") {
     return value;
   }
   return "sessions";
@@ -115,6 +116,9 @@ export function panelResourcesForTab(tab: TabId): DataResource[] {
   if (tab === "maintenance") {
     return ["overview", "doctor", "ai-request-logs", "preview"];
   }
+  if (tab === "daemon") {
+    return ["overview", "daemon", "preview"];
+  }
   return [];
 }
 
@@ -134,6 +138,10 @@ export function liveRefreshResourcesForTab(
   }
   if (tab === "maintenance") {
     resources.push("overview", "doctor", "ai-request-logs");
+    return resources;
+  }
+  if (tab === "daemon") {
+    resources.push("overview", "daemon");
   }
   return resources;
 }

@@ -19,6 +19,9 @@ const SettingsPanel = React.lazy(() =>
 const RenameOpsPanel = React.lazy(() =>
   import("./RenameOpsPanel.js").then((module) => ({ default: module.RenameOpsPanel }))
 );
+const DaemonPanel = React.lazy(() =>
+  import("./DaemonPanel.js").then((module) => ({ default: module.DaemonPanel }))
+);
 
 function clampWorkspacePaneWidth(value: number): number {
   return Math.max(WORKSPACE_PANE_MIN_WIDTH, Math.min(WORKSPACE_PANE_MAX_WIDTH, value));
@@ -58,6 +61,7 @@ export function App() {
   const [sessionFocusMode, setSessionFocusMode] = React.useState(false);
   const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(() => state.tab === "settings");
   const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(() => state.tab === "maintenance");
+  const [daemonPanelLoaded, setDaemonPanelLoaded] = React.useState(() => state.tab === "daemon");
   const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
   const uiLanguage = normalizeUiLanguage(state.configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
@@ -102,6 +106,9 @@ export function App() {
     }
     if (state.tab === "maintenance") {
       setMaintenancePanelLoaded(true);
+    }
+    if (state.tab === "daemon") {
+      setDaemonPanelLoaded(true);
     }
   }, [state.tab]);
 
@@ -222,6 +229,7 @@ export function App() {
 
   const showSettingsPanel = settingsPanelLoaded || state.tab === "settings";
   const showMaintenancePanel = maintenancePanelLoaded || state.tab === "maintenance";
+  const showDaemonPanel = daemonPanelLoaded || state.tab === "daemon";
 
   return (
     <div
@@ -263,7 +271,8 @@ export function App() {
           {[
             ["sessions", tt("sessions")],
             ["settings", tt("settings")],
-            ["maintenance", tt("renameOps")]
+            ["maintenance", tt("renameOps")],
+            ["daemon", tt("daemon")]
           ].map(([id, label]) => (
             <button
               aria-current={state.tab === id ? "page" : undefined}
@@ -447,6 +456,31 @@ export function App() {
                   preview={state.preview}
                   previewRefreshing={state.previewRefreshing}
                   selectedRequestLogId={state.selectedRequestLogId}
+                  uiLanguage={uiLanguage}
+                />
+              </AppViewTransition>
+            </React.Suspense>
+          ) : null}
+        </div>
+
+        <div className="app-tab-panel" hidden={state.tab !== "daemon"}>
+          {showDaemonPanel ? (
+            <React.Suspense
+              fallback={
+                <AppViewTransition exit="slide-down">
+                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
+                </AppViewTransition>
+              }
+            >
+              <AppViewTransition default="none" enter="slide-up">
+                <DaemonPanel
+                  actioning={state.daemonActioning}
+                  daemon={state.daemon}
+                  onRefresh={() => void state.refreshDaemon()}
+                  onStart={() => void state.startDaemon()}
+                  onStop={() => void state.stopDaemon()}
+                  overview={state.overview}
+                  preview={state.preview}
                   uiLanguage={uiLanguage}
                 />
               </AppViewTransition>

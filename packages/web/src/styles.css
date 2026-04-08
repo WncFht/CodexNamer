@@ -2443,6 +2443,23 @@ pre {
   flex-wrap: wrap;
 }
 
+.ops-log-page-jump {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ops-log-page-jump input {
+  width: 96px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 9px 12px;
+  box-shadow: var(--ring-sm);
+  font-size: 14px;
+}
+
 .ops-log-summary-chip {
   display: inline-flex;
   align-items: center;
@@ -3108,5 +3125,89 @@ pre {
   .filter-input {
     min-width: 0;
     width: 100%;
+  }
+}
+
+.daemon-layout {
+  gap: 20px;
+}
+
+.daemon-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.daemon-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.daemon-grid {
+  align-items: start;
+}
+
+.daemon-command-card,
+.daemon-log-card {
+  overflow: hidden;
+}
+
+.daemon-copy {
+  line-height: 1.6;
+}
+
+.daemon-mono,
+.daemon-log code {
+  font-family: "SFMono-Regular", "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+}
+
+.daemon-error {
+  color: var(--danger);
+}
+
+.daemon-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.daemon-log-line {
+  display: grid;
+  grid-template-columns: 120px 56px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.daemon-log-line.stderr code {
+  color: var(--danger);
+}
+
+.daemon-log-time,
+.daemon-log-stream {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .daemon-hero {
+    flex-direction: column;
+  }
+
+  .daemon-actions {
+    justify-content: flex-start;
+  }
+
+  .daemon-log-line {
+    grid-template-columns: 1fr;
   }
 }
