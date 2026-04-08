@@ -32,11 +32,7 @@
 - `naming.default_style`
 - 单会话 style 切换
 
-兼容说明：
-
-- DB / DTO 里仍保留 legacy `style` 字段
-- 当前代码会继续读写这些字段以兼容旧数据
-- 但它们不再决定实际命名策略
+当前命名策略只依赖结构化字段和 `naming.builder`，不再维护旧 style 语义。
 
 ## 4. `evaluateAutoRename()`
 

@@ -96,13 +96,6 @@
 - `last_auto_apply_success_at TEXT`
 - `last_skip_reason TEXT`
 
-兼容保留但当前运行逻辑不依赖的 legacy 列：
-
-- `current_candidate_style`
-- `last_applied_style`
-- `preferred_style`
-- `manual_override`
-
 ### `rename_history`
 
 - `id INTEGER PRIMARY KEY AUTOINCREMENT`
@@ -116,10 +109,6 @@
 - `applied_at TEXT NOT NULL`
 - `applied_revision TEXT`
 - `operator TEXT`
-
-兼容保留但当前不再作为调度输入的 legacy 列：
-
-- `style`
 
 ### `ingest_cursors`
 

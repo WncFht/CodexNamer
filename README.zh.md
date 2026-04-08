@@ -175,7 +175,7 @@ npm run daemon -- --interval 60
 
 - `~/.config/codexnamer/config.toml`
 
-> 说明：默认配置与状态路径现在使用 **CodexNamer** 前缀；如果你本地已经存在旧的 `codex-session-manager` 配置或状态目录，加载器仍会继续兼容读取。
+> 说明：CodexNamer 现在只使用 `codexnamer` 前缀的配置与状态路径。
 
 最小示例：
 

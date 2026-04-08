@@ -85,7 +85,6 @@ SQLite state DB
 ### 2. builder-first 命名
 
 - 当前最终标题结构由 `naming.builder` 决定
-- `components / component_separator` 只保留兼容读取/写回
 - `brief / detailed` 不再是当前 UI / 配置的主语义
 
 ### 3. 保护态只保留 `freeze`

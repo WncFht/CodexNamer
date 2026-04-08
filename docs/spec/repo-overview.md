@@ -195,7 +195,7 @@
 ## 6. 当前行为约束
 
 - 保护态只保留 `freeze`
-- `brief / detailed` 只剩 legacy 兼容字段，不是当前配置行为
+- `brief / detailed` 已不再是当前配置行为
 - accepted official rename source 只认 `ai` 和 `manual`
 - overview 的 rename 统计按会话去重
 - 请求日志状态页每页显示 10 条，但 API 缺省页大小仍是 40

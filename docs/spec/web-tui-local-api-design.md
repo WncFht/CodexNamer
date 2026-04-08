@@ -157,12 +157,12 @@
 - `codex exec` fallback
 - Web 里的手动 rename 按钮
 
-## 7. 还保留的兼容层
+## 7. 当前实现边界
 
-尽管当前 UI 不再使用，系统里仍保留部分 legacy 字段以兼容旧数据：
+当前 UI 与 API 只围绕现行配置模型工作：
 
-- `rename_history.style`
-- `rename_state.current_candidate_style`
-- `rename_state.last_applied_style`
-- `rename_state.preferred_style`
-- `rename_state.manual_override`
+- `naming.builder`
+- `naming.tags`
+- `ai.backend`
+- `ai.provider_source`
+- `rename.auto_apply`

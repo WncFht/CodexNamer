@@ -195,14 +195,15 @@ max_concurrency = 1
 - `naming.default_style`
 - `brief / detailed` 风格切换
 
-## 兼容层
+## 已删除的旧兼容入口
 
-当前仍会兼容读取这些 legacy 字段，但它们不再是推荐入口：
+下面这些旧配置或旧语义已经不再被读取：
 
 - `rename.mode`
 - `naming.components`
 - `naming.component_separator`
-- history / state 中的 `style` 字段
+- `backend = "codex"`
+- `provider_source = "inherit-codex"`
 
 ## Settings 页现状
 

@@ -176,7 +176,7 @@ Default config path:
 
 - `~/.config/codexnamer/config.toml`
 
-> Note: the default config and state paths now use the **CodexNamer** prefix. If you already have legacy `codex-session-manager` config or state directories, the loader still reads them for compatibility.
+> Note: CodexNamer now uses only the `codexnamer` config and state prefixes.
 
 Minimal example:
 
