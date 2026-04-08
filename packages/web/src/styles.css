@@ -403,6 +403,7 @@ pre {
 
 .chat-view {
   background: var(--bg);
+  min-width: 0;
 }
 
 .view-header {
@@ -1865,6 +1866,11 @@ pre {
   flex-wrap: wrap;
 }
 
+.turn-header,
+.turn-header-left {
+  min-width: 0;
+}
+
 .session-style-bar {
   display: grid;
   gap: 10px;
@@ -1946,6 +1952,10 @@ pre {
 .chat-meta-strip {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.message-time {
+  flex-shrink: 0;
 }
 
 .session-item-title {
@@ -2038,6 +2048,7 @@ pre {
 .chat-view-shell {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -2184,6 +2195,7 @@ pre {
 .chat-messages {
   flex: 1;
   overflow: auto;
+  min-width: 0;
   padding: 16px 18px 20px;
 }
 
@@ -2196,6 +2208,7 @@ pre {
 .messages-container {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .message-turn {
@@ -2206,6 +2219,8 @@ pre {
   box-shadow: var(--shadow-sm);
   content-visibility: auto;
   contain-intrinsic-size: 172px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-turn[data-role="user"] {
@@ -2271,6 +2286,9 @@ pre {
 .turn-body {
   font-size: 13px;
   line-height: 1.58;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .transcript-highlight {
@@ -2714,6 +2732,8 @@ pre {
   font-weight: 500;
   line-height: 1.3;
   color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .history-tray {

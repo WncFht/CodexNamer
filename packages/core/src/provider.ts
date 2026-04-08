@@ -984,7 +984,7 @@ function extractChatCompletionStreamText(raw: string): string {
   return content.trim();
 }
 
-async function executeStreamingProbeRequest(
+async function executeStreamingProviderRequest(
   fetchImpl: FetchLike,
   provider: ResolvedProvider,
   config: EffectiveConfig,
@@ -1101,7 +1101,7 @@ export async function probeRenameProvider(
     ) {
       try {
         const prompt = buildRenamePrompt(probeSession, config);
-        const streamText = await executeStreamingProbeRequest(fetchImpl, provider, config, prompt);
+        const streamText = await executeStreamingProviderRequest(fetchImpl, provider, config, prompt);
         if (!streamText.trim()) {
           throw new RenameInferenceError("Model returned an empty response.", "empty-response");
         }
@@ -1177,13 +1177,26 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
         session,
         this.requestLogger
       );
-      if (!response.text.trim()) {
-        throw new RenameInferenceError("Model returned an empty response.", "empty-response");
+      let responseText = response.text;
+      let parsedModelOutput = extractFirstJsonObject(responseText);
+      const finishMetadata: Record<string, string> = {};
+
+      if (!responseText.trim() || !parsedModelOutput) {
+        const fallbackReason = !responseText.trim() ? "empty-response" : "invalid-json";
+        const streamText = await executeStreamingProviderRequest(this.fetchImpl, provider, this.config, prompt);
+        if (!streamText.trim()) {
+          throw new RenameInferenceError("Model returned an empty response.", "empty-response");
+        }
+        const streamParsedModelOutput = extractFirstJsonObject(streamText);
+        if (!streamParsedModelOutput) {
+          throw new RenameInferenceError("Model output is not valid JSON.", "invalid-json");
+        }
+        responseText = streamText;
+        parsedModelOutput = streamParsedModelOutput;
+        finishMetadata.responseMode = "sse-fallback";
+        finishMetadata.sseFallbackReason = fallbackReason;
       }
-      const parsedModelOutput = extractFirstJsonObject(response.text);
-      if (!parsedModelOutput) {
-        throw new RenameInferenceError("Model output is not valid JSON.", "invalid-json");
-      }
+
       const composed = composeAiSuggestion(parsedModelOutput, session, this.config, {
         backend: provider.requestedBackend,
         profile: provider.profileId,
@@ -1194,20 +1207,29 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
       });
       finishRequestLog(this.requestLogger, response.logContext, {
         status: "succeeded",
-        responseChars: response.text.length,
-        responseText: response.text,
+        responseChars: responseText.length,
+        responseText,
         responsePayload: response.payload,
-        result: composed.result
+        result: composed.result,
+        metadata: Object.keys(finishMetadata).length > 0 ? finishMetadata : undefined
       });
       return composed.suggestion;
     } catch (error) {
       if (response) {
+        const metadata =
+          error instanceof RenameInferenceError && (error.code === "empty-response" || error.code === "invalid-json")
+            ? {
+                responseMode: "sse-fallback-failed",
+                sseFallbackReason: error.code
+              }
+            : undefined;
         finishRequestLog(this.requestLogger, response.logContext, {
           status: "failed",
           responseChars: response.text.length,
           responseText: response.text,
           responsePayload: response.payload,
-          error: error instanceof Error ? error.message : "Unknown provider request failure."
+          error: error instanceof Error ? error.message : "Unknown provider request failure.",
+          metadata
         });
       }
       if (error instanceof RenameInferenceError) {

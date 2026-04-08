@@ -381,6 +381,89 @@ describe("provider backends", () => {
     expect(result.responseText).toContain("stream probe 成功");
   });
 
+  it("uses streaming fallback for rename when the relay returns empty non-stream text", async () => {
+    const events: Array<Record<string, unknown>> = [];
+    const service = new OpenAICompatibleRenameInferenceService(
+      buildConfigForTests({
+        ai: {
+          backend: "responses",
+          providerSource: "manual",
+          profile: "default",
+          timeoutSeconds: 10,
+          temperature: 0.2
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            requestType: "responses",
+            displayName: "default",
+            baseUrl: "http://example.test/v1",
+            model: "gpt-test",
+            apiKey: "test-key",
+            enabled: true,
+            isDefault: true
+          }
+        ]
+      }),
+      async (_url, init) => {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        if (body.stream === true) {
+          return new Response(
+            [
+              'event: response.output_text.done',
+              'data: {"type":"response.output_text.done","text":"{\\"kind\\":\\"debug\\",\\"summary\\":\\"stream rename 成功\\",\\"scope\\":\\"provider\\",\\"tagId\\":\\"provider\\"}"}',
+              ""
+            ].join("\n"),
+            {
+              status: 200,
+              headers: {
+                "content-type": "text/event-stream"
+              }
+            }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            output_text: ""
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        );
+      },
+      {
+        start(entry) {
+          events.push({ phase: "start", ...entry });
+          return 1;
+        },
+        finish(entry) {
+          events.push({ phase: "finish", ...entry });
+        }
+      }
+    );
+
+    const suggestion = await service.suggest({
+      threadId: "t-stream-fallback",
+      rolloutPath: "/tmp/r-stream.jsonl",
+      cwd: "/tmp/project",
+      projectName: "project",
+      taskCompleteCount: 1,
+      tokenTotal: 100,
+      firstUserMessage: "检查 rename SSE fallback"
+    });
+
+    expect(suggestion.name).toContain("stream rename 成功");
+    expect(events).toHaveLength(2);
+    expect(events[1]?.status).toBe("succeeded");
+    expect(events[1]?.metadata).toMatchObject({
+      responseMode: "sse-fallback",
+      sseFallbackReason: "empty-response"
+    });
+  });
+
   it("uses AI-selected tagId when structured naming mode is active", async () => {
     const service = new OpenAICompatibleRenameInferenceService(
       buildConfigForTests({

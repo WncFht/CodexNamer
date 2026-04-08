@@ -437,12 +437,19 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       }
     ) => {
       const nextTab = latestUiStateRef.current.tab;
+      const nextThreadId = refreshOptions?.threadId ?? latestUiStateRef.current.selectedId;
       const resources = liveRefreshResourcesForTab(nextTab, {
         includePromptPreview: refreshOptions?.includePromptPreview
       });
-      void loadResources(resources, {
-        threadId: refreshOptions?.threadId ?? latestUiStateRef.current.selectedId
-      }).catch(() => undefined);
+      const tasks: Array<Promise<unknown>> = [
+        loadResources(resources, {
+          threadId: nextThreadId
+        })
+      ];
+      if (nextTab === "sessions" && nextThreadId) {
+        tasks.push(reloadDetail(nextThreadId));
+      }
+      void Promise.all(tasks).catch(() => undefined);
     }
   );
 
