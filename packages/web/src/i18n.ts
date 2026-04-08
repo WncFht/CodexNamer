@@ -100,13 +100,7 @@ const COPY = {
     selectedProfile: "Selected profile",
     uiLanguage: "UI language",
     language: "Language",
-    defaultNamingStyle: "Default naming style",
-    activeNamingStyle: "Naming style",
-    preferredNamingStyle: "Preferred style",
-    officialNamingStyle: "Official style",
     followDefault: "Follow default",
-    detailed: "Detailed",
-    brief: "Brief",
     maxLength: "Max length",
     contextStrategy: "Context strategy",
     contextMaxChars: "Context max chars",
@@ -266,13 +260,7 @@ const COPY = {
     selectedProfile: "当前配置",
     uiLanguage: "界面语言",
     language: "语言",
-    defaultNamingStyle: "默认命名风格",
-    activeNamingStyle: "命名风格",
-    preferredNamingStyle: "偏好风格",
-    officialNamingStyle: "正式名称风格",
     followDefault: "跟随默认",
-    detailed: "详细",
-    brief: "简略",
     maxLength: "最大长度",
     contextStrategy: "上下文策略",
     contextMaxChars: "上下文最大字符数",
@@ -428,13 +416,6 @@ export function autoRenameReasonLabel(reason: string, language: UiLanguage): str
           missing: "Missing"
         };
   return map[reason as keyof typeof map] ?? reason;
-}
-
-export function namingStyleLabel(style: "brief" | "detailed", language: UiLanguage): string {
-  if (style === "detailed") {
-    return t(language, "detailed");
-  }
-  return t(language, "brief");
 }
 
 export function transcriptRoleLabel(role: string, language: UiLanguage): string {

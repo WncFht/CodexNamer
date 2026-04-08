@@ -497,7 +497,6 @@ function composeAiSuggestion(
     threadId: session.threadId,
     name,
     source: "ai",
-    style: "detailed",
     kind,
     summary,
     scope,

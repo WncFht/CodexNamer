@@ -12,7 +12,6 @@ import {
   type DoctorReport,
   type EffectiveConfig,
   type MaterializedSession,
-  type NamingStyle,
   type OverviewReport,
   type PromptPreview,
   type RenameHistoryRecord,
@@ -49,8 +48,6 @@ import { deepMerge, toUtcIso } from "./util.js";
 function redactSecret(value?: string): string | undefined {
   return value ? "[redacted]" : undefined;
 }
-
-const LEGACY_NAMING_STYLE: NamingStyle = "detailed";
 
 type DaemonSweepSnapshot = {
   lastSweepAt: string;
@@ -530,7 +527,6 @@ export class CodexSessionManager {
             threadId: detail.threadId,
             name: renameState?.currentCandidateName ?? "",
             source: renameState?.currentCandidateSource ?? "heuristic",
-            style: renameState?.currentCandidateStyle ?? LEGACY_NAMING_STYLE,
             kind: "chore",
             summary: renameState?.currentCandidateName ?? "",
             generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
@@ -590,7 +586,6 @@ export class CodexSessionManager {
       source: suggestion.source,
       kind: suggestion.source === "manual" ? "manual" : "auto",
       status: "preview_only",
-      style: suggestion.style,
       operator: this.operator,
       appliedAt: suggestion.generatedAt,
       appliedRevision: detail.revision,
@@ -624,7 +619,6 @@ export class CodexSessionManager {
       !result.written &&
       (renameState?.lastAppliedName !== suggestion.name ||
         renameState?.lastAppliedSource !== suggestion.source ||
-        renameState?.lastAppliedStyle !== suggestion.style ||
         renameState?.lastAppliedRevision !== detail.revision);
     const appliedAt = persistAppliedState ? toUtcIso() : result.entry.updatedAt;
     this.db.recordRename({
@@ -634,7 +628,6 @@ export class CodexSessionManager {
       kind: suggestion.source === "manual" ? "manual" : "auto",
       status: result.written ? "applied" : "skipped",
       reason: result.written ? undefined : "unchanged",
-      style: suggestion.style,
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,
@@ -652,7 +645,6 @@ export class CodexSessionManager {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
     const renameState = this.db.getRenameState(threadId);
-    const style = renameState?.lastAppliedStyle ?? LEGACY_NAMING_STYLE;
     const uniqueName = this.ensureUniqueName(name, threadId);
 
     const result = await appendSessionIndexRename({
@@ -665,7 +657,6 @@ export class CodexSessionManager {
       !result.written &&
       (renameState?.lastAppliedName !== result.entry.threadName ||
         renameState?.lastAppliedSource !== "manual" ||
-        renameState?.lastAppliedStyle !== style ||
         renameState?.lastAppliedRevision !== detail.revision);
     const appliedAt = persistAppliedState ? toUtcIso() : result.entry.updatedAt;
 
@@ -676,7 +667,6 @@ export class CodexSessionManager {
       kind: "manual",
       status: result.written ? "applied" : "skipped",
       reason: result.written ? undefined : "unchanged",
-      style,
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,

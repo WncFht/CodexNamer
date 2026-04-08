@@ -51,7 +51,6 @@ export type SessionDetail = SessionSummary & {
     oldName?: string;
     newName: string;
     source: string;
-    style: "brief" | "detailed";
     status: string;
     reason?: string;
     appliedAt: string;
@@ -488,7 +487,6 @@ export type RenameSuggestResponse = {
   threadId: string;
   name: string;
   source: string;
-  style: "brief" | "detailed";
   kind: string;
   summary: string;
   scope?: string;

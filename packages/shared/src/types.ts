@@ -12,7 +12,6 @@ export type RenameContextStrategy =
   | "assistant-only-transcript"
   | "user-transcript-last-assistant"
   | "paired-user-turns";
-export type NamingStyle = "brief" | "detailed";
 export type NamingCompositionMode = "structured" | "prompt-override";
 export type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
 export type NamingTimestampPreset =
@@ -345,7 +344,6 @@ export interface RenameSuggestion {
   threadId: string;
   name: string;
   source: RenameSource;
-  style: NamingStyle;
   kind: string;
   summary: string;
   scope?: string;
@@ -359,15 +357,12 @@ export interface RenameStateRecord {
   currentCandidateName?: string;
   currentCandidateSource?: RenameSource;
   currentCandidateGeneratedAt?: string;
-  currentCandidateStyle?: NamingStyle;
   lastAutoName?: string;
   lastManualName?: string;
   lastAppliedName?: string;
   lastAppliedSource?: RenameSource;
   lastAppliedAt?: string;
   lastAppliedRevision?: string;
-  lastAppliedStyle?: NamingStyle;
-  preferredStyle?: NamingStyle;
   dirtySinceRename: boolean;
   forceRewrite: boolean;
   frozen: boolean;
@@ -382,7 +377,6 @@ export interface RenameHistoryRecord {
   oldName?: string;
   newName: string;
   source: RenameSource;
-  style: NamingStyle;
   status: RenameStatus;
   reason?: string;
   appliedAt: string;

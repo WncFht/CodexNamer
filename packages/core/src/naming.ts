@@ -5,7 +5,6 @@ import type {
   NamingComponent,
   NamingTagDefinition,
   NamingTimestampPreset,
-  NamingStyle,
   RenameSuggestion
 } from "@codex-session-manager/shared";
 
@@ -185,7 +184,6 @@ const BUILTIN_TAG_LABELS: Record<
 };
 
 export const DEFAULT_NAMING_TIMESTAMP_PRESET: NamingTimestampPreset = "%Y-%m-%d";
-const LEGACY_NAMING_STYLE: NamingStyle = "detailed";
 
 function buildLegacyNamingBuilder(
   components: NamingComponent[] | undefined,
@@ -282,10 +280,6 @@ export function resolveNamingTag(
     const candidates = [tag.id, tag.label, resolveTagDisplayLabel(tag, language)];
     return candidates.some((candidate) => normalizeTagLookupValue(candidate) === lookup);
   });
-}
-
-export function resolveNamingStyle(_session: unknown, _config: Pick<EffectiveConfig, "naming">): NamingStyle {
-  return LEGACY_NAMING_STYLE;
 }
 
 function normalizeTaskText(value?: string): string | undefined {
@@ -775,7 +769,6 @@ export function suggestNameHeuristically(
     threadId: materialized.threadId,
     name,
     source: "heuristic",
-    style: LEGACY_NAMING_STYLE,
     kind,
     summary,
     scope,
