@@ -113,10 +113,6 @@ const NAMING_COMPONENTS = [
   "summary"
 ] as const;
 
-const DEFAULT_TIMESTAMP_PRESET = "%Y-%m-%d" satisfies NonNullable<
-  NonNullable<EffectiveConfig["naming"]["builder"]>[number] & { type: "component" }
->["format"];
-
 function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["builder"] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
