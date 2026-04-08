@@ -1,5 +1,6 @@
 import { startTransition, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
+import { parseCodexProvider, testProvider } from "./api.js";
 import { formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import {
   asRecord,
@@ -35,7 +36,8 @@ import type {
   OverviewResponse,
   PromptPreviewResponse,
   ProviderProfile,
-  ProviderResponse
+  ProviderResponse,
+  ProviderTestResponse
 } from "./types.js";
 import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
 type SettingsSectionId = "overview" | "naming" | "ai" | "scheduler" | "runtime";
@@ -482,7 +484,7 @@ function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("基础策略", "Core policy")}</p>
-              <h4>{props.text.inline("风格与语言", "Style and language")}</h4>
+              <h4>{props.text.inline("语言与长度", "Language and length")}</h4>
             </div>
           </div>
           <div className="settings-two-up">
@@ -496,17 +498,6 @@ function NamingSection(props: {
                 { value: "zh-CN", label: "中文" }
               ]}
               value={props.draft.uiLanguage}
-            />
-            <SelectField
-              label={props.text.tt("defaultNamingStyle")}
-              onChange={(value) => {
-                props.updateDraftField("namingDefaultStyle", value);
-              }}
-              options={[
-                { value: "detailed", label: props.text.tt("detailed") },
-                { value: "brief", label: props.text.tt("brief") }
-              ]}
-              value={props.draft.namingDefaultStyle}
             />
             <label className="settings-field">
               <span>{props.text.tt("language")}</span>
@@ -991,10 +982,14 @@ function NamingSection(props: {
 function AiProviderSection(props: {
   draft: SettingsDraft;
   providers: ProviderResponse | null;
+  providerTestResult: ProviderTestResponse | null;
+  providerTesting: boolean;
   configView: ConfigView;
   text: TextTools;
   updateDraftState: DraftStateUpdater;
   updateDraftField: DraftFieldUpdater;
+  onParseCodex: () => Promise<void>;
+  onTestProvider: () => Promise<void>;
 }) {
   const effective = asRecord(props.configView.effectiveConfig);
   const inheritedCodex = asRecord(effective.inheritedCodex);
@@ -1003,51 +998,59 @@ function AiProviderSection(props: {
     () => props.draft.providerProfiles.find((profile) => profile.profileId === props.draft.selectedProfileId),
     [props.draft]
   );
-  const usingExplicitProfile = props.draft.aiProviderSource === "explicit";
-  const selectedProfileLabel = usingExplicitProfile
+  const usingManualSource = props.draft.aiProviderSource === "manual";
+  const selectedProfileLabel = usingManualSource
     ? firstNonEmptyString(selectedProfile?.profileId, props.draft.aiProfile) ?? props.text.tt("nA")
-    : props.text.inline("继承 Codex", "Inherited Codex");
+    : props.text.inline("Codex 配置", "Codex config");
   const selectedBaseUrl =
     firstNonEmptyString(
-      ...(usingExplicitProfile
+      ...(usingManualSource
         ? [selectedProfile?.baseUrl, props.providers?.resolvedProvider?.baseUrl, inheritedCodex.baseUrl]
         : [props.providers?.resolvedProvider?.baseUrl, inheritedCodex.baseUrl, selectedProfile?.baseUrl])
     ) ?? props.text.tt("nA");
   const selectedModel =
     firstNonEmptyString(
-      ...(usingExplicitProfile
+      ...(usingManualSource
         ? [selectedProfile?.model, props.providers?.resolvedProvider?.model, inheritedCodex.model]
         : [props.providers?.resolvedProvider?.model, inheritedCodex.model, selectedProfile?.model])
     ) ?? props.text.tt("nA");
-  const selectedWireApi =
+  const selectedRequestType =
     firstNonEmptyString(
-      ...(usingExplicitProfile
-        ? [selectedProfile?.wireApi, props.providers?.resolvedProvider?.transport, inheritedCodex.wireApi]
-        : [props.providers?.resolvedProvider?.transport, inheritedCodex.wireApi, selectedProfile?.wireApi])
+      ...(usingManualSource
+        ? [selectedProfile?.requestType, resolvedProvider.requestType, inheritedCodex.wireApi]
+        : [resolvedProvider.requestType, inheritedCodex.wireApi, selectedProfile?.requestType])
     ) ?? props.text.tt("nA");
   const resolvedRequestedBackend = firstNonEmptyString(resolvedProvider.requestedBackend, props.draft.aiBackend) ?? props.text.tt("nA");
-  const resolvedConfiguredBackend = firstNonEmptyString(resolvedProvider.configuredBackend, props.draft.aiBackend) ?? props.text.tt("nA");
   const resolvedTransport = firstNonEmptyString(resolvedProvider.preferredTransport, resolvedProvider.transport) ?? props.text.tt("nA");
   const resolvedCredential = Boolean(resolvedProvider.hasCredential)
     ? firstNonEmptyString(resolvedProvider.credentialSource, resolvedProvider.credentialKind) ?? props.text.inline("已配置", "Configured")
     : props.text.inline("未配置", "Missing");
   const directHttpLabel = Boolean(resolvedProvider.canDirectHttp)
     ? props.text.inline("可直接 HTTP", "Direct HTTP ready")
-    : props.text.inline("需要回退", "Needs fallback");
-  const fallbackLabel = Boolean(resolvedProvider.codexFallbackEnabled)
-    ? props.text.inline("允许 codex exec 回退", "codex exec fallback enabled")
-    : props.text.inline("不启用回退", "No codex fallback");
+    : props.text.inline("配置不完整", "Configuration incomplete");
   const requestPath = [props.draft.aiBackend, props.draft.aiProviderSource, selectedProfileLabel, resolvedTransport].filter(Boolean);
   const timeoutOptions = Array.from(new Set([props.draft.aiTimeoutSeconds, "15", "30", "45", "60", "90"])).filter(Boolean);
   const temperatureOptions = Array.from(new Set([props.draft.aiTemperature, "0", "0.2", "0.4", "0.7", "1"])).filter(Boolean);
+  const sourceDetailTitle = usingManualSource
+    ? props.text.inline("手动配置", "Manual config")
+    : props.text.inline("Codex 配置", "Codex config");
+  const sourceDetailCopy = usingManualSource
+    ? props.text.inline(
+        "当来源为 `manual` 时，rename 和测试都会使用这里选中的手动配置。",
+        "When the source is `manual`, rename and provider tests use the selected manual profile here."
+      )
+    : props.text.inline(
+        "当来源为 `codex-config` 时，rename 和测试都会直接读取当前 Codex 配置与鉴权。",
+        "When the source is `codex-config`, rename and provider tests read the current Codex config and auth directly."
+      );
 
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("provider")}
       title={props.text.inline("把命名请求走向讲清楚", "Make the naming request path easy to inspect")}
       copy={props.text.inline(
-        "先决定默认路由，再看当前实际命中的 provider、凭证和回退路径。只有需要精调时，才编辑显式 profile。",
-        "Set the default route first, then inspect the provider, credentials, and fallback path actually in effect. Edit explicit profiles only when you need fine-grained control."
+        "先确定请求类型与配置来源，再看当前实际命中的 provider、凭证和连通性。这里只保留 builder + AI 路径，不再做静默回退。",
+        "Choose the request type and config source first, then inspect the provider, credentials, and connectivity actually in effect. This panel only supports the builder plus AI path, with no silent fallback."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -1055,17 +1058,17 @@ function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.tt("ai")}</p>
-              <h4>{props.text.inline("默认路由与执行参数", "Default route and execution parameters")}</h4>
+              <h4>{props.text.inline("请求类型与配置来源", "Request type and config source")}</h4>
             </div>
           </div>
           <div className="settings-two-up">
             <SelectField
-              label={props.text.tt("backend")}
+              label={props.text.tt("requestType")}
               onChange={(value) => {
                 props.updateDraftField("aiBackend", value);
               }}
               options={[
-                { value: "codex", label: "codex" },
+                { value: "responses", label: "responses" },
                 { value: "openai-compatible", label: "openai-compatible" },
                 { value: "none", label: "none" }
               ]}
@@ -1077,8 +1080,8 @@ function AiProviderSection(props: {
                 props.updateDraftField("aiProviderSource", value);
               }}
               options={[
-                { value: "inherit-codex", label: "inherit-codex" },
-                { value: "explicit", label: "explicit" }
+                { value: "codex-config", label: "codex-config" },
+                { value: "manual", label: "manual" }
               ]}
               value={props.draft.aiProviderSource as ProviderSource}
             />
@@ -1096,43 +1099,6 @@ function AiProviderSection(props: {
               ]}
               value={props.draft.aiMaxConcurrency}
             />
-            <label className="settings-field">
-              <span>{props.text.tt("activeProfile")}</span>
-              <select
-                onChange={(event) => {
-                  const nextProfileId = event.target.value;
-                  props.updateDraftState((current) => ({
-                    ...current,
-                    aiProfile: nextProfileId,
-                    selectedProfileId: nextProfileId
-                  }));
-                }}
-                value={props.draft.aiProfile}
-              >
-                {props.draft.providerProfiles.map((profile) => (
-                  <option key={profile.profileId} value={profile.profileId}>
-                    {profile.profileId}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>{props.text.tt("editProfile")}</span>
-              <select
-                onChange={(event) => {
-                  props.updateDraftField("selectedProfileId", event.target.value, {
-                    dirty: false
-                  });
-                }}
-                value={props.draft.selectedProfileId}
-              >
-                {props.draft.providerProfiles.map((profile) => (
-                  <option key={profile.profileId} value={profile.profileId}>
-                    {profile.profileId}
-                  </option>
-                ))}
-              </select>
-            </label>
             <SelectField
               label={props.text.tt("timeoutSeconds")}
               onChange={(value) => {
@@ -1149,6 +1115,20 @@ function AiProviderSection(props: {
               options={temperatureOptions.map((value) => ({ value, label: value }))}
               value={props.draft.aiTemperature}
             />
+          </div>
+          <div className="settings-action-row">
+            {usingManualSource ? (
+              <button className="btn-sm" onClick={() => void props.onParseCodex()} type="button">
+                {props.text.inline("从 Codex 配置导入当前手动配置", "Import Codex config into manual profile")}
+              </button>
+            ) : (
+              <button className="btn-sm" onClick={() => void props.onParseCodex()} type="button">
+                {props.text.inline("重新解析 Codex 配置", "Reload Codex config")}
+              </button>
+            )}
+            <button className="btn-sm primary" disabled={props.providerTesting} onClick={() => void props.onTestProvider()} type="button">
+              {props.providerTesting ? props.text.inline("测试中...", "Testing...") : props.text.inline("测试 URL + API Key", "Test URL + API key")}
+            </button>
           </div>
           <div className="settings-provider-flow">
             {requestPath.map((step, index) => (
@@ -1169,12 +1149,8 @@ function AiProviderSection(props: {
           </div>
           <dl className="settings-runtime-grid compact">
             <div>
-              <dt>{props.text.inline("请求 backend", "Requested backend")}</dt>
+              <dt>{props.text.tt("requestType")}</dt>
               <dd>{resolvedRequestedBackend}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("配置 backend", "Configured backend")}</dt>
-              <dd>{resolvedConfiguredBackend}</dd>
             </div>
             <div>
               <dt>{props.text.inline("传输方式", "Transport")}</dt>
@@ -1188,10 +1164,6 @@ function AiProviderSection(props: {
               <dt>{props.text.inline("HTTP 直连", "Direct HTTP")}</dt>
               <dd>{directHttpLabel}</dd>
             </div>
-            <div>
-              <dt>{props.text.inline("回退", "Fallback")}</dt>
-              <dd>{fallbackLabel}</dd>
-            </div>
           </dl>
         </article>
 
@@ -1204,7 +1176,7 @@ function AiProviderSection(props: {
           </div>
           <dl className="settings-runtime-grid compact">
             <div>
-              <dt>{props.text.tt("selectedProfile")}</dt>
+              <dt>{usingManualSource ? props.text.tt("selectedProfile") : props.text.inline("配置来源", "Config source")}</dt>
               <dd>{selectedProfileLabel}</dd>
             </div>
             <div>
@@ -1216,8 +1188,8 @@ function AiProviderSection(props: {
               <dd>{selectedModel}</dd>
             </div>
             <div>
-              <dt>{props.text.tt("wireApi")}</dt>
-              <dd>{selectedWireApi}</dd>
+              <dt>{props.text.tt("requestType")}</dt>
+              <dd>{selectedRequestType}</dd>
             </div>
             <div>
               <dt>{props.text.tt("providerRef")}</dt>
@@ -1234,31 +1206,96 @@ function AiProviderSection(props: {
           </details>
         </article>
 
+        <article className="settings-surface-card">
+          <div className="settings-card-header">
+            <div>
+              <p className="panel-kicker">{props.text.inline("Connectivity", "Connectivity")}</p>
+              <h4>{props.text.inline("测试结果与延迟", "Test result and latency")}</h4>
+            </div>
+          </div>
+          <dl className="settings-runtime-grid compact">
+            <div>
+              <dt>{props.text.inline("状态", "Status")}</dt>
+              <dd>
+                {props.providerTestResult
+                  ? props.providerTestResult.ok
+                    ? props.text.inline("通过", "Passed")
+                    : props.text.inline("失败", "Failed")
+                  : props.text.tt("nA")}
+              </dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("Ping", "Ping")}</dt>
+              <dd>{props.providerTestResult?.latencyMs ? `${props.providerTestResult.latencyMs} ms` : props.text.tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("测试时间", "Tested at")}</dt>
+              <dd>{props.providerTestResult?.testedAt ?? props.text.tt("nA")}</dd>
+            </div>
+            <div>
+              <dt>{props.text.inline("结果摘要", "Summary")}</dt>
+              <dd>{firstNonEmptyString(props.providerTestResult?.responseText, props.providerTestResult?.error) ?? props.text.tt("nA")}</dd>
+            </div>
+          </dl>
+        </article>
+
         <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
-              <p className="panel-kicker">{props.text.inline("Profile editor", "Profile editor")}</p>
-              <h4>{props.text.inline("显式 profile 编辑器", "Explicit profile editor")}</h4>
-              <p className="settings-copy">
-                {props.text.inline(
-                  "这里只编辑显式 profile。本区不决定当前是否启用它，真正启用入口在上面的 `provider source`。",
-                  "This section edits explicit profiles only. Whether they are active is controlled above by `provider source`."
-                )}
-              </p>
+              <p className="panel-kicker">{props.text.inline("Source detail", "Source detail")}</p>
+              <h4>{sourceDetailTitle}</h4>
+              <p className="settings-copy">{sourceDetailCopy}</p>
             </div>
           </div>
 
-          {selectedProfile ? (
+          {usingManualSource && selectedProfile ? (
             <>
               <div className="settings-provider-groups">
                 <section className="settings-provider-group">
                   <div className="settings-card-header">
                     <div>
-                      <p className="panel-kicker">{props.text.inline("Identity", "Identity")}</p>
-                      <h4>{props.text.inline("身份与来源", "Identity and source")}</h4>
+                      <p className="panel-kicker">{props.text.inline("Profile", "Profile")}</p>
+                      <h4>{props.text.inline("选择并标识手动配置", "Select and identify the manual profile")}</h4>
                     </div>
                   </div>
                   <div className="settings-two-up">
+                    <label className="settings-field">
+                      <span>{props.text.tt("activeProfile")}</span>
+                      <select
+                        onChange={(event) => {
+                          const nextProfileId = event.target.value;
+                          props.updateDraftState((current) => ({
+                            ...current,
+                            aiProfile: nextProfileId,
+                            selectedProfileId: nextProfileId
+                          }));
+                        }}
+                        value={props.draft.aiProfile}
+                      >
+                        {props.draft.providerProfiles.map((profile) => (
+                          <option key={profile.profileId} value={profile.profileId}>
+                            {profile.profileId}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="settings-field">
+                      <span>{props.text.tt("editProfile")}</span>
+                      <select
+                        onChange={(event) => {
+                          props.updateDraftField("selectedProfileId", event.target.value, {
+                            dirty: false
+                          });
+                        }}
+                        value={props.draft.selectedProfileId}
+                      >
+                        {props.draft.providerProfiles.map((profile) => (
+                          <option key={profile.profileId} value={profile.profileId}>
+                            {profile.profileId}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="settings-field">
                       <span>{props.text.tt("displayName")}</span>
                       <input
@@ -1273,38 +1310,21 @@ function AiProviderSection(props: {
                         value={selectedProfile.displayName ?? ""}
                       />
                     </label>
-                    <SelectField<NonNullable<ProviderProfile["backendKind"]>>
-                      label={props.text.tt("backendKind")}
+                    <SelectField<NonNullable<ProviderProfile["requestType"]>>
+                      label={props.text.tt("requestType")}
                       onChange={(value) => {
                         props.updateDraftState((current) => ({
                           ...current,
                           providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                            backendKind: value
+                            requestType: value
                           })
                         }));
                       }}
                       options={[
-                        { value: "openai-compatible", label: "openai-compatible" },
-                        { value: "codex", label: "codex" },
-                        { value: "none", label: "none" }
+                        { value: "responses", label: "responses" },
+                        { value: "openai-compatible", label: "openai-compatible" }
                       ]}
-                      value={selectedProfile.backendKind ?? "openai-compatible"}
-                    />
-                    <SelectField<NonNullable<ProviderProfile["providerSource"]>>
-                      label={props.text.tt("profileSource")}
-                      onChange={(value) => {
-                        props.updateDraftState((current) => ({
-                          ...current,
-                          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                            providerSource: value
-                          })
-                        }));
-                      }}
-                      options={[
-                        { value: "explicit", label: "explicit" },
-                        { value: "inherit-codex", label: "inherit-codex" }
-                      ]}
-                      value={selectedProfile.providerSource ?? "explicit"}
+                      value={selectedProfile.requestType ?? "responses"}
                     />
                     <label className="settings-field">
                       <span>{props.text.tt("providerRef")}</span>
@@ -1359,23 +1379,6 @@ function AiProviderSection(props: {
                         value={selectedProfile.model ?? ""}
                       />
                     </label>
-                    <SelectField<NonNullable<ProviderProfile["wireApi"]>>
-                      label={props.text.tt("wireApi")}
-                      onChange={(value) => {
-                        props.updateDraftState((current) => ({
-                          ...current,
-                          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                            wireApi: value
-                          })
-                        }));
-                      }}
-                      options={[
-                        { value: "auto", label: "auto" },
-                        { value: "responses", label: "responses" },
-                        { value: "chat_completions", label: "chat_completions" }
-                      ]}
-                      value={selectedProfile.wireApi ?? "auto"}
-                    />
                   </div>
                 </section>
 
@@ -1452,11 +1455,40 @@ function AiProviderSection(props: {
                 </section>
               </div>
             </>
+          ) : !usingManualSource ? (
+            <div className="settings-provider-groups">
+              <section className="settings-provider-group">
+                <div className="settings-card-header">
+                  <div>
+                    <p className="panel-kicker">{props.text.inline("Inherited provider", "Inherited provider")}</p>
+                    <h4>{props.text.inline("当前读取到的 Codex 配置", "Codex config currently in effect")}</h4>
+                  </div>
+                </div>
+                <dl className="settings-runtime-grid compact">
+                  <div>
+                    <dt>{props.text.inline("模型提供方", "Model provider")}</dt>
+                    <dd>{String(inheritedCodex.modelProvider ?? props.text.tt("nA"))}</dd>
+                  </div>
+                  <div>
+                    <dt>{props.text.tt("requestType")}</dt>
+                    <dd>{String(inheritedCodex.wireApi ?? props.text.tt("nA"))}</dd>
+                  </div>
+                  <div>
+                    <dt>{props.text.tt("baseUrl")}</dt>
+                    <dd>{String(inheritedCodex.baseUrl ?? resolvedProvider.baseUrl ?? props.text.tt("nA"))}</dd>
+                  </div>
+                  <div>
+                    <dt>{props.text.tt("model")}</dt>
+                    <dd>{String(inheritedCodex.model ?? props.text.tt("nA"))}</dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
           ) : (
             <div className="settings-empty-state">
               {props.text.inline(
-                "当前没有显式 provider profile，命名会直接使用继承的 Codex provider。",
-                "No explicit provider profile is configured. Naming falls back to the inherited Codex provider."
+                "当前没有可编辑的手动配置，请先创建或选择一个 profile。",
+                "There is no editable manual config yet. Create or select a profile first."
               )}
             </div>
           )}
@@ -1500,16 +1532,6 @@ function SchedulerSection(props: {
             value={props.draft.renameAutoApply as RenameAutoApply}
           />
           <div className="settings-checks">
-            <label className="toggle">
-              <input
-                checked={props.draft.manualOverrideWins}
-                onChange={(event) => {
-                  props.updateDraftField("manualOverrideWins", event.target.checked);
-                }}
-                type="checkbox"
-              />
-              {props.text.tt("manualOverrideWins")}
-            </label>
             <label className="toggle">
               <input
                 checked={props.draft.freezeManualName}
@@ -1827,6 +1849,8 @@ export function SettingsPanel(props: {
 }) {
   const { draft, dirty, setDirty, draftRef, updateDraftState, updateDraftField } = useSettingsDraft(props.configView);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("naming");
+  const [providerTesting, setProviderTesting] = useState(false);
+  const [providerTestResult, setProviderTestResult] = useState<ProviderTestResponse | null>(null);
   const uiLanguage = draft?.uiLanguage ?? normalizeUiLanguage(props.configView);
   const tt: Translate = (key) => t(uiLanguage, key);
   const inline: InlineText = (zh, en) => (uiLanguage === "zh-CN" ? zh : en);
@@ -1842,6 +1866,10 @@ export function SettingsPanel(props: {
   useEffect(() => {
     refreshPromptPreviewRef.current = props.onRefreshPromptPreview;
   }, [props.onRefreshPromptPreview]);
+
+  useEffect(() => {
+    setProviderTestResult(props.providers?.lastProviderTest ?? null);
+  }, [props.providers?.lastProviderTest]);
 
   useEffect(() => {
     if (!previewDraft) {
@@ -1898,9 +1926,35 @@ export function SettingsPanel(props: {
             configView={configView}
             draft={loadedDraft}
             providers={props.providers}
+            providerTestResult={providerTestResult}
+            providerTesting={providerTesting}
             text={text}
             updateDraftField={updateDraftField}
             updateDraftState={updateDraftState}
+            onParseCodex={async () => {
+              const parsed = await parseCodexProvider();
+              updateDraftState((current) => ({
+                ...current,
+                aiProviderSource: "manual",
+                aiBackend: parsed.profile.requestType ?? current.aiBackend,
+                providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+                  requestType: parsed.profile.requestType,
+                  providerRef: parsed.profile.providerRef,
+                  baseUrl: parsed.profile.baseUrl,
+                  model: parsed.profile.model,
+                  apiKey: parsed.profile.apiKey
+                })
+              }));
+            }}
+            onTestProvider={async () => {
+              setProviderTesting(true);
+              try {
+                const result = await testProvider(previewDraft ?? encodeDraft(loadedDraft));
+                setProviderTestResult(result);
+              } finally {
+                setProviderTesting(false);
+              }
+            }}
           />
         );
       case "scheduler":

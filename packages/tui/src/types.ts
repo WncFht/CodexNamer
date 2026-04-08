@@ -8,7 +8,6 @@ export type SessionSummary = {
   candidateName?: string;
   dirty: boolean;
   frozen: boolean;
-  manualOverride: boolean;
   taskCompleteCount: number;
   provider?: string;
   model?: string;
@@ -72,7 +71,6 @@ export type SessionsResponse = {
   counts: {
     dirty: number;
     frozen: number;
-    manualOverride: number;
   };
   nextCursor: string | null;
 };
@@ -123,16 +121,14 @@ export type PromptPreviewResponse = {
 
 export type ProviderProfile = {
   profileId: string;
-  backendKind?: "none" | "codex" | "openai-compatible";
+  requestType?: "responses" | "openai-compatible";
   displayName?: string;
-  providerSource?: "inherit-codex" | "explicit";
   providerRef?: string;
   baseUrl?: string;
   model?: string;
   apiKey?: string;
   apiKeyRef?: string;
   headers?: Record<string, string>;
-  wireApi?: "responses" | "chat_completions" | "auto";
   enabled?: boolean;
   isDefault?: boolean;
 };
@@ -144,7 +140,6 @@ export type ConfigDocument = {
   rename?: {
     mode?: "heuristic" | "ai" | "hybrid";
     autoApply?: "disabled" | "idle-finalize";
-    manualOverrideWins?: boolean;
     freezeManualName?: boolean;
   };
   watch?: {
@@ -159,7 +154,6 @@ export type ConfigDocument = {
   naming?: {
     preset?: string;
     template?: string;
-    defaultStyle?: "brief" | "detailed";
     maxLength?: number;
     language?: string;
     contextStrategy?:
@@ -173,8 +167,8 @@ export type ConfigDocument = {
     contextMaxChars?: number;
   };
   ai?: {
-    backend?: "none" | "codex" | "openai-compatible";
-    providerSource?: "inherit-codex" | "explicit";
+    backend?: "none" | "responses" | "openai-compatible";
+    providerSource?: "codex-config" | "manual";
     profile?: string;
     timeoutSeconds?: number;
     temperature?: number;

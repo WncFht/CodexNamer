@@ -1,4 +1,5 @@
 import type {
+  AiRequestLogDetailResponse,
   AiRequestLogResponse,
   AutoRenamePreviewResponse,
   ApiEventsResponse,
@@ -9,10 +10,10 @@ import type {
   OverviewResponse,
   PromptPreviewResponse,
   ProviderResponse,
+  ProviderTestResponse,
+  ParseCodexProviderResponse,
   RenameApplyResponse,
   RenameFreezeResponse,
-  RenameNamingStyleResponse,
-  RenameManualOverrideResponse,
   RenameReplayResult,
   RenameSuggestResponse,
   SessionDetail,
@@ -130,34 +131,10 @@ export async function applySession(threadId: string): Promise<RenameApplyRespons
   });
 }
 
-export async function setSessionNamingStyle(
-  threadId: string,
-  style: "brief" | "detailed" | "default"
-): Promise<RenameNamingStyleResponse> {
-  return requestJson<RenameNamingStyleResponse>(`/api/v1/sessions/${threadId}/naming-style`, {
-    method: "POST",
-    body: JSON.stringify({
-      style: style === "default" ? null : style
-    })
-  });
-}
-
 export async function freezeSession(threadId: string, frozen: boolean): Promise<RenameFreezeResponse> {
   return requestJson<RenameFreezeResponse>(`/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`, {
     method: "POST"
   });
-}
-
-export async function toggleManualOverride(
-  threadId: string,
-  enabled: boolean
-): Promise<RenameManualOverrideResponse> {
-  return requestJson<RenameManualOverrideResponse>(
-    `/api/v1/sessions/${threadId}/${enabled ? "manual-override" : "clear-manual-override"}`,
-    {
-      method: "POST"
-    }
-  );
 }
 
 export async function fetchProviders(): Promise<ProviderResponse> {
@@ -223,6 +200,23 @@ export async function fetchAiRequestLogs(limit = 40): Promise<AiRequestLogRespon
     url.searchParams.set("limit", String(limit));
   }
   return requestJson<AiRequestLogResponse>(url.toString());
+}
+
+export async function fetchAiRequestLogDetail(id: number): Promise<AiRequestLogDetailResponse> {
+  return requestJson<AiRequestLogDetailResponse>(`/api/v1/ai/request-logs/${id}`);
+}
+
+export async function testProvider(userConfig?: ConfigDocument): Promise<ProviderTestResponse> {
+  return requestJson<ProviderTestResponse>("/api/v1/providers/test", {
+    method: "POST",
+    body: JSON.stringify(userConfig ? { userConfig } : {})
+  });
+}
+
+export async function parseCodexProvider(): Promise<ParseCodexProviderResponse> {
+  return requestJson<ParseCodexProviderResponse>("/api/v1/providers/parse-codex", {
+    method: "POST"
+  });
 }
 
 export async function requeueRenamesSince(params: {

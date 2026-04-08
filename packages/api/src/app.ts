@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { CodexSessionManager } from "@codex-session-manager/core";
-import type { ConfigDocument, NamingStyle, SessionSummary } from "@codex-session-manager/shared";
+import type { ConfigDocument, SessionSummary } from "@codex-session-manager/shared";
 
 import { ApiEventLog } from "./event-log.js";
 
@@ -42,10 +42,6 @@ function normalizeSearchValue(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function parseNamingStyle(value: unknown): NamingStyle | undefined {
-  return value === "brief" || value === "detailed" ? value : undefined;
-}
-
 async function filterAndSortSessions(
   sessions: SessionSummary[],
   query: Record<string, unknown> | undefined,
@@ -59,7 +55,6 @@ async function filterAndSortSessions(
 ): Promise<SessionSummary[]> {
   const dirty = parseBooleanQuery(query?.dirty);
   const frozen = parseBooleanQuery(query?.frozen);
-  const manualOverride = parseBooleanQuery(query?.manualOverride);
   const status = typeof query?.status === "string" ? query.status : undefined;
   const project = normalizeSearchValue(typeof query?.project === "string" ? query.project : undefined);
   const provider = normalizeSearchValue(typeof query?.provider === "string" ? query.provider : undefined);
@@ -75,9 +70,6 @@ async function filterAndSortSessions(
       continue;
     }
     if (frozen !== undefined && item.frozen !== frozen) {
-      continue;
-    }
-    if (manualOverride !== undefined && item.manualOverride !== manualOverride) {
       continue;
     }
     if (status && item.statusEstimate !== status) {
@@ -230,8 +222,7 @@ export async function buildApiServer(options?: {
       workspaces,
       counts: {
         dirty: allSessions.filter((item) => item.dirty).length,
-        frozen: allSessions.filter((item) => item.frozen).length,
-        manualOverride: allSessions.filter((item) => item.manualOverride).length
+        frozen: allSessions.filter((item) => item.frozen).length
       },
       nextCursor: null
     };
@@ -279,6 +270,18 @@ export async function buildApiServer(options?: {
     return manager.getAiRequestLogReport(parseNumberQuery(query.limit));
   });
 
+  app.get("/api/v1/ai/request-logs/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const detail = manager.getAiRequestLogDetail(Number(params.id));
+    if (!detail) {
+      return reply.status(404).send({
+        error: "not_found",
+        message: `Unknown request log: ${params.id}`
+      });
+    }
+    return detail;
+  });
+
   app.get("/api/v1/overview", async () => manager.overview());
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
@@ -318,39 +321,23 @@ export async function buildApiServer(options?: {
 
   app.post("/api/v1/sessions/:id/suggest", async (request) => {
     const params = request.params as { id: string };
-    const body = (request.body as { style?: string } | undefined) ?? {};
-    const suggestion = await manager.suggest(params.id, {
-      style: parseNamingStyle(body.style)
-    });
+    const suggestion = await manager.suggest(params.id);
     eventLog.publish("session.suggested", {
       threadId: params.id,
       name: suggestion.name,
-      source: suggestion.source,
-      style: suggestion.style
+      source: suggestion.source
     });
     return suggestion;
   });
 
   app.post("/api/v1/sessions/:id/apply", async (request) => {
     const params = request.params as { id: string };
-    const body = (request.body as { style?: string } | undefined) ?? {};
-    const result = await manager.apply(params.id, {
-      style: parseNamingStyle(body.style)
-    });
+    const result = await manager.apply(params.id);
     eventLog.publish("session.applied", {
       threadId: params.id,
       name: result.name,
       written: result.written
     });
-    return result;
-  });
-
-  app.post("/api/v1/sessions/:id/naming-style", async (request) => {
-    const params = request.params as { id: string };
-    const body = (request.body as { style?: string | null } | undefined) ?? {};
-    const style = body.style == null || body.style === "default" ? undefined : parseNamingStyle(body.style);
-    const result = await manager.setNamingStyle(params.id, style);
-    eventLog.publish("session.naming_style.changed", result as unknown as Record<string, unknown>);
     return result;
   });
 
@@ -389,26 +376,6 @@ export async function buildApiServer(options?: {
     return { threadId: params.id, frozen: false };
   });
 
-  app.post("/api/v1/sessions/:id/manual-override", async (request) => {
-    const params = request.params as { id: string };
-    await manager.setManualOverride(params.id);
-    eventLog.publish("session.manual_override.changed", {
-      threadId: params.id,
-      manualOverride: true
-    });
-    return { threadId: params.id, manualOverride: true };
-  });
-
-  app.post("/api/v1/sessions/:id/clear-manual-override", async (request) => {
-    const params = request.params as { id: string };
-    await manager.clearManualOverride(params.id);
-    eventLog.publish("session.manual_override.changed", {
-      threadId: params.id,
-      manualOverride: false
-    });
-    return { threadId: params.id, manualOverride: false };
-  });
-
   app.post("/api/v1/sessions/batch/suggest", async () => ({
     items: await manager.batchApplyDirty({ previewOnly: true })
   }));
@@ -442,14 +409,17 @@ export async function buildApiServer(options?: {
       ai: config.ai,
       providerProfiles: config.providerProfiles,
       inheritedCodex: config.inheritedCodex,
-      resolvedProvider: config.resolvedProvider
+      resolvedProvider: config.resolvedProvider,
+      lastProviderTest: config.lastProviderTest
     };
   });
 
   app.post("/api/v1/providers/test", async (request) => {
-    const body = (request.body as { threadId?: string } | undefined) ?? {};
-    return manager.testProvider({ threadId: body.threadId });
+    const body = (request.body as { userConfig?: ConfigDocument } | undefined) ?? {};
+    return manager.testProvider({ userConfig: body.userConfig });
   });
+
+  app.post("/api/v1/providers/parse-codex", async () => manager.parseCodexProviderConfig());
 
   app.get("/api/v1/config", async () => manager.getConfigView());
 

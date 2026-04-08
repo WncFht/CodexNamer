@@ -7,7 +7,6 @@ export type SettingsDraft = {
   namingPreset: string;
   namingTemplate: string;
   namingLanguage: string;
-  namingDefaultStyle: "brief" | "detailed";
   namingMaxLength: string;
   namingContextStrategy: string;
   namingContextMaxChars: string;
@@ -21,7 +20,6 @@ export type SettingsDraft = {
   }>;
   namingCustomPrompt: string;
   renameAutoApply: string;
-  manualOverrideWins: boolean;
   freezeManualName: boolean;
   scanIntervalSeconds: string;
   candidateIdleSeconds: string;
@@ -44,8 +42,8 @@ export type SettingsDraft = {
 };
 
 export type RenameAutoApply = "disabled" | "idle-finalize";
-export type AiBackend = "none" | "codex" | "openai-compatible";
-export type ProviderSource = "inherit-codex" | "explicit";
+export type AiBackend = "none" | "responses" | "openai-compatible";
+export type ProviderSource = "codex-config" | "manual";
 export type NamingCompositionMode = "structured" | "prompt-override";
 export type RenameContextStrategy =
   | "summary-signals"
@@ -249,22 +247,14 @@ function normalizeProfile(raw: unknown): ProviderProfile {
   const record = asRecord(raw);
   return {
     profileId: asString(record.profileId, "default"),
-    backendKind: (asString(
-      record.backendKind || record.backend_kind,
-      "openai-compatible"
-    ) as ProviderProfile["backendKind"]) ?? "openai-compatible",
+    requestType: (asString(record.requestType || record.request_type, "responses") as ProviderProfile["requestType"]) ?? "responses",
     displayName: asString(record.displayName || record.display_name),
-    providerSource: (asString(
-      record.providerSource || record.provider_source,
-      "explicit"
-    ) as ProviderProfile["providerSource"]) ?? "explicit",
     providerRef: asString(record.providerRef || record.provider_ref),
     baseUrl: asString(record.baseUrl || record.base_url),
     model: asString(record.model),
     apiKey: asString(record.apiKey || record.api_key),
     apiKeyRef: asString(record.apiKeyRef || record.api_key_ref),
     headers: (record.headers as Record<string, string> | undefined) ?? {},
-    wireApi: (asString(record.wireApi || record.wire_api, "auto") as ProviderProfile["wireApi"]) ?? "auto",
     enabled: asBoolean(record.enabled, true),
     isDefault: asBoolean(record.isDefault || record.is_default, false)
   };
@@ -291,7 +281,6 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
     namingPreset: asString(naming.preset, "conventional"),
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
     namingLanguage: asString(naming.language, "zh-CN"),
-    namingDefaultStyle: asString(naming.defaultStyle || naming.default_style, "detailed") as "brief" | "detailed",
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
     namingContextStrategy: asString(naming.contextStrategy || naming.context_strategy, "summary-signals"),
     namingContextMaxChars: asNumberString(naming.contextMaxChars || naming.context_max_chars, "8000"),
@@ -303,7 +292,6 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
     namingTags: normalizeNamingTags(naming.tags),
     namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
-    manualOverrideWins: asBoolean(rename.manualOverrideWins || rename.manual_override_wins, true),
     freezeManualName: asBoolean(rename.freezeManualName || rename.freeze_manual_name, true),
     scanIntervalSeconds: asNumberString(watch.scanIntervalSeconds || watch.scan_interval_seconds, "300"),
     candidateIdleSeconds: asNumberString(watch.candidateIdleSeconds || watch.candidate_idle_seconds, "120"),
@@ -318,8 +306,8 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
       watch.maxAutoRenamesPerSession || watch.max_auto_renames_per_session,
       "2"
     ),
-    aiBackend: asString(ai.backend, "codex"),
-    aiProviderSource: asString(ai.providerSource || ai.provider_source, "inherit-codex"),
+    aiBackend: asString(ai.backend, "responses"),
+    aiProviderSource: asString(ai.providerSource || ai.provider_source, "codex-config"),
     aiProfile: asString(ai.profile, selectedProfileId),
     aiTimeoutSeconds: asNumberString(ai.timeoutSeconds || ai.timeout_seconds, "45"),
     aiTemperature: asNumberString(ai.temperature, "0.2"),
@@ -385,7 +373,6 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
     },
     rename: {
       autoApply: draft.renameAutoApply as RenameAutoApply,
-      manualOverrideWins: draft.manualOverrideWins,
       freezeManualName: draft.freezeManualName
     },
     watch: {
@@ -401,7 +388,6 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
       preset: stripEmptyString(draft.namingPreset),
       template: stripEmptyString(draft.namingTemplate),
       language: stripEmptyString(draft.namingLanguage),
-      defaultStyle: draft.namingDefaultStyle,
       maxLength: parseNumber(draft.namingMaxLength),
       contextStrategy: stripEmptyString(draft.namingContextStrategy) as RenameContextStrategy | undefined,
       contextMaxChars: parseNumber(draft.namingContextMaxChars),
@@ -445,16 +431,14 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
     },
     providerProfiles: draft.providerProfiles.map((profile) => ({
       profileId: profile.profileId,
-      backendKind: profile.backendKind,
+      requestType: profile.requestType,
       displayName: stripEmptyString(profile.displayName ?? ""),
-      providerSource: profile.providerSource,
       providerRef: stripEmptyString(profile.providerRef ?? ""),
       baseUrl: stripEmptyString(profile.baseUrl ?? ""),
       model: stripEmptyString(profile.model ?? ""),
       apiKey: stripEmptyString(profile.apiKey ?? ""),
       apiKeyRef: stripEmptyString(profile.apiKeyRef ?? ""),
       headers: profile.headers,
-      wireApi: profile.wireApi,
       enabled: profile.enabled,
       isDefault: profile.isDefault
     }))

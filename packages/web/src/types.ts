@@ -10,16 +10,10 @@ export type SessionSummary = {
   candidateName?: string;
   dirty: boolean;
   frozen: boolean;
-  manualOverride: boolean;
   taskCompleteCount: number;
   provider?: string;
   model?: string;
   statusEstimate?: string;
-  preferredNamingStyle?: "brief" | "detailed";
-  effectiveNamingStyle?: "brief" | "detailed";
-  officialNamingStyle?: "brief" | "detailed";
-  candidateNamingStyle?: "brief" | "detailed";
-  defaultNamingStyle?: "brief" | "detailed";
 };
 
 export type SessionDetail = SessionSummary & {
@@ -101,7 +95,6 @@ export type SessionsResponse = {
     sessionCount: number;
     dirtyCount: number;
     frozenCount: number;
-    manualOverrideCount: number;
     latestUpdatedAt?: string;
     projects: string[];
   }>;
@@ -109,7 +102,6 @@ export type SessionsResponse = {
   counts: {
     dirty: number;
     frozen: number;
-    manualOverride: number;
   };
   nextCursor: string | null;
 };
@@ -119,6 +111,14 @@ export type ProviderResponse = {
   providerProfiles: Array<Record<string, unknown>>;
   inheritedCodex: Record<string, unknown>;
   resolvedProvider: Record<string, unknown>;
+  lastProviderTest?: {
+    ok: boolean;
+    testedAt: string;
+    latencyMs?: number;
+    diagnostics: Record<string, unknown>;
+    responseText?: string;
+    error?: string;
+  };
 };
 
 export type OverviewResponse = {
@@ -128,7 +128,6 @@ export type OverviewResponse = {
     dirty: number;
     clean: number;
     frozen: number;
-    manualOverride: number;
     named: number;
     withCandidate: number;
   };
@@ -217,16 +216,14 @@ export type OverviewResponse = {
 
 export type ProviderProfile = {
   profileId: string;
-  backendKind?: "none" | "codex" | "openai-compatible";
+  requestType?: "responses" | "openai-compatible";
   displayName?: string;
-  providerSource?: "inherit-codex" | "explicit";
   providerRef?: string;
   baseUrl?: string;
   model?: string;
   apiKey?: string;
   apiKeyRef?: string;
   headers?: Record<string, string>;
-  wireApi?: "responses" | "chat_completions" | "auto";
   enabled?: boolean;
   isDefault?: boolean;
 };
@@ -240,7 +237,6 @@ export type ConfigDocument = {
   rename?: {
     mode?: "heuristic" | "ai" | "hybrid";
     autoApply?: "disabled" | "idle-finalize";
-    manualOverrideWins?: boolean;
     freezeManualName?: boolean;
   };
   watch?: {
@@ -257,7 +253,6 @@ export type ConfigDocument = {
     template?: string;
     maxLength?: number;
     language?: string;
-    defaultStyle?: "brief" | "detailed";
     contextStrategy?:
       | "summary-signals"
       | "last-user-last-assistant"
@@ -290,8 +285,8 @@ export type ConfigDocument = {
     customPrompt?: string;
   };
   ai?: {
-    backend?: "none" | "codex" | "openai-compatible";
-    providerSource?: "inherit-codex" | "explicit";
+    backend?: "none" | "responses" | "openai-compatible";
+    providerSource?: "codex-config" | "manual";
     profile?: string;
     timeoutSeconds?: number;
     temperature?: number;
@@ -383,8 +378,8 @@ export type AiRequestLogResponse = {
     id: number;
     threadId: string;
     projectName?: string;
-    backend: "codex" | "openai-compatible";
-    transport: "responses" | "chat_completions" | "codex-exec";
+    backend: "responses" | "openai-compatible";
+    transport: "responses" | "openai-compatible";
     status: "running" | "succeeded" | "failed";
     startedAt: string;
     finishedAt?: string;
@@ -396,6 +391,54 @@ export type AiRequestLogResponse = {
     error?: string;
     metadata?: Record<string, string>;
   }>;
+};
+
+export type AiRequestLogDetailResponse = AiRequestLogResponse["items"][number] & {
+  promptText?: string;
+  requestPayload?: Record<string, unknown>;
+  responseText?: string;
+  responsePayload?: Record<string, unknown>;
+  result?: {
+    parsedModelOutput?: Record<string, unknown>;
+    finalSuggestion?: RenameSuggestResponse;
+    composition?: {
+      mode: "structured" | "prompt-override";
+      builder: Array<
+        | {
+            type: "component";
+            component: "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
+            format?: "%Y/%m/%d" | "%Y-%m-%d" | "%m/%d" | "%m-%d" | "%Y/%m/%d %H:%M" | "%H:%M";
+          }
+        | {
+            type: "separator";
+            value: string;
+          }
+      >;
+      explicitName?: string;
+      tagLabel?: string;
+      finalName: string;
+    };
+  };
+};
+
+export type ProviderTestResponse = {
+  ok: boolean;
+  testedAt: string;
+  latencyMs?: number;
+  diagnostics: Record<string, unknown>;
+  responseText?: string;
+  error?: string;
+};
+
+export type ParseCodexProviderResponse = {
+  source: "codex-config";
+  profile: {
+    requestType?: "responses" | "openai-compatible";
+    providerRef?: string;
+    baseUrl?: string;
+    model?: string;
+    apiKey?: string;
+  };
 };
 
 export type ApiEventsResponse = {
@@ -424,20 +467,9 @@ export type RenameApplyResponse = {
   name: string;
 };
 
-export type RenameNamingStyleResponse = {
-  threadId: string;
-  preferredStyle?: "brief" | "detailed";
-  effectiveStyle: "brief" | "detailed";
-};
-
 export type RenameFreezeResponse = {
   threadId: string;
   frozen: boolean;
-};
-
-export type RenameManualOverrideResponse = {
-  threadId: string;
-  manualOverride: boolean;
 };
 
 export type ConfigUpdateResponse = {

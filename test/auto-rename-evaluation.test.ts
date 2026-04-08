@@ -14,7 +14,6 @@ function makeDetail(overrides?: Partial<SessionDetail>): SessionDetail {
     candidateName: undefined,
     dirty: true,
     frozen: false,
-    manualOverride: false,
     taskCompleteCount: 2,
     provider: "OpenAI",
     model: "gpt-5.4",
@@ -37,7 +36,6 @@ function makeRenameState(overrides?: Partial<RenameStateRecord>): RenameStateRec
   return {
     threadId: "thread-eval",
     dirtySinceRename: true,
-    manualOverride: false,
     frozen: false,
     autoApplyCount: 0,
     ...overrides
@@ -91,7 +89,7 @@ describe("auto rename evaluation", () => {
     expect(evaluation.reason).toBe("finalize_ready");
   });
 
-  it("returns guard reasons before apply when cooldown or manual protection is active", () => {
+  it("returns guard reasons before apply when cooldown or freeze is active", () => {
     const config = buildConfigForTests({
       watch: {
         scanIntervalSeconds: 300,
@@ -113,17 +111,11 @@ describe("auto rename evaluation", () => {
     expect(cooldownEvaluation.action).toBe("skip");
     expect(cooldownEvaluation.reason).toBe("rename_cooldown");
 
-    const manualEvaluation = evaluateAutoRename(
-      makeDetail({
-        manualOverride: true
-      }),
-      config,
-      {
-        now: new Date("2026-04-04T12:10:00.000Z"),
-        renameState: makeRenameState()
-      }
-    );
-    expect(manualEvaluation.action).toBe("skip");
-    expect(manualEvaluation.reason).toBe("manual_override");
+    const frozenEvaluation = evaluateAutoRename(makeDetail({ frozen: true }), config, {
+      now: new Date("2026-04-04T12:10:00.000Z"),
+      renameState: makeRenameState()
+    });
+    expect(frozenEvaluation.action).toBe("skip");
+    expect(frozenEvaluation.reason).toBe("frozen");
   });
 });

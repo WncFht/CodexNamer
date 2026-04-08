@@ -26,7 +26,6 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        manualOverride: false,
         taskCompleteCount: 1
       },
       {
@@ -36,7 +35,6 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        manualOverride: false,
         taskCompleteCount: 1
       },
       {
@@ -46,7 +44,6 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        manualOverride: false,
         taskCompleteCount: 1
       },
       {
@@ -56,7 +53,6 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        manualOverride: false,
         taskCompleteCount: 1
       }
     ]);
@@ -74,7 +70,6 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: false,
         frozen: false,
-        manualOverride: false,
         taskCompleteCount: 0
       })
     ).toBe("Official");
@@ -90,7 +85,6 @@ describe("browser-utils", () => {
       workspaceLabel: "w",
       dirty: false,
       frozen: false,
-      manualOverride: false,
       taskCompleteCount: 0
     };
 

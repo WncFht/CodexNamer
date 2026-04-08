@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
 import { autoRenameReasonLabel, autoRenameStatusLabel, formatUiNumber, t, type UiLanguage } from "./i18n.js";
-import type { AiRequestLogResponse, AutoRenamePreviewResponse, DoctorResponse, OverviewResponse } from "./types.js";
+import type { AiRequestLogDetailResponse, AiRequestLogResponse, AutoRenamePreviewResponse, DoctorResponse, OverviewResponse } from "./types.js";
 
 type ChartTheme = {
   text: string;
@@ -263,12 +263,7 @@ function reasonTone(reason: string): "warning" | "manual" | "success" {
   if (reason === "candidate_ready" || reason === "finalize_ready") {
     return "success";
   }
-  if (
-    reason === "manual_override" ||
-    reason === "frozen" ||
-    reason === "max_auto_renames_reached" ||
-    reason === "rename_cooldown"
-  ) {
+  if (reason === "frozen" || reason === "max_auto_renames_reached" || reason === "rename_cooldown") {
     return "manual";
   }
   return "warning";
@@ -276,11 +271,14 @@ function reasonTone(reason: string): "warning" | "manual" | "success" {
 
 export function RenameOpsPanel(props: {
   aiRequestLogs: AiRequestLogResponse | null;
+  aiRequestLogDetail: AiRequestLogDetailResponse | null;
   overview: OverviewResponse | null;
   preview: AutoRenamePreviewResponse | null;
   previewRefreshing: boolean;
   doctor: DoctorResponse | null;
   uiLanguage: UiLanguage;
+  selectedRequestLogId?: number;
+  onSelectRequestLog: (id?: number) => void;
   onRefreshRuntime: () => void | Promise<void>;
   onRefreshPreview: (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => void | Promise<void>;
   onReplayRenames: (params: {
@@ -290,7 +288,7 @@ export function RenameOpsPanel(props: {
 }) {
   const [logQuery, setLogQuery] = React.useState("");
   const [logStatusFilter, setLogStatusFilter] = React.useState<"all" | "running" | "succeeded" | "failed">("all");
-  const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "chat_completions" | "codex-exec">("all");
+  const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "openai-compatible">("all");
   const [replaySince, setReplaySince] = React.useState("");
   const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const [replaying, setReplaying] = React.useState(false);
@@ -335,7 +333,7 @@ export function RenameOpsPanel(props: {
       title: autoRenameStatusLabel("skip", props.uiLanguage),
       count: previewSkipCount,
       tone: "warning" as const,
-      copy: inline("被活跃中、冻结、手动覆盖或冷却等保护条件挡住。", "Blocked by guards such as active updates, frozen state, manual override, or cooldown.")
+      copy: inline("被活跃中、冻结或冷却等保护条件挡住。", "Blocked by guards such as active updates, frozen state, or cooldown.")
     },
     {
       key: "suggest",
@@ -1183,15 +1181,14 @@ export function RenameOpsPanel(props: {
             <select
               onChange={(event) =>
                 setLogTransportFilter(
-                  event.target.value as "all" | "responses" | "chat_completions" | "codex-exec"
+                  event.target.value as "all" | "responses" | "openai-compatible"
                 )
               }
               value={logTransportFilter}
             >
               <option value="all">{inline("全部", "All")}</option>
               <option value="responses">responses</option>
-              <option value="chat_completions">chat_completions</option>
-              <option value="codex-exec">codex-exec</option>
+              <option value="openai-compatible">openai-compatible</option>
             </select>
           </label>
           <button className="btn-sm" onClick={() => void props.onRefreshRuntime()} type="button">
@@ -1216,6 +1213,54 @@ export function RenameOpsPanel(props: {
             {inline("最近完成", "Last finished")}: {formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}
           </span>
         </div>
+
+        {props.aiRequestLogDetail ? (
+          <div className="detail-panel">
+            <div className="panel-topline">
+              <div>
+                <p className="panel-kicker">AI Trace</p>
+                <h3>{inline("请求详情", "Request detail")}</h3>
+              </div>
+              <button className="btn-sm" onClick={() => props.onSelectRequestLog(undefined)} type="button">
+                {inline("返回日志列表", "Back to logs")}
+              </button>
+            </div>
+            <dl className="settings-runtime-grid compact">
+              <div>
+                <dt>Thread</dt>
+                <dd>{props.aiRequestLogDetail.threadId}</dd>
+              </div>
+              <div>
+                <dt>{inline("状态", "Status")}</dt>
+                <dd>{aiRequestStatusLabel(props.aiRequestLogDetail.status, props.uiLanguage)}</dd>
+              </div>
+              <div>
+                <dt>{inline("请求类型", "Request type")}</dt>
+                <dd>{props.aiRequestLogDetail.transport}</dd>
+              </div>
+              <div>
+                <dt>{inline("最终标题", "Final name")}</dt>
+                <dd>{props.aiRequestLogDetail.result?.composition?.finalName ?? noDataLabel}</dd>
+              </div>
+            </dl>
+            <details className="settings-disclosure" open>
+              <summary>{inline("Prompt 输入", "Prompt input")}</summary>
+              <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.promptText ?? noDataLabel}</pre>
+            </details>
+            <details className="settings-disclosure" open>
+              <summary>{inline("模型原始输出", "Raw model output")}</summary>
+              <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.responseText ?? noDataLabel}</pre>
+            </details>
+            <details className="settings-disclosure" open>
+              <summary>{inline("解析后的结构化结果", "Parsed structured result")}</summary>
+              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.result?.parsedModelOutput ?? {}, null, 2)}</pre>
+            </details>
+            <details className="settings-disclosure" open>
+              <summary>{inline("Builder 到最终标题", "Builder to final title")}</summary>
+              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.result?.composition ?? {}, null, 2)}</pre>
+            </details>
+          </div>
+        ) : null}
 
         <div className="ops-log-table-container">
           <table className="ops-log-table">
@@ -1242,7 +1287,12 @@ export function RenameOpsPanel(props: {
                 </tr>
               ) : null}
               {filteredAiRequests.map((item) => (
-                <tr className="ops-log-row" data-status={item.status} key={item.id}>
+                <tr
+                  className="ops-log-row"
+                  data-status={item.status}
+                  key={item.id}
+                  onClick={() => props.onSelectRequestLog(item.id)}
+                >
                   <td className="ops-log-col-time">
                     <div className="ops-log-primary ops-log-nowrap" title={item.startedAt}>{formatWhen(item.startedAt, props.uiLanguage)}</div>
                     <div className="ops-log-secondary ops-log-nowrap" title={item.finishedAt ?? ""}>{formatWhen(item.finishedAt, props.uiLanguage)}</div>

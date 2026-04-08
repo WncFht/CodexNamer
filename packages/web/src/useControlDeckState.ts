@@ -4,9 +4,6 @@ import {
   applySession,
   freezeSession,
   requeueRenamesSince,
-  setSessionNamingStyle,
-  suggestSession,
-  toggleManualOverride,
   updateConfig
 } from "./api.js";
 import {
@@ -23,9 +20,6 @@ import type {
   ConfigDocument,
   RenameApplyResponse,
   RenameFreezeResponse,
-  RenameNamingStyleResponse,
-  RenameManualOverrideResponse,
-  RenameSuggestResponse,
   SessionDetail,
   SessionSummary
 } from "./types.js";
@@ -40,6 +34,7 @@ export function useControlDeckState() {
   const [tab, setTab] = useState<TabId>(initialUiState.tab);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(initialUiState.selectedWorkspaceId);
   const [selectedId, setSelectedId] = useState<string | undefined>(initialUiState.selectedId);
+  const [selectedRequestLogId, setSelectedRequestLogId] = useState<number | undefined>(initialUiState.selectedRequestLogId);
   const [search, setSearch] = useState(initialUiState.search);
   const [dirtyOnly, setDirtyOnly] = useState(initialUiState.dirtyOnly);
   const [showHiddenTranscript, setShowHiddenTranscript] = useState(initialUiState.showHiddenTranscript);
@@ -64,6 +59,7 @@ export function useControlDeckState() {
     dirtyOnly,
     selectedWorkspaceId,
     selectedId,
+    selectedRequestLogId,
     onSelectSession: setSelectedId,
     onSelectWorkspace: setSelectedWorkspaceId,
     onFailure: setFailure
@@ -77,9 +73,10 @@ export function useControlDeckState() {
       dirtyOnly,
       showHiddenTranscript,
       selectedWorkspaceId,
-      selectedId
+      selectedId,
+      selectedRequestLogId
     });
-  }, [dirtyOnly, search, selectedId, selectedWorkspaceId, showHiddenTranscript, tab]);
+  }, [dirtyOnly, search, selectedId, selectedRequestLogId, selectedWorkspaceId, showHiddenTranscript, tab]);
 
   useEffect(() => {
     setError(null);
@@ -91,6 +88,7 @@ export function useControlDeckState() {
       setTab(nextState.tab);
       setSelectedWorkspaceId(nextState.selectedWorkspaceId);
       setSelectedId(nextState.selectedId);
+      setSelectedRequestLogId(nextState.selectedRequestLogId);
       setDirtyOnly(nextState.dirtyOnly);
       setShowHiddenTranscript(nextState.showHiddenTranscript);
       startTransition(() => {
@@ -238,12 +236,15 @@ export function useControlDeckState() {
     setSelectedWorkspaceId,
     selectedId,
     setSelectedId,
+    selectedRequestLogId,
+    setSelectedRequestLogId,
     detail: resources.detail,
     providers: resources.providers,
     configView: resources.configView,
     doctor: resources.doctor,
     overview: resources.overview,
     aiRequestLogs: resources.aiRequestLogs,
+    aiRequestLogDetail: resources.aiRequestLogDetail,
     preview: resources.preview,
     search,
     setSearch: (value: string) => {
@@ -276,21 +277,6 @@ export function useControlDeckState() {
     saveConfig,
     replayRenamesSince,
     actions: {
-      suggest: () =>
-        resources.detail
-          ? runAction<RenameSuggestResponse>({
-              threadId: resources.detail.threadId,
-              actionName: "Suggesting name",
-              action: () => suggestSession(resources.detail!.threadId),
-              onSuccess: (result) => ({
-                message: `Suggested: ${result.name}`,
-                patch: {
-                  candidateName: result.name,
-                  dirty: true
-                }
-              })
-            })
-          : Promise.resolve(),
       apply: () =>
         resources.detail
           ? runAction<RenameApplyResponse>({
@@ -317,43 +303,6 @@ export function useControlDeckState() {
                 message: result.frozen ? "Session frozen" : "Session unfrozen",
                 patch: {
                   frozen: result.frozen
-                }
-              })
-            })
-          : Promise.resolve(),
-      toggleManualOverride: () =>
-        resources.detail
-          ? runAction<RenameManualOverrideResponse>({
-              threadId: resources.detail.threadId,
-              actionName: resources.detail.manualOverride ? "Clearing manual override" : "Enabling manual override",
-              action: () => toggleManualOverride(resources.detail!.threadId, !resources.detail!.manualOverride),
-              onSuccess: (result) => ({
-                message: result.manualOverride ? "Manual override enabled" : "Manual override cleared",
-                patch: {
-                  manualOverride: result.manualOverride
-                }
-              })
-            })
-          : Promise.resolve(),
-      setNamingStyle: (style: "brief" | "detailed" | "default") =>
-        resources.detail
-          ? runAction<RenameNamingStyleResponse>({
-              threadId: resources.detail.threadId,
-              actionName: "Updating naming style",
-              action: () => setSessionNamingStyle(resources.detail!.threadId, style),
-              onSuccess: (result) => ({
-                message:
-                  style === "default"
-                    ? "Session now follows the default naming style"
-                    : `Session naming style set to ${result.effectiveStyle}`,
-                patch: {
-                  preferredNamingStyle: result.preferredStyle,
-                  effectiveNamingStyle: result.effectiveStyle,
-                  candidateName:
-                    resources.detail?.candidateNamingStyle &&
-                    resources.detail.candidateNamingStyle !== result.effectiveStyle
-                      ? undefined
-                      : resources.detail?.candidateName
                 }
               })
             })

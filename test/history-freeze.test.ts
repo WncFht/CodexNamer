@@ -15,7 +15,7 @@ describe("history and state commands", () => {
     managers.length = 0;
   });
 
-  it("stores rename history and toggles freeze/manual override", async () => {
+  it("stores rename history and toggles freeze", async () => {
     const workspace = await createTempWorkspace();
     const threadId = "thread-history";
     await writeRolloutFixture({
@@ -34,19 +34,15 @@ describe("history and state commands", () => {
 
     await manager.rename(threadId, "manual title");
     await manager.freeze(threadId);
-    await manager.setManualOverride(threadId);
 
     const detail = await manager.getSessionDetail(threadId);
     expect(detail?.frozen).toBe(true);
-    expect(detail?.manualOverride).toBe(true);
     expect(detail?.renameHistory?.[0]?.newName).toBe("manual title");
 
     await manager.unfreeze(threadId);
-    await manager.clearManualOverride(threadId);
 
     const updated = await manager.getSessionDetail(threadId);
     expect(updated?.frozen).toBe(false);
-    expect(updated?.manualOverride).toBe(false);
   });
 
   it("deduplicates repeated unchanged rename history entries", async () => {

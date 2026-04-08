@@ -135,28 +135,6 @@ cli
   });
 
 cli
-  .command("manual-override", "Mark a session as manually controlled")
-  .option("--id <threadId>", "Thread id")
-  .action(async (options: IdOptions) => {
-    if (!options.id) {
-      throw new Error("--id is required");
-    }
-    await withManager((manager) => manager.setManualOverride(options.id!));
-    console.log(JSON.stringify({ threadId: options.id, manualOverride: true }, null, 2));
-  });
-
-cli
-  .command("clear-manual-override", "Clear manual override state for a session")
-  .option("--id <threadId>", "Thread id")
-  .action(async (options: IdOptions) => {
-    if (!options.id) {
-      throw new Error("--id is required");
-    }
-    await withManager((manager) => manager.clearManualOverride(options.id!));
-    console.log(JSON.stringify({ threadId: options.id, manualOverride: false }, null, 2));
-  });
-
-cli
   .command("batch-apply", "Apply renames to a batch of sessions")
   .option("--dirty", "Process dirty sessions")
   .option("--preview", "Preview only")
@@ -197,9 +175,8 @@ cli
 
 cli
   .command("provider-test", "Test current provider/backend configuration")
-  .option("--id <threadId>", "Use a real session instead of a synthetic test session")
-  .action(async (options: IdOptions) => {
-    const result = await withManager((manager) => manager.testProvider({ threadId: options.id }));
+  .action(async () => {
+    const result = await withManager((manager) => manager.testProvider());
     console.log(JSON.stringify(result, null, 2));
   });
 

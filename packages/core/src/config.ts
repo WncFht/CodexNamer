@@ -61,6 +61,44 @@ function getStringArray(record: Record<string, unknown>, ...keys: string[]): str
   return undefined;
 }
 
+function normalizeProviderSource(value: string | undefined): EffectiveConfig["ai"]["providerSource"] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (value === "manual") {
+    return "manual";
+  }
+  if (value === "codex-config") {
+    return "codex-config";
+  }
+  return undefined;
+}
+
+function normalizeWireApi(
+  value: string | undefined
+): EffectiveConfig["providerProfiles"][number]["requestType"] | EffectiveConfig["inheritedCodex"]["providers"][string]["wireApi"] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (value === "responses") {
+    return "responses";
+  }
+  if (value === "openai-compatible") {
+    return "openai-compatible";
+  }
+  return undefined;
+}
+
+function normalizeAiBackend(value: string | undefined): EffectiveConfig["ai"]["backend"] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (value === "none") {
+    return "none";
+  }
+  return normalizeWireApi(value) as EffectiveConfig["ai"]["backend"] | undefined;
+}
+
 function normalizeNamingTags(value: unknown): EffectiveConfig["naming"]["tags"] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -256,7 +294,6 @@ const DEFAULT_CONFIG: EffectiveConfig = {
   rename: {
     mode: "hybrid",
     autoApply: "idle-finalize",
-    manualOverrideWins: true,
     freezeManualName: true
   },
   watch: {
@@ -267,7 +304,6 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     template: "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
     maxLength: 72,
     language: "zh-CN",
-    defaultStyle: "detailed",
     contextStrategy: "summary-signals",
     contextMaxChars: 8_000,
     compositionMode: "structured",
@@ -284,8 +320,8 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     customPrompt: undefined
   },
   ai: {
-    backend: "codex",
-    providerSource: "inherit-codex",
+    backend: "responses",
+    providerSource: "codex-config",
     profile: "default",
     timeoutSeconds: 45,
     temperature: 0.2,
@@ -294,9 +330,8 @@ const DEFAULT_CONFIG: EffectiveConfig = {
   providerProfiles: [
     {
       profileId: "default",
-      backendKind: "openai-compatible",
+      requestType: "responses",
       displayName: "Default",
-      providerSource: "inherit-codex",
       apiKey: undefined,
       enabled: true,
       isDefault: true
@@ -340,28 +375,14 @@ function normalizeProviderProfileRecords(records: Record<string, unknown>): Effe
     const record = value as Record<string, unknown>;
     return {
       profileId,
-      backendKind:
-        (getString(record, "backend_kind", "backendKind") as EffectiveConfig["ai"]["backend"] | undefined) ??
-        "openai-compatible",
+      requestType: normalizeWireApi(getString(record, "request_type", "requestType")) ?? "responses",
       displayName: getString(record, "display_name", "displayName") ?? profileId,
-      providerSource:
-        (getString(
-          record,
-          "provider_source",
-          "providerSource"
-        ) as EffectiveConfig["ai"]["providerSource"] | undefined) ?? "explicit",
       providerRef: getString(record, "provider_ref", "providerRef"),
       baseUrl: getString(record, "base_url", "baseUrl"),
       model: getString(record, "model"),
       apiKey: getString(record, "api_key", "apiKey"),
       apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
       headers: (record.headers as Record<string, string> | undefined) ?? {},
-      wireApi:
-        (getString(record, "wire_api", "wireApi") as
-          | "responses"
-          | "chat_completions"
-          | "auto"
-          | undefined) ?? "auto",
       enabled: getBoolean(record, "enabled") ?? true,
       isDefault: getBoolean(record, "is_default", "isDefault") ?? profileId === "default"
     };
@@ -384,31 +405,17 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
         .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
         .map((record) => ({
           profileId: getString(record, "profile_id", "profileId") ?? "default",
-          backendKind:
-            (getString(record, "backend_kind", "backendKind") as EffectiveConfig["ai"]["backend"] | undefined) ??
-            "openai-compatible",
+          requestType: normalizeWireApi(getString(record, "request_type", "requestType")) ?? "responses",
           displayName:
             getString(record, "display_name", "displayName") ??
             getString(record, "profile_id", "profileId") ??
             "default",
-          providerSource:
-            (getString(
-              record,
-              "provider_source",
-              "providerSource"
-            ) as EffectiveConfig["ai"]["providerSource"] | undefined) ?? "explicit",
           providerRef: getString(record, "provider_ref", "providerRef"),
           baseUrl: getString(record, "base_url", "baseUrl"),
           model: getString(record, "model"),
           apiKey: getString(record, "api_key", "apiKey"),
           apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
           headers: (record.headers as Record<string, string> | undefined) ?? {},
-          wireApi:
-            (getString(record, "wire_api", "wireApi") as
-              | "responses"
-              | "chat_completions"
-              | "auto"
-              | undefined) ?? "auto",
           enabled: getBoolean(record, "enabled") ?? true,
           isDefault: getBoolean(record, "is_default", "isDefault") ?? false
         }))
@@ -425,7 +432,6 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       autoApply: getString(rename, "auto_apply", "autoApply") as
         | EffectiveConfig["rename"]["autoApply"]
         | undefined,
-      manualOverrideWins: getBoolean(rename, "manual_override_wins", "manualOverrideWins"),
       freezeManualName: getBoolean(rename, "freeze_manual_name", "freezeManualName")
     },
     watch: {
@@ -446,11 +452,6 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       template: getString(naming, "template"),
       maxLength: getNumber(naming, "max_length", "maxLength"),
       language: getString(naming, "language"),
-      defaultStyle: getString(
-        naming,
-        "default_style",
-        "defaultStyle"
-      ) as EffectiveConfig["naming"]["defaultStyle"] | undefined,
       contextStrategy: getString(
         naming,
         "context_strategy",
@@ -469,10 +470,8 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       customPrompt: getString(naming, "custom_prompt", "customPrompt")
     },
     ai: {
-      backend: getString(ai, "backend") as EffectiveConfig["ai"]["backend"] | undefined,
-      providerSource: getString(ai, "provider_source", "providerSource") as
-        | EffectiveConfig["ai"]["providerSource"]
-        | undefined,
+      backend: normalizeAiBackend(getString(ai, "backend")),
+      providerSource: normalizeProviderSource(getString(ai, "provider_source", "providerSource")),
       profile: getString(ai, "profile"),
       timeoutSeconds: getNumber(ai, "timeout_seconds", "timeoutSeconds"),
       temperature: getNumber(ai, "temperature"),
@@ -569,16 +568,14 @@ function serializeConfigDocument(document: ConfigDocument): string {
   const providerTable: Record<string, Record<string, unknown>> = {};
   for (const profile of document.providerProfiles ?? []) {
     const encoded = stripEmptyRecord({
-      backend_kind: profile.backendKind,
+      request_type: profile.requestType,
       display_name: profile.displayName,
-      provider_source: profile.providerSource,
       provider_ref: profile.providerRef,
       base_url: profile.baseUrl,
       model: profile.model,
       api_key: profile.apiKey,
       api_key_ref: profile.apiKeyRef,
       headers: profile.headers,
-      wire_api: profile.wireApi,
       enabled: profile.enabled,
       is_default: profile.isDefault
     });
@@ -596,7 +593,6 @@ function serializeConfigDocument(document: ConfigDocument): string {
     rename: stripEmptyRecord({
       mode: document.rename?.mode,
       auto_apply: document.rename?.autoApply,
-      manual_override_wins: document.rename?.manualOverrideWins,
       freeze_manual_name: document.rename?.freezeManualName
     }),
     watch: stripEmptyRecord({
@@ -613,7 +609,6 @@ function serializeConfigDocument(document: ConfigDocument): string {
       template: document.naming?.template,
       max_length: document.naming?.maxLength,
       language: document.naming?.language,
-      default_style: document.naming?.defaultStyle,
       context_strategy: document.naming?.contextStrategy,
       context_max_chars: document.naming?.contextMaxChars,
       composition_mode: document.naming?.compositionMode,
@@ -793,7 +788,7 @@ async function loadCodexInheritedConfig(codexHome: string): Promise<EffectiveCon
       name: (record.name as string | undefined) ?? providerKey,
       baseUrl: record.base_url as string | undefined,
       wireApi:
-        (record.wire_api as "responses" | "chat_completions" | "auto" | undefined) ?? "auto",
+        normalizeWireApi(record.wire_api as string | undefined) ?? "responses",
       apiKeyEnv:
         (record.api_key_env as string | undefined) ??
         (record.env_key as string | undefined) ??

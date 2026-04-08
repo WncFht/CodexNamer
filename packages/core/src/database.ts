@@ -4,15 +4,18 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import type {
   AiBackend,
+  AiRequestLogDetail,
   AiRequestLogRecord,
   AiRequestLogReport,
   AiRequestStatus,
   AiRequestTransport,
+  EffectiveConfig,
   MaterializedSession,
   NamingStyle,
   OverviewReport,
   RenameHistoryRecord,
   RenameHistoryKind,
+  RenameSuggestion,
   RenameSource,
   RenameStateRecord,
   SessionDetail,
@@ -55,7 +58,6 @@ type SessionRow = {
   last_applied_revision: string | null;
   last_applied_at: string | null;
   preferred_style: string | null;
-  manual_override: number | null;
   frozen: number | null;
 };
 
@@ -179,7 +181,12 @@ export class StateDatabase {
         base_url TEXT,
         model TEXT,
         prompt_chars INTEGER,
+        prompt_text TEXT,
+        request_payload_json TEXT,
         response_chars INTEGER,
+        response_text TEXT,
+        response_payload_json TEXT,
+        result_json TEXT,
         error TEXT,
         metadata_json TEXT
       );
@@ -192,6 +199,11 @@ export class StateDatabase {
     this.ensureColumn("rename_state", "preferred_style", "TEXT");
     this.ensureColumn("rename_state", "force_rewrite", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("rename_history", "style", "TEXT");
+    this.ensureColumn("ai_request_logs", "prompt_text", "TEXT");
+    this.ensureColumn("ai_request_logs", "request_payload_json", "TEXT");
+    this.ensureColumn("ai_request_logs", "response_text", "TEXT");
+    this.ensureColumn("ai_request_logs", "response_payload_json", "TEXT");
+    this.ensureColumn("ai_request_logs", "result_json", "TEXT");
     this.db.exec(`
       UPDATE rename_state
       SET current_candidate_style = COALESCE(current_candidate_style, 'brief')
@@ -404,21 +416,6 @@ export class StateDatabase {
           )
           .run(entry.threadName, entry.updatedAt, entry.id);
 
-        const state = this.getRenameState(entry.id);
-        if (!state) {
-          continue;
-        }
-
-        const manualOverrideDetected =
-          Boolean(state.lastAppliedName) &&
-          entry.threadName !== state.lastAppliedName &&
-          entry.threadName !== state.currentCandidateName;
-
-        if (manualOverrideDetected) {
-          this.db
-            .prepare(`UPDATE rename_state SET manual_override = 1 WHERE thread_id = ?`)
-            .run(entry.id);
-        }
       }
     });
 
@@ -450,7 +447,6 @@ export class StateDatabase {
       preferredStyle: normalizeNamingStyle(row.preferred_style),
       dirtySinceRename: toBoolean(row.dirty_since_rename as number | null),
       forceRewrite: toBoolean(row.force_rewrite as number | null),
-      manualOverride: toBoolean(row.manual_override as number | null),
       frozen: toBoolean(row.frozen as number | null),
       autoApplyCount: Number(row.auto_apply_count ?? 0),
       lastAutoApplyAttemptAt: (row.last_auto_apply_attempt_at as string | null) ?? undefined,
@@ -533,7 +529,6 @@ export class StateDatabase {
     operator: string;
     appliedAt: string;
     appliedRevision?: string;
-    manualOverride?: boolean;
     autoApply?: boolean;
     persistAppliedState?: boolean;
   }): void {
@@ -583,9 +578,9 @@ export class StateDatabase {
           .prepare(
             `INSERT INTO rename_state (
               thread_id, last_applied_name, last_applied_source, last_applied_at,
-              last_applied_style, last_applied_revision, dirty_since_rename, force_rewrite, manual_override, auto_apply_count,
+              last_applied_style, last_applied_revision, dirty_since_rename, force_rewrite, auto_apply_count,
               last_auto_name, last_manual_name, last_auto_apply_success_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
             ON CONFLICT(thread_id) DO UPDATE SET
               last_applied_name = excluded.last_applied_name,
               last_applied_source = excluded.last_applied_source,
@@ -594,7 +589,6 @@ export class StateDatabase {
               last_applied_revision = excluded.last_applied_revision,
               dirty_since_rename = 0,
               force_rewrite = 0,
-              manual_override = excluded.manual_override,
               auto_apply_count = excluded.auto_apply_count,
               last_auto_name = excluded.last_auto_name,
               last_manual_name = excluded.last_manual_name,
@@ -607,10 +601,9 @@ export class StateDatabase {
             params.appliedAt,
             params.style,
             params.appliedRevision ?? null,
-            params.manualOverride ? 1 : 0,
             params.autoApply ? (previous?.autoApplyCount ?? 0) + 1 : previous?.autoApplyCount ?? 0,
             params.autoApply ? params.newName : previous?.lastAutoName ?? null,
-            params.manualOverride ? params.newName : previous?.lastManualName ?? null,
+            params.source === "manual" ? params.newName : previous?.lastManualName ?? null,
             params.autoApply ? params.appliedAt : previous?.lastAutoApplySuccessAt ?? null
           );
 
@@ -638,8 +631,7 @@ export class StateDatabase {
       .prepare(
         `SELECT s.thread_id, s.cwd, s.project_name, s.first_user_message, s.updated_at, s.latest_official_name,
                 s.model_provider, s.model, s.task_complete_count, s.status_estimate,
-                rs.current_candidate_name, rs.current_candidate_style, rs.last_applied_style, rs.preferred_style,
-                rs.last_applied_revision, rs.manual_override, rs.frozen, rs.force_rewrite,
+                rs.current_candidate_name, rs.last_applied_revision, rs.frozen, rs.force_rewrite,
                 rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -663,15 +655,10 @@ export class StateDatabase {
         candidateName: (row.current_candidate_name as string | null) ?? undefined,
         dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null),
         frozen: toBoolean(row.frozen as number | null),
-        manualOverride: toBoolean(row.manual_override as number | null),
         taskCompleteCount: Number(row.task_complete_count ?? 0),
         provider: (row.model_provider as string | null) ?? undefined,
         model: (row.model as string | null) ?? undefined,
-        statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined,
-        preferredNamingStyle: normalizeNamingStyle(row.preferred_style),
-        effectiveNamingStyle: normalizeNamingStyle(row.preferred_style),
-        officialNamingStyle: normalizeNamingStyle(row.last_applied_style),
-        candidateNamingStyle: normalizeNamingStyle(row.current_candidate_style)
+        statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined
       }))
       .filter((row) => (filters?.dirty === undefined ? true : row.dirty === filters.dirty));
   }
@@ -685,7 +672,6 @@ export class StateDatabase {
         existing.sessionCount += 1;
         existing.dirtyCount += session.dirty ? 1 : 0;
         existing.frozenCount += session.frozen ? 1 : 0;
-        existing.manualOverrideCount += session.manualOverride ? 1 : 0;
         if (session.projectName && !existing.projects.includes(session.projectName)) {
           existing.projects.push(session.projectName);
         }
@@ -702,7 +688,6 @@ export class StateDatabase {
         sessionCount: 1,
         dirtyCount: session.dirty ? 1 : 0,
         frozenCount: session.frozen ? 1 : 0,
-        manualOverrideCount: session.manualOverride ? 1 : 0,
         latestUpdatedAt: session.updatedAt,
         projects: session.projectName ? [session.projectName] : []
       });
@@ -719,9 +704,9 @@ export class StateDatabase {
         `SELECT s.thread_id, s.rollout_path, s.cwd, s.project_name, s.created_at, s.updated_at,
                 s.model_provider, s.model, s.first_user_message, s.last_user_message,
                 s.last_agent_message, s.task_complete_count, s.token_total, s.latest_official_name,
-                s.status_estimate, sr.current_revision, rs.current_candidate_name, rs.current_candidate_style,
-                rs.last_applied_at, rs.last_applied_style, rs.preferred_style,
-                rs.last_applied_revision, rs.manual_override, rs.frozen, rs.force_rewrite, rs.dirty_since_rename
+                s.status_estimate, sr.current_revision, rs.current_candidate_name,
+                rs.last_applied_at,
+                rs.last_applied_revision, rs.frozen, rs.force_rewrite, rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN session_revisions sr ON sr.thread_id = s.thread_id
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -746,7 +731,6 @@ export class StateDatabase {
       candidateName: row.current_candidate_name ?? undefined,
       dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null),
       frozen: toBoolean(row.frozen as number | null),
-      manualOverride: toBoolean(row.manual_override as number | null),
       taskCompleteCount: row.task_complete_count,
       provider: row.model_provider ?? undefined,
       model: row.model ?? undefined,
@@ -757,11 +741,7 @@ export class StateDatabase {
       tokenTotal: row.token_total,
       revision: row.current_revision ?? undefined,
       lastAppliedAt: row.last_applied_at ?? undefined,
-      lastAppliedRevision: row.last_applied_revision ?? undefined,
-      preferredNamingStyle: normalizeNamingStyle(row.preferred_style),
-      effectiveNamingStyle: normalizeNamingStyle(row.preferred_style),
-      officialNamingStyle: normalizeNamingStyle(row.last_applied_style),
-      candidateNamingStyle: normalizeNamingStyle(row.current_candidate_style)
+      lastAppliedRevision: row.last_applied_revision ?? undefined
     };
   }
 
@@ -819,13 +799,16 @@ export class StateDatabase {
     baseUrl?: string;
     model?: string;
     promptChars?: number;
+    promptText?: string;
+    requestPayload?: Record<string, unknown>;
     metadata?: Record<string, string>;
   }): number {
     const result = this.db
       .prepare(
         `INSERT INTO ai_request_logs (
-          thread_id, project_name, backend, transport, status, started_at, base_url, model, prompt_chars, metadata_json
-        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`
+          thread_id, project_name, backend, transport, status, started_at, base_url, model, prompt_chars, prompt_text,
+          request_payload_json, metadata_json
+        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         params.threadId,
@@ -836,6 +819,8 @@ export class StateDatabase {
         params.baseUrl ?? null,
         params.model ?? null,
         params.promptChars ?? null,
+        params.promptText ?? null,
+        params.requestPayload ? JSON.stringify(params.requestPayload) : null,
         params.metadata ? JSON.stringify(params.metadata) : null
       );
 
@@ -848,6 +833,19 @@ export class StateDatabase {
     finishedAt: string;
     durationMs: number;
     responseChars?: number;
+    responseText?: string;
+    responsePayload?: Record<string, unknown>;
+    result?: {
+      parsedModelOutput?: Record<string, unknown>;
+      finalSuggestion?: RenameSuggestion;
+      composition?: {
+        mode: EffectiveConfig["naming"]["compositionMode"];
+        builder: EffectiveConfig["naming"]["builder"];
+        explicitName?: string;
+        tagLabel?: string;
+        finalName: string;
+      };
+    };
     error?: string;
     metadata?: Record<string, string>;
   }): void {
@@ -866,7 +864,8 @@ export class StateDatabase {
     this.db
       .prepare(
         `UPDATE ai_request_logs
-         SET status = ?, finished_at = ?, duration_ms = ?, response_chars = ?, error = ?, metadata_json = ?
+         SET status = ?, finished_at = ?, duration_ms = ?, response_chars = ?, response_text = ?, response_payload_json = ?,
+             result_json = ?, error = ?, metadata_json = ?
          WHERE id = ?`
       )
       .run(
@@ -874,6 +873,9 @@ export class StateDatabase {
         params.finishedAt,
         Math.max(0, Math.trunc(params.durationMs)),
         params.responseChars ?? null,
+        params.responseText ?? null,
+        params.responsePayload ? JSON.stringify(params.responsePayload) : null,
+        params.result ? JSON.stringify(params.result) : null,
         params.error ?? null,
         Object.keys(mergedMetadata).length > 0 ? JSON.stringify(mergedMetadata) : null,
         params.id
@@ -929,6 +931,59 @@ export class StateDatabase {
             ? (JSON.parse(row.metadata_json) as Record<string, string>)
             : undefined
       }))
+      };
+  }
+
+  getAiRequestLogDetail(id: number): AiRequestLogDetail | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, thread_id, project_name, backend, transport, status, started_at, finished_at, duration_ms,
+                base_url, model, prompt_chars, prompt_text, request_payload_json, response_chars, response_text,
+                response_payload_json, result_json, error, metadata_json
+         FROM ai_request_logs
+         WHERE id = ?`
+      )
+      .get(id) as Record<string, unknown> | undefined;
+    if (!row) {
+      return undefined;
+    }
+
+    return {
+      id: Number(row.id ?? 0),
+      threadId: (row.thread_id as string | null) ?? "",
+      projectName: (row.project_name as string | null) ?? undefined,
+      backend: row.backend as AiRequestLogRecord["backend"],
+      transport: row.transport as AiRequestTransport,
+      status: row.status as AiRequestStatus,
+      startedAt: (row.started_at as string | null) ?? "",
+      finishedAt: (row.finished_at as string | null) ?? undefined,
+      durationMs:
+        typeof row.duration_ms === "number" ? row.duration_ms : Number.isFinite(Number(row.duration_ms)) ? Number(row.duration_ms) : undefined,
+      baseUrl: (row.base_url as string | null) ?? undefined,
+      model: (row.model as string | null) ?? undefined,
+      promptChars:
+        typeof row.prompt_chars === "number" ? row.prompt_chars : Number.isFinite(Number(row.prompt_chars)) ? Number(row.prompt_chars) : undefined,
+      promptText: (row.prompt_text as string | null) ?? undefined,
+      requestPayload:
+        typeof row.request_payload_json === "string" && row.request_payload_json
+          ? (JSON.parse(row.request_payload_json) as Record<string, unknown>)
+          : undefined,
+      responseChars:
+        typeof row.response_chars === "number" ? row.response_chars : Number.isFinite(Number(row.response_chars)) ? Number(row.response_chars) : undefined,
+      responseText: (row.response_text as string | null) ?? undefined,
+      responsePayload:
+        typeof row.response_payload_json === "string" && row.response_payload_json
+          ? (JSON.parse(row.response_payload_json) as Record<string, unknown>)
+          : undefined,
+      result:
+        typeof row.result_json === "string" && row.result_json
+          ? (JSON.parse(row.result_json) as AiRequestLogDetail["result"])
+          : undefined,
+      error: (row.error as string | null) ?? undefined,
+      metadata:
+        typeof row.metadata_json === "string" && row.metadata_json
+          ? (JSON.parse(row.metadata_json) as Record<string, string>)
+          : undefined
     };
   }
 
@@ -1141,7 +1196,6 @@ export class StateDatabase {
         dirty: sessions.filter((item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId)).length,
         clean: sessions.filter((item) => !item.dirty && !nonAcceptedNamedThreadIds.has(item.threadId)).length,
         frozen: sessions.filter((item) => item.frozen).length,
-        manualOverride: sessions.filter((item) => item.manualOverride).length,
         named: sessions.filter((item) => Boolean(item.officialName) && !nonAcceptedNamedThreadIds.has(item.threadId)).length,
         withCandidate: sessions.filter((item) => Boolean(item.candidateName)).length
       },
@@ -1207,16 +1261,6 @@ export class StateDatabase {
          ON CONFLICT(thread_id) DO UPDATE SET frozen = excluded.frozen`
       )
       .run(threadId, frozen ? 1 : 0);
-  }
-
-  setManualOverride(threadId: string, manualOverride: boolean): void {
-    this.db
-      .prepare(
-        `INSERT INTO rename_state (thread_id, manual_override)
-         VALUES (?, ?)
-         ON CONFLICT(thread_id) DO UPDATE SET manual_override = excluded.manual_override`
-      )
-      .run(threadId, manualOverride ? 1 : 0);
   }
 
   queueRenameReplaySince(params: {

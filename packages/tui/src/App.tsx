@@ -196,7 +196,6 @@ function SessionRow(props: {
         ? inLanguage(props.uiLanguage, "dirty", "dirty")
         : inLanguage(props.uiLanguage, "clean", "clean"),
       props.session.frozen ? inLanguage(props.uiLanguage, "冻结", "frozen") : null,
-      props.session.manualOverride ? inLanguage(props.uiLanguage, "手动覆盖", "manual") : null,
       props.session.statusEstimate ? sessionStatusLabel(props.session.statusEstimate, props.uiLanguage) : null
     ]
       .filter(Boolean)
@@ -601,7 +600,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             ? { model: value }
             : key === "providerApiKey"
               ? { apiKey: value }
-              : { wireApi: value as ProviderProfile["wireApi"] };
+              : { requestType: value as ProviderProfile["requestType"] };
       setSettingsDraft({
         ...settingsDraft,
         providerProfiles: updateSelectedProfile(settingsDraft.providerProfiles, settingsDraft.selectedProfileId, patch)
@@ -966,18 +965,6 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       return;
     }
 
-    if (input === "m" && detail) {
-      void runAction(
-        () => client.setManualOverride(detail.threadId, !detail.manualOverride),
-        inLanguage(
-          uiLanguage,
-          `${detail.manualOverride ? "已清除手动覆盖" : "已启用手动覆盖"} ${truncateDisplayText(detail.threadId, 12)}`,
-          `${detail.manualOverride ? "Cleared manual override for" : "Enabled manual override for"} ${truncateDisplayText(detail.threadId, 12)}`
-        )
-      );
-      return;
-    }
-
     if (input === "A") {
       setLoading(true);
       setError(null);
@@ -1132,8 +1119,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               `${inLanguage(uiLanguage, "更新于", "updated")} ${formatUiWhen(detail?.updatedAt, uiLanguage)}`,
               `${detail?.tokenTotal ?? 0} tokens`,
               detail?.dirty ? inLanguage(uiLanguage, "dirty", "dirty") : inLanguage(uiLanguage, "clean", "clean"),
-              detail?.frozen ? inLanguage(uiLanguage, "冻结", "frozen") : null,
-              detail?.manualOverride ? inLanguage(uiLanguage, "手动覆盖", "manual") : null
+              detail?.frozen ? inLanguage(uiLanguage, "冻结", "frozen") : null
             ]
               .filter(Boolean)
               .join(" | "),
@@ -1298,7 +1284,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           {truncateDisplayText(`model: ${selectedProfile?.model ?? tt("nA")}`, layout.detailInnerWidth)}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`wireApi: ${selectedProfile?.wireApi ?? tt("nA")}`, layout.detailInnerWidth)}
+          {truncateDisplayText(`requestType: ${selectedProfile?.requestType ?? tt("nA")}`, layout.detailInnerWidth)}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(`${tt("resolved")}: ${resolvedProviderSummary}`, layout.detailInnerWidth)}
@@ -1503,8 +1489,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               {fitDisplayLine(
                 inLanguage(
                   uiLanguage,
-                  "/ 搜索  r 重命名  s 建议  a 应用  f 冻结  m 手动覆盖  p 预览  A 批量应用  q 退出",
-                  "/ search  r rename  s suggest  a apply  f freeze  m manual  p preview  A batch  q quit"
+                  "/ 搜索  r 重命名  s 建议  a 应用  f 冻结  p 预览  A 批量应用  q 退出",
+                  "/ search  r rename  s suggest  a apply  f freeze  p preview  A batch  q quit"
                 ),
                 layout.columns - 2,
                 ""

@@ -67,7 +67,6 @@ export function autoRenameStatusLabel(status: string, language: UiLanguage): str
 
 export function autoRenameReasonLabel(reason: string, language: UiLanguage): string {
   const zhMap: Record<string, string> = {
-    manual_override: "手动覆盖保护",
     frozen: "已冻结",
     max_auto_renames_reached: "已达到自动重命名上限",
     rename_cooldown: "处于重命名冷却期",
@@ -81,7 +80,6 @@ export function autoRenameReasonLabel(reason: string, language: UiLanguage): str
     missing: "会话缺失"
   };
   const enMap: Record<string, string> = {
-    manual_override: "Manual Override",
     frozen: "Frozen",
     max_auto_renames_reached: "Max Auto Renames Reached",
     rename_cooldown: "Rename Cooldown",

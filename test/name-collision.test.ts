@@ -80,8 +80,8 @@ describe("rename name collision handling", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       ai: {
-        backend: "codex",
-        providerSource: "inherit-codex",
+        backend: "responses",
+        providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
         temperature: 0.2
@@ -112,7 +112,6 @@ describe("rename name collision handling", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:00.000Z",
-        manualOverride: true,
         autoApply: false
       });
       manager.db.recordRename({
@@ -124,7 +123,6 @@ describe("rename name collision handling", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:01.000Z",
-        manualOverride: true,
         autoApply: false
       });
 

@@ -386,10 +386,8 @@ export function App() {
               onToggleSessionPane={toggleSessionPane}
               onSessionPaneWidthChange={adjustSessionPaneWidth}
               onStartSessionResize={startSessionResize}
-              onSuggest={() => state.actions.suggest()}
               onApply={() => state.actions.apply()}
               onToggleFreeze={() => state.actions.toggleFreeze()}
-              onToggleManualOverride={() => state.actions.toggleManualOverride()}
             />
           ) : null}
         </div>
@@ -438,13 +436,16 @@ export function App() {
               <AppViewTransition default="none" enter="slide-up">
                 <RenameOpsPanel
                   aiRequestLogs={state.aiRequestLogs}
+                  aiRequestLogDetail={state.aiRequestLogDetail}
                   doctor={state.doctor}
                   onReplayRenames={(params) => state.replayRenamesSince(params)}
                   onRefreshRuntime={() => state.refreshMaintenance()}
                   onRefreshPreview={(options) => state.refreshPreview(options)}
+                  onSelectRequestLog={state.setSelectedRequestLogId}
                   overview={state.overview}
                   preview={state.preview}
                   previewRefreshing={state.previewRefreshing}
+                  selectedRequestLogId={state.selectedRequestLogId}
                   uiLanguage={uiLanguage}
                 />
               </AppViewTransition>

@@ -7,9 +7,6 @@ export function formatWhen(value: string | undefined | null, language: UiLanguag
 }
 
 export function toneForSession(session: SessionSummary): string {
-  if (session.manualOverride) {
-    return "manual";
-  }
   if (session.frozen) {
     return "frozen";
   }

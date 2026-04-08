@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
+  type AiRequestLogDetail,
   type AiRequestLogReport,
   type ConfigDocument,
   type ConfigView,
@@ -27,7 +28,13 @@ import {
 
 import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "./config.js";
 import { StateDatabase } from "./database.js";
-import { buildRenamePrompt, createRenameInferenceService, inspectRenameProvider } from "./provider.js";
+import {
+  buildRenamePrompt,
+  createRenameInferenceService,
+  inspectRenameProvider,
+  probeRenameProvider,
+  resolveRenameProvider
+} from "./provider.js";
 import { buildSessionRevision } from "./revision.js";
 import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "./rollout.js";
 import {
@@ -42,6 +49,8 @@ import { deepMerge, toUtcIso } from "./util.js";
 function redactSecret(value?: string): string | undefined {
   return value ? "[redacted]" : undefined;
 }
+
+const LEGACY_NAMING_STYLE: NamingStyle = "detailed";
 
 type DaemonSweepSnapshot = {
   lastSweepAt: string;
@@ -67,6 +76,20 @@ type RenameReplaySnapshot = {
     queued: number;
     clearedCandidates: number;
   }>;
+};
+
+type ProviderTestSnapshot = {
+  latestByFingerprint: Record<
+    string,
+    {
+      ok: boolean;
+      testedAt: string;
+      latencyMs?: number;
+      diagnostics: Record<string, unknown>;
+      responseText?: string;
+      error?: string;
+    }
+  >;
 };
 
 const ACCEPTED_OFFICIAL_RENAME_SOURCES = ["ai", "manual"] as const;
@@ -219,15 +242,6 @@ export class CodexSessionManager {
     return detail;
   }
 
-  private resolveEffectiveNamingStyle(
-    detail?: Pick<SessionDetail, "preferredNamingStyle">,
-    renameState?: { preferredStyle?: NamingStyle },
-    explicitStyle?: NamingStyle,
-    config: EffectiveConfig = this.config
-  ): NamingStyle {
-    return explicitStyle ?? detail?.preferredNamingStyle ?? renameState?.preferredStyle ?? config.naming.defaultStyle;
-  }
-
   private buildSyntheticPromptSession(config: EffectiveConfig = this.config): MaterializedSession {
     return {
       threadId: "provider-test",
@@ -251,6 +265,60 @@ export class CodexSessionManager {
       return this.config;
     }
     return deepMerge(this.config, userConfig as Partial<EffectiveConfig>);
+  }
+
+  private providerFingerprint(config: EffectiveConfig = this.config): string {
+    const diagnostics = inspectRenameProvider(config);
+    return JSON.stringify({
+      requestedBackend: diagnostics.requestedBackend,
+      profileId: diagnostics.profileId,
+      providerRef: diagnostics.providerRef,
+      baseUrl: diagnostics.baseUrl,
+      model: diagnostics.model,
+      requestType: diagnostics.requestType,
+      credentialKind: diagnostics.credentialKind,
+      credentialSource: diagnostics.credentialSource
+    });
+  }
+
+  private rememberProviderTest(
+    config: EffectiveConfig,
+    result: {
+      ok: boolean;
+      testedAt: string;
+      latencyMs?: number;
+      diagnostics: Record<string, unknown>;
+      responseText?: string;
+      error?: string;
+    }
+  ): void {
+    const snapshot = this.db.getMaintenanceState<ProviderTestSnapshot>("provider_tests");
+    this.db.setMaintenanceState("provider_tests", {
+      latestByFingerprint: {
+        ...(snapshot?.latestByFingerprint ?? {}),
+        [this.providerFingerprint(config)]: result
+      }
+    } satisfies ProviderTestSnapshot);
+  }
+
+  private async requireSuccessfulProviderTest(config: EffectiveConfig = this.config): Promise<void> {
+    const snapshot = this.db.getMaintenanceState<ProviderTestSnapshot>("provider_tests");
+    const latest = snapshot?.latestByFingerprint?.[this.providerFingerprint(config)];
+    if (latest?.ok) {
+      return;
+    }
+    const result = await probeRenameProvider(config);
+    this.rememberProviderTest(config, {
+      ok: result.ok,
+      testedAt: result.testedAt,
+      latencyMs: result.latencyMs,
+      diagnostics: result.diagnostics as unknown as Record<string, unknown>,
+      responseText: result.responseText,
+      error: result.error
+    });
+    if (!result.ok) {
+      throw new Error("Provider has not passed connectivity test yet. Test it in Settings before rename.");
+    }
   }
 
   private async performScan(): Promise<ScanReport> {
@@ -409,7 +477,6 @@ export class CodexSessionManager {
 
   private async materializeSessionForSuggestion(
     detail: SessionDetail,
-    style?: NamingStyle,
     config: EffectiveConfig = this.config
   ): Promise<MaterializedSession> {
     const transcriptStrategies = new Set([
@@ -426,7 +493,6 @@ export class CodexSessionManager {
 
     return {
       ...detail,
-      namingStyle: this.resolveEffectiveNamingStyle(detail, undefined, style, config),
       renameContext: buildRenameContext(detail, config, {
         transcript
       })
@@ -439,19 +505,17 @@ export class CodexSessionManager {
       saveCandidate?: boolean;
       reservedNameKeys?: Set<string>;
       blockedOfficialThreadIds?: Set<string>;
-      style?: NamingStyle;
       reservationScheduler?: <T>(callback: () => T | Promise<T>) => Promise<T>;
     }
   ): Promise<RenameSuggestion> {
+    await this.requireSuccessfulProviderTest();
     const renameState = this.db.getRenameState(detail.threadId);
-    const targetStyle = this.resolveEffectiveNamingStyle(detail, renameState, options?.style);
     const candidateGeneratedAt = renameState?.currentCandidateGeneratedAt
       ? Date.parse(renameState.currentCandidateGeneratedAt)
       : Number.NaN;
     const sessionUpdatedAt = detail.updatedAt ? Date.parse(detail.updatedAt) : Number.NaN;
     const canReuseCandidate =
       Boolean(renameState?.currentCandidateName && renameState.currentCandidateGeneratedAt) &&
-      renameState?.currentCandidateStyle === targetStyle &&
       (this.isAcceptedOfficialRenameSource(renameState?.currentCandidateSource) ||
         !this.requiresAcceptedRewrite(renameState)) &&
       (!Number.isFinite(sessionUpdatedAt) ||
@@ -466,7 +530,7 @@ export class CodexSessionManager {
             threadId: detail.threadId,
             name: renameState?.currentCandidateName ?? "",
             source: renameState?.currentCandidateSource ?? "heuristic",
-            style: targetStyle,
+            style: renameState?.currentCandidateStyle ?? LEGACY_NAMING_STYLE,
             kind: "chore",
             summary: renameState?.currentCandidateName ?? "",
             generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
@@ -491,7 +555,7 @@ export class CodexSessionManager {
     }
 
     const rawSuggestion = await this.inferenceService.suggest(
-      await this.materializeSessionForSuggestion(detail, targetStyle)
+      await this.materializeSessionForSuggestion(detail)
     );
     const finalizeSuggestion = () => {
       const suggestion = this.ensureUniqueRenameSuggestion(
@@ -516,12 +580,10 @@ export class CodexSessionManager {
       : finalizeSuggestion();
   }
 
-  async suggest(threadId: string, options?: { style?: NamingStyle }): Promise<RenameSuggestion> {
+  async suggest(threadId: string): Promise<RenameSuggestion> {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
-    const suggestion = await this.resolveSuggestionForDetail(detail, {
-      style: options?.style
-    });
+    const suggestion = await this.resolveSuggestionForDetail(detail);
     this.db.recordRename({
       threadId,
       newName: suggestion.name,
@@ -532,7 +594,6 @@ export class CodexSessionManager {
       operator: this.operator,
       appliedAt: suggestion.generatedAt,
       appliedRevision: detail.revision,
-      manualOverride: false,
       autoApply: false
     });
     return suggestion;
@@ -544,7 +605,6 @@ export class CodexSessionManager {
       autoApply?: boolean;
       skipScan?: boolean;
       detail?: SessionDetail;
-      style?: NamingStyle;
     }
   ): Promise<{ written: boolean; name: string }> {
     if (!options?.skipScan) {
@@ -552,9 +612,7 @@ export class CodexSessionManager {
     }
     const detail = options?.detail ?? this.requireSessionDetail(threadId);
     const renameState = this.db.getRenameState(threadId);
-    const suggestion = await this.resolveSuggestionForDetail(detail, {
-      style: options?.style
-    });
+    const suggestion = await this.resolveSuggestionForDetail(detail);
 
     const result = await appendSessionIndexRename({
       filePath: this.sessionIndexPath,
@@ -580,7 +638,6 @@ export class CodexSessionManager {
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,
-      manualOverride: false,
       autoApply: options?.autoApply ?? false,
       persistAppliedState
     });
@@ -595,7 +652,7 @@ export class CodexSessionManager {
     await this.scan();
     const detail = this.requireSessionDetail(threadId);
     const renameState = this.db.getRenameState(threadId);
-    const style = this.resolveEffectiveNamingStyle(detail, renameState);
+    const style = renameState?.lastAppliedStyle ?? LEGACY_NAMING_STYLE;
     const uniqueName = this.ensureUniqueName(name, threadId);
 
     const result = await appendSessionIndexRename({
@@ -623,7 +680,6 @@ export class CodexSessionManager {
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,
-      manualOverride: true,
       autoApply: false,
       persistAppliedState
     });
@@ -631,32 +687,6 @@ export class CodexSessionManager {
     return {
       written: result.written,
       name: result.entry.threadName
-    };
-  }
-
-  async setNamingStyle(
-    threadId: string,
-    preferredStyle?: NamingStyle
-  ): Promise<{ threadId: string; preferredStyle?: NamingStyle; effectiveStyle: NamingStyle }> {
-    await this.scan();
-    const detail = this.requireSessionDetail(threadId);
-    const previousState = this.db.getRenameState(threadId);
-    this.db.setPreferredStyle(threadId, preferredStyle);
-    const effectiveStyle = this.resolveEffectiveNamingStyle(
-      {
-        ...detail,
-        preferredNamingStyle: preferredStyle
-      },
-      undefined,
-      undefined
-    );
-    if (previousState?.currentCandidateName && previousState.currentCandidateStyle !== effectiveStyle) {
-      this.db.clearCandidate(threadId);
-    }
-    return {
-      threadId,
-      preferredStyle,
-      effectiveStyle
     };
   }
 
@@ -681,11 +711,6 @@ export class CodexSessionManager {
         results.push({ threadId: normalizedDetail.threadId, action: "skipped", reason: "frozen" });
         continue;
       }
-      if (normalizedDetail.manualOverride) {
-        results.push({ threadId: normalizedDetail.threadId, action: "skipped", reason: "manual_override" });
-        continue;
-      }
-
       const suggestion = await this.resolveSuggestionForDetail(normalizedDetail, {
         reservedNameKeys,
         blockedOfficialThreadIds
@@ -739,20 +764,12 @@ export class CodexSessionManager {
     this.db.setFrozen(threadId, false);
   }
 
-  async setManualOverride(threadId: string): Promise<void> {
-    await this.scan();
-    this.requireSessionDetail(threadId);
-    this.db.setManualOverride(threadId, true);
-  }
-
-  async clearManualOverride(threadId: string): Promise<void> {
-    await this.scan();
-    this.requireSessionDetail(threadId);
-    this.db.setManualOverride(threadId, false);
-  }
-
   async printConfig(): Promise<Record<string, unknown>> {
     const providerDiagnostics = inspectRenameProvider(this.config);
+    const lastProviderTest =
+      this.db.getMaintenanceState<ProviderTestSnapshot>("provider_tests")?.latestByFingerprint?.[
+        this.providerFingerprint(this.config)
+      ];
 
     return {
       general: this.config.general,
@@ -779,7 +796,27 @@ export class CodexSessionManager {
             }
           : undefined
       },
-      resolvedProvider: providerDiagnostics
+      resolvedProvider: providerDiagnostics,
+      lastProviderTest
+    };
+  }
+
+  parseCodexProviderConfig(): Record<string, unknown> {
+    const previewConfig = deepMerge(this.config, {
+      ai: {
+        providerSource: "codex-config"
+      }
+    } as Partial<EffectiveConfig>);
+    const resolved = resolveRenameProvider(previewConfig);
+    return {
+      source: "codex-config",
+      profile: {
+        requestType: resolved?.requestType ?? (previewConfig.ai.backend === "none" ? "responses" : previewConfig.ai.backend),
+        providerRef: resolved?.providerRef,
+        baseUrl: resolved?.baseUrl,
+        model: resolved?.model,
+        apiKey: resolved?.credentialKind === "api-key" ? resolved.credentialValue : undefined
+      }
     };
   }
 
@@ -856,33 +893,18 @@ export class CodexSessionManager {
     };
   }
 
-  async testProvider(options?: { threadId?: string }): Promise<Record<string, unknown>> {
-    const diagnostics = inspectRenameProvider(this.config);
-    let session: MaterializedSession;
-
-    if (options?.threadId) {
-      await this.scan();
-      const detail = this.requireSessionDetail(options.threadId);
-      session = await this.materializeSessionForSuggestion(detail);
-    } else {
-      const syntheticSession: MaterializedSession = this.buildSyntheticPromptSession();
-      session = {
-        ...syntheticSession,
-        renameContext: buildRenameContext(syntheticSession, this.config)
-      };
-    }
-
-    const suggestion = await this.inferenceService.suggest(session);
-    return {
-      ok: this.config.ai.backend === "none" ? true : suggestion.source === "ai",
-      diagnostics,
-      session: {
-        threadId: session.threadId,
-        projectName: session.projectName,
-        synthetic: !options?.threadId
-      },
-      suggestion
-    };
+  async testProvider(options?: { userConfig?: ConfigDocument }): Promise<Record<string, unknown>> {
+    const previewConfig = this.resolvePreviewConfig(options?.userConfig);
+    const result = await probeRenameProvider(previewConfig);
+    this.rememberProviderTest(previewConfig, {
+      ok: result.ok,
+      testedAt: result.testedAt,
+      latencyMs: result.latencyMs,
+      diagnostics: result.diagnostics as unknown as Record<string, unknown>,
+      responseText: result.responseText,
+      error: result.error
+    });
+    return result;
   }
 
   async buildPromptPreview(options?: { threadId?: string; userConfig?: ConfigDocument }): Promise<PromptPreview> {
@@ -891,7 +913,7 @@ export class CodexSessionManager {
     if (options?.threadId) {
       await this.scan();
       const detail = this.requireSessionDetail(options.threadId);
-      session = await this.materializeSessionForSuggestion(detail, undefined, previewConfig);
+      session = await this.materializeSessionForSuggestion(detail, previewConfig);
     } else {
       const syntheticSession = this.buildSyntheticPromptSession(previewConfig);
       session = {
@@ -912,6 +934,10 @@ export class CodexSessionManager {
 
   getAiRequestLogReport(limit?: number): AiRequestLogReport {
     return this.db.getAiRequestLogReport(limit);
+  }
+
+  getAiRequestLogDetail(id: number): AiRequestLogDetail | undefined {
+    return this.db.getAiRequestLogDetail(id);
   }
 
   async doctor(): Promise<DoctorReport> {
@@ -1298,17 +1324,9 @@ export class CodexSessionManager {
     nonAcceptedNamedThreadIds: Set<string>
   ): T {
     const pendingAcceptedRewrite = nonAcceptedNamedThreadIds.has(session.threadId);
-    const effectiveStyle = this.resolveEffectiveNamingStyle(session);
-    const candidateStyleMatches =
-      !session.candidateName ||
-      !session.candidateNamingStyle ||
-      session.candidateNamingStyle === effectiveStyle;
     return {
       ...session,
-      defaultNamingStyle: this.config.naming.defaultStyle,
-      effectiveNamingStyle: effectiveStyle,
       officialName: pendingAcceptedRewrite ? undefined : session.officialName,
-      candidateName: candidateStyleMatches ? session.candidateName : undefined,
       dirty: session.dirty || pendingAcceptedRewrite
     };
   }
@@ -1328,7 +1346,6 @@ export class CodexSessionManager {
         existing.sessionCount += 1;
         existing.dirtyCount += session.dirty ? 1 : 0;
         existing.frozenCount += session.frozen ? 1 : 0;
-        existing.manualOverrideCount += session.manualOverride ? 1 : 0;
         if (session.projectName && !existing.projects.includes(session.projectName)) {
           existing.projects.push(session.projectName);
         }
@@ -1345,7 +1362,6 @@ export class CodexSessionManager {
         sessionCount: 1,
         dirtyCount: session.dirty ? 1 : 0,
         frozenCount: session.frozen ? 1 : 0,
-        manualOverrideCount: session.manualOverride ? 1 : 0,
         latestUpdatedAt: session.updatedAt,
         projects: session.projectName ? [session.projectName] : []
       });

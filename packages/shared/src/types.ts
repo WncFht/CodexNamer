@@ -1,8 +1,8 @@
 export type RenameMode = "heuristic" | "ai" | "hybrid";
-export type AiBackend = "none" | "codex" | "openai-compatible";
-export type ProviderSource = "explicit" | "inherit-codex" | "mixed";
-export type ProviderWireApi = "responses" | "chat_completions" | "auto";
-export type AiRequestTransport = "responses" | "chat_completions" | "codex-exec";
+export type AiBackend = "none" | "responses" | "openai-compatible";
+export type ProviderSource = "manual" | "codex-config";
+export type ProviderWireApi = "responses" | "openai-compatible";
+export type AiRequestTransport = "responses" | "openai-compatible";
 export type AiRequestStatus = "running" | "succeeded" | "failed";
 export type RenameContextStrategy =
   | "summary-signals"
@@ -94,7 +94,6 @@ export interface NamingConfig {
   template: string;
   maxLength: number;
   language: string;
-  defaultStyle: NamingStyle;
   contextStrategy: RenameContextStrategy;
   contextMaxChars: number;
   compositionMode: NamingCompositionMode;
@@ -108,7 +107,6 @@ export interface NamingConfig {
 export interface RenameConfig {
   mode: RenameMode;
   autoApply: "disabled" | "idle-finalize";
-  manualOverrideWins: boolean;
   freezeManualName: boolean;
 }
 
@@ -129,16 +127,14 @@ export interface AiConfig {
 
 export interface ProviderProfile {
   profileId: string;
-  backendKind: AiBackend;
+  requestType: Exclude<AiBackend, "none">;
   displayName: string;
-  providerSource: ProviderSource;
   providerRef?: string;
   baseUrl?: string;
   model?: string;
   apiKey?: string;
   apiKeyRef?: string;
   headers?: Record<string, string>;
-  wireApi?: ProviderWireApi;
   enabled: boolean;
   isDefault: boolean;
 }
@@ -215,7 +211,6 @@ export type ApiEventType =
   | "session.renamed"
   | "session.naming_style.changed"
   | "session.freeze.changed"
-  | "session.manual_override.changed"
   | "batch.apply.completed"
   | "config.updated"
   | "maintenance.rename_requeued"
@@ -288,7 +283,6 @@ export interface MaterializedSession {
   firstUserMessage?: string;
   lastUserMessage?: string;
   lastAgentMessage?: string;
-  namingStyle?: NamingStyle;
   taskCompleteCount: number;
   tokenTotal: number;
   renameContext?: RenameContext;
@@ -301,7 +295,6 @@ export interface WorkspaceSummary {
   sessionCount: number;
   dirtyCount: number;
   frozenCount: number;
-  manualOverrideCount: number;
   latestUpdatedAt?: string;
   projects: string[];
 }
@@ -377,7 +370,6 @@ export interface RenameStateRecord {
   preferredStyle?: NamingStyle;
   dirtySinceRename: boolean;
   forceRewrite: boolean;
-  manualOverride: boolean;
   frozen: boolean;
   autoApplyCount: number;
   lastAutoApplyAttemptAt?: string;
@@ -410,16 +402,10 @@ export interface SessionSummary {
   candidateName?: string;
   dirty: boolean;
   frozen: boolean;
-  manualOverride: boolean;
   taskCompleteCount: number;
   provider?: string;
   model?: string;
   statusEstimate?: SessionStatusEstimate;
-  preferredNamingStyle?: NamingStyle;
-  effectiveNamingStyle?: NamingStyle;
-  officialNamingStyle?: NamingStyle;
-  candidateNamingStyle?: NamingStyle;
-  defaultNamingStyle?: NamingStyle;
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -478,10 +464,53 @@ export interface AiRequestLogRecord {
   metadata?: Record<string, string>;
 }
 
+export interface AiRequestLogDetail extends AiRequestLogRecord {
+  promptText?: string;
+  requestPayload?: Record<string, unknown>;
+  responseText?: string;
+  responsePayload?: Record<string, unknown>;
+  result?: {
+    parsedModelOutput?: Record<string, unknown>;
+    finalSuggestion?: RenameSuggestion;
+    composition?: {
+      mode: NamingCompositionMode;
+      builder: NamingBuilderItem[];
+      explicitName?: string;
+      tagLabel?: string;
+      finalName: string;
+    };
+  };
+}
+
 export interface AiRequestLogReport {
   activeCount: number;
   lastFinishedAt?: string;
   items: AiRequestLogRecord[];
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  testedAt: string;
+  latencyMs?: number;
+  diagnostics: ProviderDiagnosticsLike;
+  responseText?: string;
+  error?: string;
+}
+
+export interface ProviderDiagnosticsLike {
+  configuredBackend: AiBackend;
+  requestedBackend: AiBackend;
+  profileId?: string;
+  providerRef?: string;
+  baseUrl?: string;
+  model?: string;
+  requestType?: ProviderWireApi;
+  requiresOpenaiAuth?: boolean;
+  credentialKind?: "api-key" | "bearer-token";
+  credentialSource?: string;
+  hasCredential: boolean;
+  preferredTransport: "none" | "http";
+  canDirectHttp: boolean;
 }
 
 export interface OverviewReport {
@@ -491,7 +520,6 @@ export interface OverviewReport {
     dirty: number;
     clean: number;
     frozen: number;
-    manualOverride: number;
     named: number;
     withCandidate: number;
   };

@@ -11,7 +11,6 @@ export interface AutoRenameEvaluation {
   action: "skip" | "suggest" | "apply";
   reason:
     | SessionStatusEstimate
-    | "manual_override"
     | "frozen"
     | "max_auto_renames_reached"
     | "rename_cooldown";
@@ -51,15 +50,6 @@ export function evaluateAutoRename(
   const now = options?.now ?? new Date();
   const renameState = options?.renameState;
   const statusEstimate = estimateSessionStatus(detail, config, now);
-
-  if (detail.manualOverride) {
-    return {
-      threadId: detail.threadId,
-      statusEstimate,
-      action: "skip",
-      reason: "manual_override"
-    };
-  }
 
   if (detail.frozen) {
     return {

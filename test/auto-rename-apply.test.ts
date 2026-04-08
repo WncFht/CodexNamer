@@ -11,7 +11,6 @@ describe("auto rename apply", () => {
       rename: {
         mode: "hybrid",
         autoApply: "idle-finalize",
-        manualOverrideWins: true,
         freezeManualName: true
       }
     });
@@ -36,7 +35,6 @@ describe("auto rename apply", () => {
       rename: {
         mode: "hybrid",
         autoApply: "idle-finalize",
-        manualOverrideWins: true,
         freezeManualName: true
       }
     });
@@ -70,7 +68,6 @@ describe("auto rename apply", () => {
       rename: {
         mode: "hybrid",
         autoApply: "idle-finalize",
-        manualOverrideWins: true,
         freezeManualName: true
       },
       watch: {
@@ -125,7 +122,6 @@ describe("auto rename apply", () => {
       rename: {
         mode: "hybrid",
         autoApply: "disabled",
-        manualOverrideWins: true,
         freezeManualName: true
       },
       watch: {
@@ -171,8 +167,8 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       ai: {
-        backend: "codex",
-        providerSource: "inherit-codex",
+        backend: "responses",
+        providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
         temperature: 0.2,

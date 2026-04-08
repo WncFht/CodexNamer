@@ -104,17 +104,6 @@ export class LocalApiClient {
     });
   }
 
-  setManualOverride(threadId: string, enabled: boolean): Promise<unknown> {
-    return requestJson(
-      this.resolve(
-        `/api/v1/sessions/${threadId}/${enabled ? "manual-override" : "clear-manual-override"}`
-      ),
-      {
-        method: "POST"
-      }
-    );
-  }
-
   batchApplyDirty(previewOnly: boolean): Promise<BatchApplyResponse> {
     return requestJson<BatchApplyResponse>(this.resolve("/api/v1/sessions/batch/apply"), {
       method: "POST",

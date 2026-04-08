@@ -4,7 +4,6 @@ import type { UiLanguage } from "./i18n.js";
 export type SettingKey =
   | "uiLanguage"
   | "namingTemplate"
-  | "namingDefaultStyle"
   | "namingMaxLength"
   | "namingLanguage"
   | "namingContextStrategy"
@@ -26,7 +25,6 @@ export type SettingKey =
 export type SettingsDraft = {
   uiLanguage: UiLanguage;
   namingTemplate: string;
-  namingDefaultStyle: "brief" | "detailed";
   namingMaxLength: string;
   namingLanguage: string;
   namingContextStrategy: string;
@@ -72,20 +70,14 @@ export function normalizeProfile(raw: unknown): ProviderProfile {
   const record = asRecord(raw);
   return {
     profileId: asString(record.profileId, "default"),
-    backendKind:
-      (asString(record.backendKind || record.backend_kind, "openai-compatible") as ProviderProfile["backendKind"]) ??
-      "openai-compatible",
+    requestType: (asString(record.requestType || record.request_type, "responses") as ProviderProfile["requestType"]) ?? "responses",
     displayName: asString(record.displayName || record.display_name),
-    providerSource:
-      (asString(record.providerSource || record.provider_source, "explicit") as ProviderProfile["providerSource"]) ??
-      "explicit",
     providerRef: asString(record.providerRef || record.provider_ref),
     baseUrl: asString(record.baseUrl || record.base_url),
     model: asString(record.model),
     apiKey: asString(record.apiKey || record.api_key),
     apiKeyRef: asString(record.apiKeyRef || record.api_key_ref),
     headers: (record.headers as Record<string, string> | undefined) ?? {},
-    wireApi: (asString(record.wireApi || record.wire_api, "auto") as ProviderProfile["wireApi"]) ?? "auto",
     enabled: typeof record.enabled === "boolean" ? record.enabled : true,
     isDefault:
       typeof record.isDefault === "boolean"
@@ -113,8 +105,6 @@ export function buildSettingsDraft(configView: ConfigView): SettingsDraft {
   return {
     uiLanguage: general.uiLanguage === "zh-CN" ? "zh-CN" : "en-US",
     namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
-    namingDefaultStyle:
-      asString(naming.defaultStyle || naming.default_style, "detailed") === "brief" ? "brief" : "detailed",
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
     namingLanguage: asString(naming.language, "zh-CN"),
     namingContextStrategy: asString(naming.contextStrategy || naming.context_strategy, "summary-signals"),
@@ -122,8 +112,8 @@ export function buildSettingsDraft(configView: ConfigView): SettingsDraft {
     candidateIdleSeconds: asNumberString(watch.candidateIdleSeconds || watch.candidate_idle_seconds, "120"),
     finalizeIdleSeconds: asNumberString(watch.finalizeIdleSeconds || watch.finalize_idle_seconds, "600"),
     renameCooldownSeconds: asNumberString(watch.renameCooldownSeconds || watch.rename_cooldown_seconds, "900"),
-    aiBackend: asString(ai.backend, "codex"),
-    aiProviderSource: asString(ai.providerSource || ai.provider_source, "inherit-codex"),
+    aiBackend: asString(ai.backend, "responses"),
+    aiProviderSource: asString(ai.providerSource || ai.provider_source, "codex-config"),
     aiProfile: asString(ai.profile, selectedProfileId),
     aiTimeoutSeconds: asNumberString(ai.timeoutSeconds || ai.timeout_seconds, "45"),
     aiTemperature: asNumberString(ai.temperature, "0.2"),
@@ -170,7 +160,6 @@ export function encodeSettingsDraft(draft: SettingsDraft): ConfigDocument {
     },
     naming: {
       template: stripEmpty(draft.namingTemplate),
-      defaultStyle: draft.namingDefaultStyle,
       maxLength: parseNumber(draft.namingMaxLength),
       language: stripEmpty(draft.namingLanguage),
       contextStrategy: stripEmpty(draft.namingContextStrategy) as TuiNamingContextStrategy | undefined,
@@ -186,16 +175,14 @@ export function encodeSettingsDraft(draft: SettingsDraft): ConfigDocument {
     },
     providerProfiles: draft.providerProfiles.map((profile) => ({
       profileId: profile.profileId,
-      backendKind: profile.backendKind,
+      requestType: profile.requestType,
       displayName: stripEmpty(profile.displayName ?? ""),
-      providerSource: profile.providerSource,
       providerRef: stripEmpty(profile.providerRef ?? ""),
       baseUrl: stripEmpty(profile.baseUrl ?? ""),
       model: stripEmpty(profile.model ?? ""),
       apiKey: stripEmpty(profile.apiKey ?? ""),
       apiKeyRef: stripEmpty(profile.apiKeyRef ?? ""),
       headers: profile.headers,
-      wireApi: profile.wireApi,
       enabled: profile.enabled,
       isDefault: profile.isDefault
     }))
@@ -223,9 +210,6 @@ export function cycleSettingsFieldValue(
   if (key === "uiLanguage") {
     return { ...draft, uiLanguage: cycle(draft.uiLanguage, ["en-US", "zh-CN"] as const) };
   }
-  if (key === "namingDefaultStyle") {
-    return { ...draft, namingDefaultStyle: cycle(draft.namingDefaultStyle, ["detailed", "brief"] as const) };
-  }
   if (key === "namingContextStrategy") {
     return {
       ...draft,
@@ -249,20 +233,20 @@ export function cycleSettingsFieldValue(
   if (key === "aiBackend") {
     return {
       ...draft,
-      aiBackend: cycle(draft.aiBackend, ["codex", "openai-compatible", "none"] as const)
+      aiBackend: cycle(draft.aiBackend, ["responses", "openai-compatible", "none"] as const)
     };
   }
   if (key === "aiProviderSource") {
     return {
       ...draft,
-      aiProviderSource: cycle(draft.aiProviderSource, ["inherit-codex", "explicit"] as const)
+      aiProviderSource: cycle(draft.aiProviderSource, ["codex-config", "manual"] as const)
     };
   }
   if (key === "providerWireApi" && selectedProfile) {
     return {
       ...draft,
       providerProfiles: updateSelectedProfile(draft.providerProfiles, draft.selectedProfileId, {
-        wireApi: cycle(selectedProfile.wireApi ?? "auto", ["auto", "responses", "chat_completions"] as const)
+        requestType: cycle(selectedProfile.requestType ?? "responses", ["responses", "openai-compatible"] as const)
       })
     };
   }
@@ -281,7 +265,6 @@ export function buildSettingsFields(params: {
   return [
     { key: "uiLanguage", label: inline("界面 / 语言", "UI / Language"), value: draft?.uiLanguage ?? "" },
     { key: "namingTemplate", label: inline("命名 / 模板", "Naming / Template"), value: draft?.namingTemplate ?? "" },
-    { key: "namingDefaultStyle", label: inline("命名 / 默认风格", "Naming / Default style"), value: draft?.namingDefaultStyle ?? "" },
     { key: "namingMaxLength", label: inline("命名 / 最大长度", "Naming / Max length"), value: draft?.namingMaxLength ?? "" },
     { key: "namingLanguage", label: inline("命名 / 语言", "Naming / Language"), value: draft?.namingLanguage ?? "" },
     { key: "namingContextStrategy", label: inline("命名 / 上下文策略", "Naming / Context strategy"), value: draft?.namingContextStrategy ?? "" },
@@ -302,6 +285,6 @@ export function buildSettingsFields(params: {
     },
     { key: "providerModel", label: inline("Provider / 模型", "Provider / model"), value: profile?.model ?? "" },
     { key: "providerApiKey", label: "Provider / API key", value: profile?.apiKey ?? "" },
-    { key: "providerWireApi", label: "Provider / Wire API", value: profile?.wireApi ?? "" }
+    { key: "providerWireApi", label: "Provider / Request type", value: profile?.requestType ?? "" }
   ];
 }
