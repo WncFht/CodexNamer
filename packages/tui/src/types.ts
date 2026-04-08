@@ -342,8 +342,6 @@ export type ConfigDocument = {
           value: string;
         }
     >;
-    components?: Array<"timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary">;
-    componentSeparator?: string;
     tags?: Array<{
       id: string;
       label?: string;

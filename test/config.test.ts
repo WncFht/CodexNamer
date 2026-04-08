@@ -109,8 +109,11 @@ describe("config loading", () => {
           contextStrategy: "user-assistant-transcript",
           contextMaxChars: 4096,
           compositionMode: "prompt-override",
-          components: ["tag", "summary"],
-          componentSeparator: " / ",
+          builder: [
+            { type: "component", component: "tag" },
+            { type: "separator", value: " / " },
+            { type: "component", component: "summary" }
+          ],
           tags: [
             {
               id: "settings",
@@ -151,8 +154,11 @@ describe("config loading", () => {
     expect(effective.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(effective.naming.contextMaxChars).toBe(4096);
     expect(effective.naming.compositionMode).toBe("prompt-override");
-    expect(effective.naming.components).toEqual(["tag", "summary"]);
-    expect(effective.naming.componentSeparator).toBe(" / ");
+    expect(effective.naming.builder).toEqual([
+      { type: "component", component: "tag" },
+      { type: "separator", value: " / " },
+      { type: "component", component: "summary" }
+    ]);
     expect(effective.naming.tags).toHaveLength(1);
     expect(effective.naming.tags[0]?.id).toBe("settings");
     expect(effective.naming.customPrompt).toBe("Always classify the session before naming it.");
@@ -163,36 +169,9 @@ describe("config loading", () => {
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
     expect(written).toContain('composition_mode = "prompt-override"');
-    expect(written).toContain('components = [ "tag", "summary" ]');
-    expect(written).toContain('component_separator = " / "');
+    expect(written).toContain('[[naming.builder]]');
+    expect(written).toContain('component = "tag"');
+    expect(written).toContain('value = " / "');
     expect(written).toContain('custom_prompt = "Always classify the session before naming it."');
-  });
-
-  it("falls back to legacy codex-session-manager config and state paths when present", async () => {
-    const root = await makeTempDir();
-    process.env.HOME = root;
-
-    const codexHome = path.join(root, ".codex");
-    const legacyUserConfigPath = path.join(root, ".config", "codex-session-manager", "config.toml");
-    const legacyProjectConfigPath = path.join(root, ".codex-session-manager.toml");
-    const legacyStateDir = path.join(root, ".local", "state", "codex-session-manager");
-
-    await fs.mkdir(path.dirname(legacyUserConfigPath), { recursive: true });
-    await fs.mkdir(legacyStateDir, { recursive: true });
-    await fs.mkdir(codexHome, { recursive: true });
-    await fs.writeFile(path.join(codexHome, "config.toml"), 'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n', "utf8");
-    await fs.writeFile(legacyUserConfigPath, ['[general]', `codex_home = "${codexHome}"`].join("\n"), "utf8");
-    await fs.writeFile(legacyProjectConfigPath, ['[naming]', 'language = "en-US"'].join("\n"), "utf8");
-
-    const effective = await loadEffectiveConfig({ cwd: root });
-    const view = await loadConfigView({
-      cwd: root,
-      effectiveConfig: effective
-    });
-
-    expect(effective.general.stateDir).toBe(legacyStateDir);
-    expect(view.paths.userConfigPath).toBe(legacyUserConfigPath);
-    expect(view.paths.projectConfigPath).toBe(legacyProjectConfigPath);
-    expect(view.projectOverride.naming?.language).toBe("en-US");
   });
 });

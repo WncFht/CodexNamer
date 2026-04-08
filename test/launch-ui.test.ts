@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyManagedProcess, detectLegacyRepoPath } from "../scripts/launch-ui.ts";
+import { classifyManagedProcess, detectSiblingRepoPath } from "../scripts/launch-ui.ts";
 
 describe("classifyManagedProcess", () => {
   const repoCwd = "/tmp/codexnamer";
@@ -65,14 +65,14 @@ describe("classifyManagedProcess", () => {
   });
 });
 
-describe("detectLegacyRepoPath", () => {
-  it("detects the pre-migration sibling repo for ai-tools workspaces", () => {
-    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/ai-tools/codexnamer")).toBe(
+describe("detectSiblingRepoPath", () => {
+  it("detects a same-name sibling repo for ai-tools workspaces", () => {
+    expect(detectSiblingRepoPath("/home/fanghaotian/Desktop/src/ai-tools/codexnamer")).toBe(
       "/home/fanghaotian/Desktop/src/codexnamer"
     );
   });
 
   it("ignores repos that are not under ai-tools", () => {
-    expect(detectLegacyRepoPath("/home/fanghaotian/Desktop/src/codexnamer")).toBeUndefined();
+    expect(detectSiblingRepoPath("/home/fanghaotian/Desktop/src/codexnamer")).toBeUndefined();
   });
 });

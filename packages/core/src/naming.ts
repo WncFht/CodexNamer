@@ -185,36 +185,8 @@ const BUILTIN_TAG_LABELS: Record<
 
 export const DEFAULT_NAMING_TIMESTAMP_PRESET: NamingTimestampPreset = "%Y-%m-%d";
 
-function buildLegacyNamingBuilder(
-  components: NamingComponent[] | undefined,
-  separator: string | undefined
-): NamingBuilderItem[] {
-  if (!components || components.length === 0) {
-    return [];
-  }
-
-  const builder: NamingBuilderItem[] = [];
-  components.forEach((component, index) => {
-    builder.push({
-      type: "component",
-      component,
-      ...(component === "timestamp" ? { format: DEFAULT_NAMING_TIMESTAMP_PRESET } : {})
-    });
-    if (separator && index < components.length - 1) {
-      builder.push({
-        type: "separator",
-        value: separator
-      });
-    }
-  });
-  return builder;
-}
-
 export function getEffectiveNamingBuilder(config: Pick<EffectiveConfig, "naming">): NamingBuilderItem[] {
-  if (config.naming.builder && config.naming.builder.length > 0) {
-    return config.naming.builder;
-  }
-  return buildLegacyNamingBuilder(config.naming.components, config.naming.componentSeparator);
+  return config.naming.builder;
 }
 
 export function describeNamingBuilderItem(item: NamingBuilderItem, language: string): string {

@@ -1,4 +1,3 @@
-export type RenameMode = "heuristic" | "ai" | "hybrid";
 export type AiBackend = "none" | "responses" | "openai-compatible";
 export type ProviderSource = "manual" | "codex-config";
 export type ProviderWireApi = "responses" | "openai-compatible";
@@ -96,15 +95,12 @@ export interface NamingConfig {
   contextStrategy: RenameContextStrategy;
   contextMaxChars: number;
   compositionMode: NamingCompositionMode;
-  builder?: NamingBuilderItem[];
-  components: NamingComponent[];
-  componentSeparator: string;
+  builder: NamingBuilderItem[];
   tags: NamingTagDefinition[];
   customPrompt?: string;
 }
 
 export interface RenameConfig {
-  mode: RenameMode;
   autoApply: "disabled" | "idle-finalize";
   freezeManualName: boolean;
 }

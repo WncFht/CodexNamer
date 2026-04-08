@@ -187,6 +187,7 @@ export class StateDatabase {
       CREATE INDEX IF NOT EXISTS idx_ai_request_logs_status ON ai_request_logs(status);
     `);
     this.ensureColumn("rename_state", "force_rewrite", "INTEGER NOT NULL DEFAULT 0");
+    this.dropColumnIfExists("rename_state", "manual_override");
     this.ensureColumn("ai_request_logs", "prompt_text", "TEXT");
     this.ensureColumn("ai_request_logs", "request_payload_json", "TEXT");
     this.ensureColumn("ai_request_logs", "response_text", "TEXT");
@@ -200,6 +201,15 @@ export class StateDatabase {
     );
     if (!exists) {
       this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  }
+
+  private dropColumnIfExists(table: string, column: string): void {
+    const exists = (this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<Record<string, unknown>>).some(
+      (row) => row.name === column
+    );
+    if (exists) {
+      this.db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
     }
   }
 

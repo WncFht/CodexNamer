@@ -6,9 +6,6 @@ import {
   DEFAULT_CONFIG_RELATIVE_PATH,
   DEFAULT_STATE_RELATIVE_PATH,
   DEFAULT_WATCH,
-  LEGACY_CONFIG_RELATIVE_PATH,
-  LEGACY_PROJECT_CONFIG_FILENAME,
-  LEGACY_STATE_RELATIVE_PATH,
   PROJECT_CONFIG_FILENAME,
   REDACTED_SECRET,
   type CodexInheritedAuth,
@@ -45,20 +42,6 @@ function getNumber(record: Record<string, unknown>, ...keys: string[]): number |
     const value = record[key];
     if (typeof value === "number") {
       return value;
-    }
-  }
-  return undefined;
-}
-
-function getStringArray(record: Record<string, unknown>, ...keys: string[]): string[] | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (!Array.isArray(value)) {
-      continue;
-    }
-    const strings = value.filter((item): item is string => typeof item === "string");
-    if (strings.length > 0) {
-      return strings;
     }
   }
   return undefined;
@@ -120,7 +103,7 @@ function normalizeNamingTags(value: unknown): EffectiveConfig["naming"]["tags"] 
   return tags.length > 0 ? tags : undefined;
 }
 
-const NAMING_COMPONENTS: EffectiveConfig["naming"]["components"] = [
+const NAMING_COMPONENTS = [
   "timestamp",
   "workspace",
   "project",
@@ -128,36 +111,11 @@ const NAMING_COMPONENTS: EffectiveConfig["naming"]["components"] = [
   "kind",
   "scope",
   "summary"
-];
+] as const;
 
 const DEFAULT_TIMESTAMP_PRESET = "%Y-%m-%d" satisfies NonNullable<
   NonNullable<EffectiveConfig["naming"]["builder"]>[number] & { type: "component" }
 >["format"];
-
-function buildLegacyNamingBuilder(
-  components: EffectiveConfig["naming"]["components"] | undefined,
-  separator: string | undefined
-): NonNullable<EffectiveConfig["naming"]["builder"]> | undefined {
-  if (!components || components.length === 0) {
-    return undefined;
-  }
-
-  const builder: NonNullable<EffectiveConfig["naming"]["builder"]> = [];
-  components.forEach((component, index) => {
-    builder.push({
-      type: "component",
-      component,
-      ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {})
-    });
-    if (separator && index < components.length - 1) {
-      builder.push({
-        type: "separator",
-        value: separator
-      });
-    }
-  });
-  return builder;
-}
 
 function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["builder"] | undefined {
   if (!Array.isArray(value)) {
@@ -179,7 +137,7 @@ function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["buil
       }
 
       if (type === "component") {
-        const component = getString(record, "component") as EffectiveConfig["naming"]["components"][number] | undefined;
+        const component = getString(record, "component") as (typeof NAMING_COMPONENTS)[number] | undefined;
         if (!component || !NAMING_COMPONENTS.includes(component)) {
           return undefined;
         }
@@ -200,39 +158,6 @@ function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["buil
     );
 
   return builder.length > 0 ? builder : undefined;
-}
-
-function deriveLegacyComponentsFromBuilder(
-  builder: EffectiveConfig["naming"]["builder"] | undefined
-): EffectiveConfig["naming"]["components"] | undefined {
-  const components = builder
-    ?.filter(
-      (
-        item
-      ): item is Extract<NonNullable<EffectiveConfig["naming"]["builder"]>[number], { type: "component" }> =>
-        item.type === "component"
-    )
-    .map((item) => item.component);
-
-  return components && components.length > 0 ? components : undefined;
-}
-
-function deriveLegacySeparatorFromBuilder(builder: EffectiveConfig["naming"]["builder"] | undefined): string | undefined {
-  const separators = builder
-    ?.filter(
-      (
-        item
-      ): item is Extract<NonNullable<EffectiveConfig["naming"]["builder"]>[number], { type: "separator" }> =>
-        item.type === "separator"
-    )
-    .map((item) => item.value);
-
-  if (!separators || separators.length === 0) {
-    return undefined;
-  }
-
-  const [first] = separators;
-  return separators.every((value) => value === first) ? first : undefined;
 }
 
 const DEFAULT_NAMING_TAGS: EffectiveConfig["naming"]["tags"] = [
@@ -295,7 +220,6 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     uiLanguage: "en-US"
   },
   rename: {
-    mode: "hybrid",
     autoApply: "idle-finalize",
     freezeManualName: true
   },
@@ -317,8 +241,6 @@ const DEFAULT_CONFIG: EffectiveConfig = {
       { type: "separator", value: " · " },
       { type: "component", component: "summary" }
     ],
-    components: ["tag", "kind", "summary"],
-    componentSeparator: " · ",
     tags: DEFAULT_NAMING_TAGS,
     customPrompt: undefined
   },
@@ -373,37 +295,6 @@ async function readTomlFile(filePath: string): Promise<Record<string, unknown> |
   }
 }
 
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function resolvePreferredPath(primaryPath: string, legacyPath: string): Promise<string> {
-  if (await pathExists(primaryPath)) {
-    return primaryPath;
-  }
-  if (await pathExists(legacyPath)) {
-    return legacyPath;
-  }
-  return primaryPath;
-}
-
-async function resolveDefaultStateDir(): Promise<string> {
-  const primary = expandHome(`~/${DEFAULT_STATE_RELATIVE_PATH}`);
-  const legacy = expandHome(`~/${LEGACY_STATE_RELATIVE_PATH}`);
-  if (await pathExists(primary)) {
-    return primary;
-  }
-  if (await pathExists(legacy)) {
-    return legacy;
-  }
-  return primary;
-}
-
 function normalizeProviderProfileRecords(records: Record<string, unknown>): EffectiveConfig["providerProfiles"] {
   return Object.entries(records).map(([profileId, value]) => {
     const record = value as Record<string, unknown>;
@@ -428,8 +319,6 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
   const rename = (raw.rename ?? {}) as Record<string, unknown>;
   const watch = (raw.watch ?? {}) as Record<string, unknown>;
   const naming = (raw.naming ?? {}) as Record<string, unknown>;
-  const legacyComponents = getStringArray(naming, "components") as EffectiveConfig["naming"]["components"] | undefined;
-  const legacySeparator = getString(naming, "component_separator", "componentSeparator");
 
   const ai = (raw.ai ?? {}) as Record<string, unknown>;
   const maintenance = (raw.maintenance ?? {}) as Record<string, unknown>;
@@ -462,7 +351,6 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
       uiLanguage: getString(general, "ui_language", "uiLanguage") as EffectiveConfig["general"]["uiLanguage"] | undefined
     },
     rename: {
-      mode: getString(rename, "mode") as EffectiveConfig["rename"]["mode"] | undefined,
       autoApply: getString(rename, "auto_apply", "autoApply") as
         | EffectiveConfig["rename"]["autoApply"]
         | undefined,
@@ -497,9 +385,7 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
         "composition_mode",
         "compositionMode"
       ) as EffectiveConfig["naming"]["compositionMode"] | undefined,
-      builder: normalizeNamingBuilder(naming.builder) ?? buildLegacyNamingBuilder(legacyComponents, legacySeparator),
-      components: legacyComponents,
-      componentSeparator: legacySeparator,
+      builder: normalizeNamingBuilder(naming.builder),
       tags: normalizeNamingTags(naming.tags),
       customPrompt: getString(naming, "custom_prompt", "customPrompt")
     },
@@ -595,10 +481,6 @@ function stripEmptyRecord(record: Record<string, unknown>): Record<string, unkno
 }
 
 function serializeConfigDocument(document: ConfigDocument): string {
-  const derivedBuilder = document.naming?.builder;
-  const derivedComponents = document.naming?.components ?? deriveLegacyComponentsFromBuilder(derivedBuilder);
-  const derivedSeparator =
-    document.naming?.componentSeparator ?? deriveLegacySeparatorFromBuilder(derivedBuilder);
   const providerTable: Record<string, Record<string, unknown>> = {};
   for (const profile of document.providerProfiles ?? []) {
     const encoded = stripEmptyRecord({
@@ -625,7 +507,6 @@ function serializeConfigDocument(document: ConfigDocument): string {
       ui_language: document.general?.uiLanguage
     }),
     rename: stripEmptyRecord({
-      mode: document.rename?.mode,
       auto_apply: document.rename?.autoApply,
       freeze_manual_name: document.rename?.freezeManualName
     }),
@@ -658,8 +539,6 @@ function serializeConfigDocument(document: ConfigDocument): string {
               format: item.format
             })
       ),
-      components: derivedComponents,
-      component_separator: derivedSeparator,
       tags: document.naming?.tags?.map((tag) =>
         stripEmptyRecord({
           id: tag.id,
@@ -704,16 +583,8 @@ export async function resolveConfigPaths(options?: {
   configPath?: string;
 }): Promise<{ cwd: string; userConfigPath: string; projectConfigPath: string }> {
   const cwd = options?.cwd ?? process.cwd();
-  const userConfigPath =
-    options?.configPath ??
-    (await resolvePreferredPath(
-      path.join(process.env.HOME ?? "", DEFAULT_CONFIG_RELATIVE_PATH),
-      path.join(process.env.HOME ?? "", LEGACY_CONFIG_RELATIVE_PATH)
-    ));
-  const projectConfigPath = await resolvePreferredPath(
-    path.join(cwd, PROJECT_CONFIG_FILENAME),
-    path.join(cwd, LEGACY_PROJECT_CONFIG_FILENAME)
-  );
+  const userConfigPath = options?.configPath ?? path.join(process.env.HOME ?? "", DEFAULT_CONFIG_RELATIVE_PATH);
+  const projectConfigPath = path.join(cwd, PROJECT_CONFIG_FILENAME);
   return {
     cwd,
     userConfigPath,
@@ -866,7 +737,7 @@ export async function loadEffectiveConfig(options?: {
     options?.overrides?.general?.stateDir ?? projectRaw.general?.stateDir ?? userRaw.general?.stateDir;
   effective.general = {
     codexHome: expandHome(effective.general.codexHome ?? mergedGeneral.codexHome),
-    stateDir: explicitStateDir ? expandHome(explicitStateDir) : await resolveDefaultStateDir(),
+    stateDir: explicitStateDir ? expandHome(explicitStateDir) : expandHome(`~/${DEFAULT_STATE_RELATIVE_PATH}`),
     uiLanguage: effective.general.uiLanguage ?? mergedGeneral.uiLanguage ?? DEFAULT_CONFIG.general.uiLanguage
   };
 

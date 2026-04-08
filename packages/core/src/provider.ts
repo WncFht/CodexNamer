@@ -6,7 +6,6 @@ import type {
   MaterializedSession,
   ProviderWireApi,
   RenameContext,
-  RenameMode,
   RenameSuggestion
 } from "@codexnamer/shared";
 
@@ -69,7 +68,7 @@ export interface RenameInferenceRequestLogger {
 }
 
 export interface RenameInferenceService {
-  suggest(session: MaterializedSession, mode?: RenameMode): Promise<RenameSuggestion>;
+  suggest(session: MaterializedSession): Promise<RenameSuggestion>;
 }
 
 export class RenameInferenceError extends Error {
@@ -1230,7 +1229,7 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
     private readonly requestLogger?: RenameInferenceRequestLogger
   ) {}
 
-  async suggest(session: MaterializedSession, _mode?: RenameMode): Promise<RenameSuggestion> {
+  async suggest(session: MaterializedSession): Promise<RenameSuggestion> {
     if (this.config.ai.backend === "none") {
       throw new RenameInferenceError("AI rename is disabled.", "unsupported-backend");
     }

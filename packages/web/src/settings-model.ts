@@ -82,8 +82,6 @@ export type DraftFieldUpdater = <K extends keyof SettingsDraft>(
 ) => void;
 
 export type SettingsTagDraft = SettingsDraft["namingTags"][number];
-
-const DEFAULT_NAMING_COMPONENTS: NamingComponent[] = ["tag", "kind", "summary"];
 export const DEFAULT_NAMING_BUILDER: NamingBuilderItem[] = [
   { type: "component", component: "tag" },
   { type: "separator", value: " · " },
@@ -136,36 +134,9 @@ function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function normalizeNamingComponents(raw: unknown): NamingComponent[] {
+function normalizeNamingBuilder(raw: unknown): NamingBuilderItem[] {
   if (!Array.isArray(raw)) {
-    return DEFAULT_NAMING_COMPONENTS;
-  }
-  const allowed: NamingComponent[] = ["timestamp", "workspace", "project", "tag", "kind", "scope", "summary"];
-  const selected = raw.filter((value): value is NamingComponent => allowed.includes(value as NamingComponent));
-  return selected.length > 0 ? selected : DEFAULT_NAMING_COMPONENTS;
-}
-
-function buildLegacyNamingBuilder(components: NamingComponent[], separator: string): NamingBuilderItem[] {
-  const builder: NamingBuilderItem[] = [];
-  components.forEach((component, index) => {
-    builder.push({
-      type: "component",
-      component,
-      ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {})
-    });
-    if (separator && index < components.length - 1) {
-      builder.push({
-        type: "separator",
-        value: separator
-      });
-    }
-  });
-  return builder.length > 0 ? builder : DEFAULT_NAMING_BUILDER;
-}
-
-function normalizeNamingBuilder(raw: unknown, legacyComponents: NamingComponent[], legacySeparator: string): NamingBuilderItem[] {
-  if (!Array.isArray(raw)) {
-    return buildLegacyNamingBuilder(legacyComponents, legacySeparator);
+    return DEFAULT_NAMING_BUILDER;
   }
 
   const builder = raw
@@ -193,25 +164,7 @@ function normalizeNamingBuilder(raw: unknown, legacyComponents: NamingComponent[
     })
     .filter((item): item is NamingBuilderItem => Boolean(item));
 
-  return builder.length > 0 ? builder : buildLegacyNamingBuilder(legacyComponents, legacySeparator);
-}
-
-function deriveNamingComponents(builder: NamingBuilderItem[]): NamingComponent[] {
-  const components = builder
-    .filter((item): item is Extract<NamingBuilderItem, { type: "component" }> => item.type === "component")
-    .map((item) => item.component);
-  return components.length > 0 ? components : DEFAULT_NAMING_COMPONENTS;
-}
-
-function deriveNamingSeparator(builder: NamingBuilderItem[]): string | undefined {
-  const separators = builder
-    .filter((item): item is Extract<NamingBuilderItem, { type: "separator" }> => item.type === "separator")
-    .map((item) => item.value);
-  if (separators.length === 0) {
-    return undefined;
-  }
-  const [first] = separators;
-  return separators.every((value) => value === first) ? first : undefined;
+  return builder.length > 0 ? builder : DEFAULT_NAMING_BUILDER;
 }
 
 function normalizeNamingTags(raw: unknown): SettingsDraft["namingTags"] {
@@ -265,8 +218,6 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
   const naming = asRecord(effective.naming);
   const rename = asRecord(effective.rename);
   const watch = asRecord(effective.watch);
-  const legacyNamingComponents = normalizeNamingComponents(naming.components);
-  const legacyNamingSeparator = asString(naming.componentSeparator || naming.component_separator, " · ");
   const ai = asRecord(effective.ai);
   const maintenance = asRecord(effective.maintenance);
   const providerProfilesRaw = Array.isArray(effective.providerProfiles) ? effective.providerProfiles : [];
@@ -288,7 +239,7 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
       naming.compositionMode || naming.composition_mode,
       "structured"
     ) as NamingCompositionMode,
-    namingBuilder: normalizeNamingBuilder(naming.builder, legacyNamingComponents, legacyNamingSeparator),
+    namingBuilder: normalizeNamingBuilder(naming.builder),
     namingTags: normalizeNamingTags(naming.tags),
     namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
@@ -365,8 +316,6 @@ export function isDraftDirty(draft: SettingsDraft, baseline: ConfigDocument): bo
 }
 
 export function encodeDraft(draft: SettingsDraft): ConfigDocument {
-  const derivedComponents = deriveNamingComponents(draft.namingBuilder);
-  const derivedSeparator = deriveNamingSeparator(draft.namingBuilder);
   return {
     general: {
       uiLanguage: draft.uiLanguage
@@ -404,8 +353,6 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
               ...(item.component === "timestamp" ? { format: item.format ?? DEFAULT_TIMESTAMP_PRESET } : {})
             }
       ),
-      components: derivedComponents,
-      componentSeparator: derivedSeparator,
       tags: draft.namingTags
         .map((tag) => ({
           id: tag.id.trim(),

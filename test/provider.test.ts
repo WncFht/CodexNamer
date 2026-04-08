@@ -136,7 +136,7 @@ describe("provider backends", () => {
     expect(events[1]?.status).toBe("succeeded");
   });
 
-  it("does not include legacy template reference in the AI prompt", async () => {
+  it("does not include removed template reference in the AI prompt", async () => {
     let capturedPrompt = "";
     const service = new OpenAICompatibleRenameInferenceService(
       buildConfigForTests({
@@ -469,8 +469,13 @@ describe("provider backends", () => {
       buildConfigForTests({
         naming: {
           language: "zh-CN",
-          components: ["tag", "kind", "summary"],
-          componentSeparator: " · "
+          builder: [
+            { type: "component", component: "tag" },
+            { type: "separator", value: " · " },
+            { type: "component", component: "kind" },
+            { type: "separator", value: " · " },
+            { type: "component", component: "summary" }
+          ]
         },
         ai: {
           backend: "openai-compatible",

@@ -95,7 +95,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-export function detectLegacyRepoPath(repoCwd: string): string | undefined {
+export function detectSiblingRepoPath(repoCwd: string): string | undefined {
   const normalizedRepo = path.resolve(repoCwd);
   const repoName = path.basename(normalizedRepo);
   const parentName = path.basename(path.dirname(normalizedRepo));
@@ -103,8 +103,8 @@ export function detectLegacyRepoPath(repoCwd: string): string | undefined {
     return undefined;
   }
 
-  const legacyPath = path.resolve(normalizedRepo, "..", "..", repoName);
-  return legacyPath === normalizedRepo ? undefined : legacyPath;
+  const siblingPath = path.resolve(normalizedRepo, "..", "..", repoName);
+  return siblingPath === normalizedRepo ? undefined : siblingPath;
 }
 
 async function canListen(host: string, port: number): Promise<boolean> {
@@ -448,14 +448,14 @@ async function main(): Promise<void> {
   const { mode, passthrough, explicitApiBase } = parseArgs(process.argv.slice(2));
   const repoCwd = process.cwd();
   const webPort = process.env.CODEXNAMER_WEB_PORT ?? String(DEFAULT_WEB_PORT);
-  const legacyRepoPath = detectLegacyRepoPath(repoCwd);
+  const siblingRepoPath = detectSiblingRepoPath(repoCwd);
   console.error(`[codexnamer] Launch mode: ${mode}`);
   console.error(`[codexnamer] Repo cwd: ${repoCwd}`);
   if (mode === "web") {
     console.error(`[codexnamer] Requested web URL: http://127.0.0.1:${webPort}/`);
   }
-  if (legacyRepoPath && (await pathExists(legacyRepoPath))) {
-    console.error(`[codexnamer] Legacy same-name repo still exists at: ${legacyRepoPath}`);
+  if (siblingRepoPath && (await pathExists(siblingRepoPath))) {
+    console.error(`[codexnamer] Another same-name repo exists at: ${siblingRepoPath}`);
   }
   await cleanupStaleManagedProcesses(mode, explicitApiBase);
   const api = await ensureApi(explicitApiBase);

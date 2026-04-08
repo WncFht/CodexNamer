@@ -87,7 +87,7 @@ describe("local api", () => {
     });
     expect(suggest.statusCode).toBe(200);
     expect(suggest.json().threadId).toBe("019d-api-2");
-    expect(suggest.json().style).toBe("detailed");
+    expect(suggest.json().source).toBe("ai");
 
     const freeze = await app.inject({
       method: "POST",
@@ -355,8 +355,11 @@ describe("local api", () => {
           contextStrategy: "user-assistant-transcript",
           contextMaxChars: 4096,
           compositionMode: "prompt-override",
-          components: ["tag", "summary"],
-          componentSeparator: " / ",
+          builder: [
+            { type: "component", component: "tag" },
+            { type: "separator", value: " / " },
+            { type: "component", component: "summary" }
+          ],
           tags: [
             {
               id: "settings",
@@ -378,8 +381,11 @@ describe("local api", () => {
     expect(update.json().config.effectiveConfig.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(update.json().config.effectiveConfig.naming.contextMaxChars).toBe(4096);
     expect(update.json().config.effectiveConfig.naming.compositionMode).toBe("prompt-override");
-    expect(update.json().config.effectiveConfig.naming.components).toEqual(["tag", "summary"]);
-    expect(update.json().config.effectiveConfig.naming.componentSeparator).toBe(" / ");
+    expect(update.json().config.effectiveConfig.naming.builder).toEqual([
+      { type: "component", component: "tag" },
+      { type: "separator", value: " / " },
+      { type: "component", component: "summary" }
+    ]);
     expect(update.json().config.effectiveConfig.naming.tags[0].id).toBe("settings");
     expect(update.json().config.effectiveConfig.naming.customPrompt).toBe(
       "Always output a Chinese classification tag first."
@@ -399,8 +405,9 @@ describe("local api", () => {
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
     expect(written).toContain('composition_mode = "prompt-override"');
-    expect(written).toContain('components = [ "tag", "summary" ]');
-    expect(written).toContain('component_separator = " / "');
+    expect(written).toContain('[[naming.builder]]');
+    expect(written).toContain('component = "tag"');
+    expect(written).toContain('value = " / "');
     expect(written).toContain('custom_prompt = "Always output a Chinese classification tag first."');
     expect(written).toContain('candidate_idle_seconds = 33');
   });

@@ -66,7 +66,6 @@ describe("history and state commands", () => {
     manager.db.saveCandidate(threadId, {
       name: "manual title",
       source: "ai",
-      style: "detailed",
       generatedAt: "2026-04-04T12:00:00.000Z"
     });
 

@@ -9,7 +9,6 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        mode: "hybrid",
         autoApply: "idle-finalize",
         freezeManualName: true
       }
@@ -33,7 +32,6 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        mode: "hybrid",
         autoApply: "idle-finalize",
         freezeManualName: true
       }
@@ -66,7 +64,6 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        mode: "hybrid",
         autoApply: "idle-finalize",
         freezeManualName: true
       },
@@ -120,7 +117,6 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        mode: "hybrid",
         autoApply: "disabled",
         freezeManualName: true
       },
@@ -185,7 +181,6 @@ describe("auto rename apply", () => {
           threadId: string;
           name: string;
           source: "ai";
-          style: "detailed";
           kind: string;
           summary: string;
           generatedAt: string;
@@ -201,7 +196,6 @@ describe("auto rename apply", () => {
           threadId: session.threadId,
           name: `rename ${session.threadId}`,
           source: "ai",
-          style: "detailed",
           kind: "fix",
           summary: "rename queue",
           generatedAt: new Date().toISOString()

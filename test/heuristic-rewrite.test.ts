@@ -35,7 +35,6 @@ describe("heuristic names are treated as pending AI rewrite", () => {
         newName: "0405 fix(settings): 旧 heuristic 名字",
         source: "heuristic",
         kind: "auto",
-        style: "brief",
         status: "applied",
         appliedAt: "2026-04-04T12:00:00.000Z",
         appliedRevision: rawDetail?.revision,

@@ -184,7 +184,6 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
             threadId: string;
             name: string;
             source: "ai";
-            style: "detailed";
             kind: string;
             summary: string;
             generatedAt: string;
@@ -196,7 +195,6 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
         threadId: session.threadId,
         name: `rename ${session.threadId}`,
         source: "ai",
-        style: "detailed",
         kind: "chore",
         summary: `rename ${session.threadId}`,
         generatedAt: new Date().toISOString()
