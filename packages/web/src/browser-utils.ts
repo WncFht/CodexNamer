@@ -87,14 +87,14 @@ export function sessionDisplayTitle(session: SessionSummary | SessionDetail): st
 }
 
 export function sessionListTitle(session: SessionSummary | SessionDetail): string {
+  const generatedTitle = session.officialName ?? session.candidateName;
+  if (generatedTitle) {
+    return generatedTitle;
+  }
   const firstUserMessage = session.firstUserMessage?.trim();
-  return firstUserMessage && firstUserMessage.length > 0 ? firstUserMessage : sessionDisplayTitle(session);
+  return firstUserMessage && firstUserMessage.length > 0 ? firstUserMessage : session.threadId;
 }
 
 export function sessionListSubtitle(session: SessionSummary | SessionDetail): string {
-  const firstUserMessage = session.firstUserMessage?.trim();
-  if (firstUserMessage && firstUserMessage.length > 0) {
-    return sessionDisplayTitle(session);
-  }
-  return session.candidateName ?? session.threadId;
+  return session.threadId;
 }

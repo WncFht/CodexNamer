@@ -75,7 +75,7 @@ describe("browser-utils", () => {
     ).toBe("Official");
   });
 
-  test("prefers the first user message in the session list while keeping the rename in subtitle", () => {
+  test("prefers generated titles in the session list and keeps thread id in subtitle", () => {
     const session = {
       threadId: "abc",
       firstUserMessage: "修复 settings 保存后被重置的问题",
@@ -88,7 +88,22 @@ describe("browser-utils", () => {
       taskCompleteCount: 0
     };
 
+    expect(sessionListTitle(session)).toBe("fix(settings): persist ui language");
+    expect(sessionListSubtitle(session)).toBe("abc");
+  });
+
+  test("falls back to the first user message when no generated title exists", () => {
+    const session = {
+      threadId: "abc",
+      firstUserMessage: "修复 settings 保存后被重置的问题",
+      workspaceId: "w",
+      workspaceLabel: "w",
+      dirty: false,
+      frozen: false,
+      taskCompleteCount: 0
+    };
+
     expect(sessionListTitle(session)).toBe("修复 settings 保存后被重置的问题");
-    expect(sessionListSubtitle(session)).toBe("fix(settings): persist ui language");
+    expect(sessionListSubtitle(session)).toBe("abc");
   });
 });
