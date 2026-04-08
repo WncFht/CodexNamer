@@ -61,6 +61,7 @@ export default tseslint.config(
       "no-undef": "off",
       "no-control-regex": "off",
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
         {

@@ -19,7 +19,6 @@ import {
   QUICK_SEPARATOR_OPTIONS,
   renderNamingStructurePreview,
   renderTagLabel,
-  SettingsTagDraft,
   tagToneClass,
   TIMESTAMP_PRESET_OPTIONS,
   type AiBackend,
@@ -32,6 +31,7 @@ import {
   type NamingTimestampPreset,
   type ProviderSource,
   type RenameAutoApply,
+  type SettingsTagDraft,
   type SettingsDraft,
   useSettingsDraft,
   updateSelectedProfile
