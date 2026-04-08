@@ -363,6 +363,19 @@ function NamingSection(props: {
   const [replaySince, setReplaySince] = useState("");
   const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const [replaying, setReplaying] = useState(false);
+  const [manualPromptPreviewRefreshing, setManualPromptPreviewRefreshing] = useState(false);
+
+  const handleManualPromptPreviewRefresh = async () => {
+    if (manualPromptPreviewRefreshing) {
+      return;
+    }
+    setManualPromptPreviewRefreshing(true);
+    try {
+      await props.onRefreshPromptPreview(props.draftConfig, { urgent: true });
+    } finally {
+      setManualPromptPreviewRefreshing(false);
+    }
+  };
 
   const namingComponentOptions: Array<{ value: NamingComponent; label: string; copy: string }> = [
     {
@@ -904,10 +917,13 @@ function NamingSection(props: {
             </div>
             <button
               className="btn-sm"
-              onClick={() => void props.onRefreshPromptPreview(props.draftConfig, { urgent: true })}
+              disabled={manualPromptPreviewRefreshing}
+              onClick={() => {
+                void handleManualPromptPreviewRefresh();
+              }}
               type="button"
             >
-              {props.promptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
+              {manualPromptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
             </button>
           </div>
           <dl className="settings-runtime-grid compact">
