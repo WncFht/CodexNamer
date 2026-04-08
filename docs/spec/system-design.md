@@ -4,7 +4,7 @@
 
 ## 设计摘要
 
-Codex Session Manager 的主线路如下：
+CodexNamer 的主线路如下：
 
 1. 扫描 Codex rollout 文件并抽取会话事实。
 2. 将会话状态写入本地 SQLite。

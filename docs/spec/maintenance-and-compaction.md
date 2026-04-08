@@ -103,7 +103,7 @@ WebUI / CLI `doctor` 应展示：
 
 compact 前自动生成：
 
-- `~/.local/state/codex-session-manager/backups/session_index-YYYYMMDDTHHMMSSZ.jsonl`
+- `~/.local/state/codexnamer/backups/session_index-YYYYMMDDTHHMMSSZ.jsonl`
 
 默认保留：
 
@@ -133,11 +133,11 @@ compact 失败时：
 CLI：
 
 ```bash
-codex-session compact-index
-codex-session compact-index --dry-run
-codex-session compact-index --force
-codex-session doctor
-codex-session maintenance prune
+codexnamer compact-index
+codexnamer compact-index --dry-run
+codexnamer compact-index --force
+codexnamer doctor
+codexnamer maintenance prune
 ```
 
 ## 维护历史

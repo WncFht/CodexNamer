@@ -174,27 +174,27 @@ So you can distinguish "configured for auto-apply" from "actually applying now".
 
 Default config path:
 
-- `~/.config/codex-session-manager/config.toml`
+- `~/.config/codexnamer/config.toml`
 
-> Note: the public project name is now **CodexNamer**, but the current default local config/state paths still use the historical `codex-session-manager` prefix for compatibility.
+> Note: the default config and state paths now use the **CodexNamer** prefix. If you already have legacy `codex-session-manager` config or state directories, the loader still reads them for compatibility.
 
 Minimal example:
 
 ```toml
 [general]
 codex_home = "~/.codex"
-state_dir = "~/.local/state/codex-session-manager"
+state_dir = "~/.local/state/codexnamer"
 ui_language = "zh-CN"
 
 [ai]
-backend = "codex"
-provider_source = "inherit-codex"
+backend = "responses"
+provider_source = "codex-config"
 profile = "default"
 max_concurrency = 1
 
 [naming]
+preset = "conventional"
 language = "zh-CN"
-default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 composition_mode = "structured"

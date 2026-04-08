@@ -4,7 +4,7 @@
 
 ## 1. 仓库定位
 
-`codex-session-manager` 是一个独立于 `openai/codex` 的本地 session 管理器。
+`CodexNamer` 是一个独立于 `openai/codex` 的本地 session 管理器。
 
 它通过读取 rollout、维护本地 SQLite、并向 `session_index.jsonl` 追加 rename 记录来工作，不修改 Codex 源码。
 

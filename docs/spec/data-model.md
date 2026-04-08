@@ -42,7 +42,7 @@
 
 默认文件：
 
-- `~/.local/state/codex-session-manager/app.db`
+- `~/.local/state/codexnamer/app.db`
 
 ## 当前表
 
@@ -168,7 +168,7 @@
 provider profile 与 AI 配置当前不落在 SQLite，而是来自：
 
 - 用户配置文件
-- 项目级 `.codex-session-manager.toml`
+- 项目级 `.codexnamer.toml`
 - 继承的 Codex 配置
 
 ## 关键枚举
@@ -242,7 +242,7 @@ provider profile 与 AI 配置当前不落在 SQLite，而是来自：
 {
   "threadId": "019d....",
   "cwd": "/path/to/project",
-  "projectName": "codex-session-manager",
+  "projectName": "codexnamer",
   "updatedAt": "2026-04-09T03:02:00Z",
   "officialName": "JI",
   "candidateName": "docs · feat · update status page docs",

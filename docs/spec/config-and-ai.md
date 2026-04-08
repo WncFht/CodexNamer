@@ -5,8 +5,8 @@
 ## 配置来源优先级
 
 1. CLI / runtime overrides
-2. 项目级 `.codex-session-manager.toml`
-3. 用户级 `~/.config/codex-session-manager/config.toml`
+2. 项目级 `.codexnamer.toml`
+3. 用户级 `~/.config/codexnamer/config.toml`
 4. 继承的 `~/.codex/config.toml` / `auth.json`
 5. 内置默认值
 
@@ -88,7 +88,7 @@
 ```toml
 [general]
 codex_home = "~/.codex"
-state_dir = "~/.local/state/codex-session-manager"
+state_dir = "~/.local/state/codexnamer"
 ui_language = "zh-CN"
 
 [rename]

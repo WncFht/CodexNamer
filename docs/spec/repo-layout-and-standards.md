@@ -12,7 +12,7 @@
 ## 建议仓库结构
 
 ```text
-codex-session-manager/
+codexnamer/
   README.md
   docs/
     adr/

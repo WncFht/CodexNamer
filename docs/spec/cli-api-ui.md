@@ -9,19 +9,19 @@
 当前命令：
 
 ```bash
-codex-session list [--dirty]
-codex-session show --id <thread-id>
-codex-session suggest --id <thread-id>
-codex-session apply --id <thread-id>
-codex-session rename --id <thread-id> --name "..."
-codex-session history --id <thread-id>
-codex-session freeze --id <thread-id>
-codex-session unfreeze --id <thread-id>
-codex-session batch apply --dirty [--preview]
-codex-session compact-index [--dry-run]
-codex-session doctor
-codex-session config print
-codex-session provider test
+codexnamer list [--dirty]
+codexnamer show --id <thread-id>
+codexnamer suggest --id <thread-id>
+codexnamer apply --id <thread-id>
+codexnamer rename --id <thread-id> --name "..."
+codexnamer history --id <thread-id>
+codexnamer freeze --id <thread-id>
+codexnamer unfreeze --id <thread-id>
+codexnamer batch apply --dirty [--preview]
+codexnamer compact-index [--dry-run]
+codexnamer doctor
+codexnamer config print
+codexnamer provider test
 ```
 
 说明：

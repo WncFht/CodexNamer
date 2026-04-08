@@ -173,27 +173,27 @@ npm run daemon -- --interval 60
 
 默认配置路径：
 
-- `~/.config/codex-session-manager/config.toml`
+- `~/.config/codexnamer/config.toml`
 
-> 说明：公开项目名现在使用 **CodexNamer**，但当前默认本地配置 / 状态路径为了兼容，仍然保留历史上的 `codex-session-manager` 前缀。
+> 说明：默认配置与状态路径现在使用 **CodexNamer** 前缀；如果你本地已经存在旧的 `codex-session-manager` 配置或状态目录，加载器仍会继续兼容读取。
 
 最小示例：
 
 ```toml
 [general]
 codex_home = "~/.codex"
-state_dir = "~/.local/state/codex-session-manager"
+state_dir = "~/.local/state/codexnamer"
 ui_language = "zh-CN"
 
 [ai]
-backend = "codex"
-provider_source = "inherit-codex"
+backend = "responses"
+provider_source = "codex-config"
 profile = "default"
 max_concurrency = 1
 
 [naming]
+preset = "conventional"
 language = "zh-CN"
-default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 composition_mode = "structured"
