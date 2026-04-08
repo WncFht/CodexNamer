@@ -1466,5 +1466,3 @@ export class CodexNamer {
     }
   }
 }
-
-export { CodexNamer as CodexSessionManager };

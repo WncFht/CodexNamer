@@ -36,8 +36,7 @@ function parseArgs(argv: string[]): {
   const apiBase =
     apiBaseFromFlag ??
     (apiBaseIndex >= 0 ? rest[apiBaseIndex + 1] : undefined) ??
-    process.env.CODEXNAMER_API_BASE ??
-    process.env.CSM_API_BASE;
+    process.env.CODEXNAMER_API_BASE;
 
   return {
     mode: modeArg,
@@ -448,7 +447,7 @@ function withApiBaseArgs(mode: UiMode, passthrough: string[], apiBase: string): 
 async function main(): Promise<void> {
   const { mode, passthrough, explicitApiBase } = parseArgs(process.argv.slice(2));
   const repoCwd = process.cwd();
-  const webPort = process.env.CODEXNAMER_WEB_PORT ?? process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT);
+  const webPort = process.env.CODEXNAMER_WEB_PORT ?? String(DEFAULT_WEB_PORT);
   const legacyRepoPath = detectLegacyRepoPath(repoCwd);
   console.error(`[codexnamer] Launch mode: ${mode}`);
   console.error(`[codexnamer] Repo cwd: ${repoCwd}`);
@@ -471,8 +470,7 @@ async function main(): Promise<void> {
         mode === "web"
           ? {
               CODEXNAMER_API_BASE: api.baseUrl,
-              CODEXNAMER_WEB_PORT:
-                process.env.CODEXNAMER_WEB_PORT ?? process.env.CSM_WEB_PORT ?? String(DEFAULT_WEB_PORT)
+              CODEXNAMER_WEB_PORT: process.env.CODEXNAMER_WEB_PORT ?? String(DEFAULT_WEB_PORT)
             }
           : {
               CODEXNAMER_API_BASE: api.baseUrl
