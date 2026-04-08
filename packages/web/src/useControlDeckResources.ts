@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import {
+  fetchAiRequestLogDetail,
   fetchAiRequestLogs,
   fetchAutoRenamePreview,
   fetchConfig,
@@ -22,6 +23,7 @@ import {
   type TabId
 } from "./control-deck-model.js";
 import type {
+  AiRequestLogDetailResponse,
   AiRequestLogResponse,
   ApiEventsResponse,
   AutoRenamePreviewResponse,
@@ -42,6 +44,7 @@ type UseControlDeckResourcesOptions = {
   dirtyOnly: boolean;
   selectedWorkspaceId: string;
   selectedId?: string;
+  selectedRequestLogId?: number;
   onSelectSession: (threadId?: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onFailure: (error: unknown) => void;
@@ -56,6 +59,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
+  const [aiRequestLogDetail, setAiRequestLogDetail] = useState<AiRequestLogDetailResponse | null>(null);
   const [preview, setPreview] = useState<AutoRenamePreviewResponse | null>(null);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -70,7 +74,8 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     deferredSearch,
     dirtyOnly: options.dirtyOnly,
     selectedWorkspaceId: options.selectedWorkspaceId,
-    selectedId: options.selectedId
+    selectedId: options.selectedId,
+    selectedRequestLogId: options.selectedRequestLogId
   });
   const sessionsRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
@@ -79,6 +84,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const overviewRequestIdRef = useRef(0);
   const doctorRequestIdRef = useRef(0);
   const aiRequestLogsRequestIdRef = useRef(0);
+  const aiRequestLogDetailRequestIdRef = useRef(0);
   const previewRequestIdRef = useRef(0);
   const promptPreviewRequestIdRef = useRef(0);
   const previewUrgentPendingRef = useRef(0);
@@ -89,7 +95,8 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     deferredSearch,
     dirtyOnly: options.dirtyOnly,
     selectedWorkspaceId: options.selectedWorkspaceId,
-    selectedId: options.selectedId
+    selectedId: options.selectedId,
+    selectedRequestLogId: options.selectedRequestLogId
   };
 
   const selectedSummary = useMemo(
@@ -153,6 +160,20 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       return;
     }
     setAiRequestLogs(aiRequestLogPayload);
+  };
+
+  const reloadAiRequestLogDetail = async (requestLogId: number | undefined) => {
+    const requestId = ++aiRequestLogDetailRequestIdRef.current;
+    if (!requestLogId || Number.isNaN(requestLogId)) {
+      setAiRequestLogDetail(null);
+      return;
+    }
+
+    const detailPayload = await fetchAiRequestLogDetail(requestLogId);
+    if (requestId !== aiRequestLogDetailRequestIdRef.current) {
+      return;
+    }
+    setAiRequestLogDetail(detailPayload);
   };
 
   const reloadPreview = async (options?: {
@@ -412,6 +433,16 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   }, [options.selectedId, options.tab]);
 
   useEffect(() => {
+    if (options.tab !== "maintenance") {
+      setAiRequestLogDetail(null);
+      return;
+    }
+    void reloadAiRequestLogDetail(options.selectedRequestLogId).catch((error) => {
+      reportFailure(error);
+    });
+  }, [options.selectedRequestLogId, options.tab, reportFailure]);
+
+  useEffect(() => {
     let active = true;
     void loadResources(["config"])
       .then(() => {
@@ -486,6 +517,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     doctor,
     overview,
     aiRequestLogs,
+    aiRequestLogDetail,
     preview,
     loadingSessions,
     loadingDetail,

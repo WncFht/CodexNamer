@@ -24,6 +24,7 @@ export type UrlUiState = {
   showHiddenTranscript: boolean;
   selectedWorkspaceId: string;
   selectedId?: string;
+  selectedRequestLogId?: number;
 };
 
 function parseUrlBoolean(value: string | null, fallback: boolean): boolean {
@@ -49,7 +50,8 @@ export function readUiStateFromUrl(): UrlUiState {
     dirtyOnly: parseUrlBoolean(params.get("dirty"), true),
     showHiddenTranscript: parseUrlBoolean(params.get("hidden"), false),
     selectedWorkspaceId: workspace && workspace !== ALL_WORKSPACES_ID ? workspace : ALL_WORKSPACES_ID,
-    selectedId: params.get("session") ?? undefined
+    selectedId: params.get("session") ?? undefined,
+    selectedRequestLogId: params.get("requestLog") ? Number(params.get("requestLog")) : undefined
   };
 }
 
@@ -90,6 +92,12 @@ export function writeUiStateToUrl(state: UrlUiState): void {
     params.delete("session");
   } else {
     params.set("session", state.selectedId);
+  }
+
+  if (!state.selectedRequestLogId || Number.isNaN(state.selectedRequestLogId)) {
+    params.delete("requestLog");
+  } else {
+    params.set("requestLog", String(state.selectedRequestLogId));
   }
 
   const nextSearch = params.toString();
