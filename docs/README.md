@@ -15,6 +15,7 @@
 - [数据模型](./spec/data-model.md)
 - [触发与生命周期](./spec/trigger-and-lifecycle.md)
 - [Auto Rename 评估与 Context 构建](./spec/rename-evaluation-and-context.md)
+- [状态页说明（Rename Ops / 运行态）](./spec/status-page-guide.md)
 - [CLI / API / UI 设计](./spec/cli-api-ui.md)
 - [维护与压缩](./spec/maintenance-and-compaction.md)
 - [测试与可观测性](./spec/testing-and-observability.md)
