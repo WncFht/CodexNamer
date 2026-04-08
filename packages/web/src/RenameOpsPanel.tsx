@@ -249,6 +249,31 @@ function aiRequestStatusLabel(status: string | undefined, language: UiLanguage):
   }
 }
 
+function replayBasisLabel(
+  basis: "session-updated-at" | "last-applied-at",
+  language: UiLanguage
+): string {
+  if (language === "zh-CN") {
+    return basis === "last-applied-at" ? "按上次正式命名时间" : "按会话更新时间";
+  }
+  return basis === "last-applied-at" ? "last applied at" : "session updated at";
+}
+
+function reasonTone(reason: string): "warning" | "manual" | "success" {
+  if (reason === "candidate_ready" || reason === "finalize_ready") {
+    return "success";
+  }
+  if (
+    reason === "manual_override" ||
+    reason === "frozen" ||
+    reason === "max_auto_renames_reached" ||
+    reason === "rename_cooldown"
+  ) {
+    return "manual";
+  }
+  return "warning";
+}
+
 export function RenameOpsPanel(props: {
   aiRequestLogs: AiRequestLogResponse | null;
   overview: OverviewResponse | null;
@@ -258,10 +283,17 @@ export function RenameOpsPanel(props: {
   uiLanguage: UiLanguage;
   onRefreshRuntime: () => void | Promise<void>;
   onRefreshPreview: (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => void | Promise<void>;
+  onReplayRenames: (params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }) => Promise<unknown> | unknown;
 }) {
   const [logQuery, setLogQuery] = React.useState("");
   const [logStatusFilter, setLogStatusFilter] = React.useState<"all" | "running" | "succeeded" | "failed">("all");
   const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "chat_completions" | "codex-exec">("all");
+  const [replaySince, setReplaySince] = React.useState("");
+  const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
+  const [replaying, setReplaying] = React.useState(false);
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
   const isChinese = props.uiLanguage === "zh-CN";
   const inline = (zh: string, en: string) => (props.uiLanguage === "zh-CN" ? zh : en);
@@ -270,7 +302,6 @@ export function RenameOpsPanel(props: {
   const skippedLabel = isChinese ? "已跳过" : "Skipped";
   const manualSourceLabel = isChinese ? "手动" : "Manual";
   const noDataLabel = isChinese ? "暂无数据" : "No data";
-  const sessionsLabel = isChinese ? "个会话" : "sessions";
   const overview = props.overview;
   const aiRequestLogs = props.aiRequestLogs;
   const previewItems = props.preview?.items ?? [];
@@ -297,6 +328,30 @@ export function RenameOpsPanel(props: {
   }, [previewItems]);
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
   const latestAiRequest = aiRequestLogs?.items[0];
+  const replayRuns = overview?.replay.recentRuns ?? [];
+  const stateGuide = [
+    {
+      key: "skip",
+      title: autoRenameStatusLabel("skip", props.uiLanguage),
+      count: previewSkipCount,
+      tone: "warning" as const,
+      copy: inline("被活跃中、冻结、手动覆盖或冷却等保护条件挡住。", "Blocked by guards such as active updates, frozen state, manual override, or cooldown.")
+    },
+    {
+      key: "suggest",
+      title: autoRenameStatusLabel("suggest", props.uiLanguage),
+      count: previewSuggestCount,
+      tone: "manual" as const,
+      copy: inline("已经达到候选阈值，会先生成候选名，但还不到正式落盘时机。", "Past the candidate threshold, so a candidate title is generated, but it is not ready to land yet.")
+    },
+    {
+      key: "apply",
+      title: autoRenameStatusLabel("apply", props.uiLanguage),
+      count: previewApplyCount,
+      tone: "success" as const,
+      copy: inline("已经达到最终应用阈值；如果 daemon 正在 auto-apply，就会正式写回。", "Past the finalize threshold; if the daemon is auto-applying, this is eligible to land as the official title.")
+    }
+  ];
   const filteredAiRequests = React.useMemo(() => {
     const query = logQuery.trim().toLowerCase();
     return (aiRequestLogs?.items ?? []).filter((item) => {
@@ -328,6 +383,21 @@ export function RenameOpsPanel(props: {
   const filteredRunningCount = filteredAiRequests.filter((item) => item.status === "running").length;
   const filteredFailedCount = filteredAiRequests.filter((item) => item.status === "failed").length;
   const filteredSucceededCount = filteredAiRequests.filter((item) => item.status === "succeeded").length;
+
+  const handleReplay = async () => {
+    if (!replaySince || replaying) {
+      return;
+    }
+    setReplaying(true);
+    try {
+      await props.onReplayRenames({
+        since: new Date(replaySince).toISOString(),
+        basis: replayBasis
+      });
+    } finally {
+      setReplaying(false);
+    }
+  };
 
   const activityOption = React.useMemo(() => {
     if (!overview) {
@@ -583,21 +653,20 @@ export function RenameOpsPanel(props: {
     });
   }, [manualSourceLabel, noDataLabel, overview, props.uiLanguage]);
 
-  const workloadOption = React.useMemo(() => {
+  const pipelineOption = React.useMemo(() => {
     if (!overview) {
       return undefined;
     }
 
-    const bars = overview.workload.topWorkspacesByTokens
-      .slice()
-      .reverse()
-      .map((item) => ({
-        label: item.workspaceLabel,
-        value: item.tokens,
-        sessions: item.sessions
-      }));
+    const stages = [
+      { key: "discovered", label: inline("刚发现", "Discovered"), value: overview.pipeline.discovered, color: "#b7b3a7" },
+      { key: "active", label: inline("活跃中", "Active"), value: overview.pipeline.active, color: "#a57533" },
+      { key: "candidate", label: inline("候选就绪", "Candidate ready"), value: overview.pipeline.candidateReady, color: "#6f8a53" },
+      { key: "finalize", label: inline("可终稿", "Finalize ready"), value: overview.pipeline.finalizeReady, color: "#c96442" },
+      { key: "applied", label: inline("已应用", "Applied"), value: overview.pipeline.applied, color: "#4f7d66" }
+    ];
 
-    return (theme: ChartTheme, echartsLib: any): ChartOption => ({
+    return (theme: ChartTheme): ChartOption => ({
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
@@ -606,30 +675,21 @@ export function RenameOpsPanel(props: {
         },
         backgroundColor: "rgba(0, 0, 0, 0.85)",
         borderColor: "rgba(255, 255, 255, 0.1)",
-        textStyle: { color: "#fff", fontSize: 12 },
-        formatter(params: Array<{ value: number; dataIndex: number }>) {
-          const entry = bars[params[0]?.dataIndex ?? 0];
-          if (!entry) {
-            return "";
-          }
-          return `${entry.label}<br/>${formatCompactNumber(entry.value, props.uiLanguage)} tokens<br/>${entry.sessions} ${sessionsLabel}`;
-        }
+        textStyle: { color: "#fff", fontSize: 12 }
       },
       grid: {
-        left: 12,
-        right: 24,
-        top: 12,
-        bottom: 12,
+        left: 20,
+        right: 20,
+        top: 16,
+        bottom: 16,
         containLabel: true
       },
       xAxis: {
         type: "value",
+        minInterval: 1,
         axisLabel: {
           color: theme.text,
-          fontSize: 11,
-          formatter(value: number) {
-            return formatCompactNumber(value, props.uiLanguage);
-          }
+          fontSize: 11
         },
         splitLine: {
           lineStyle: {
@@ -640,7 +700,7 @@ export function RenameOpsPanel(props: {
       },
       yAxis: {
         type: "category",
-        data: bars.map((item) => item.label),
+        data: stages.map((item) => item.label),
         axisLabel: {
           color: theme.text,
           fontSize: 11
@@ -655,28 +715,105 @@ export function RenameOpsPanel(props: {
       series: [
         {
           type: "bar",
-          data: bars.map((item) => item.value),
-          barWidth: 16,
-          itemStyle: {
-            borderRadius: [0, 10, 10, 0],
-            color: new echartsLib.graphic.LinearGradient(1, 0, 0, 0, [
-              { offset: 0, color: "rgba(201, 100, 66, 0.95)" },
-              { offset: 1, color: "rgba(201, 100, 66, 0.3)" }
-            ])
-          },
+          data: stages.map((item) => ({
+            value: item.value,
+            itemStyle: {
+              color: item.color,
+              borderRadius: [0, 10, 10, 0]
+            }
+          })),
+          barWidth: 18,
           label: {
             show: true,
             position: "right",
             color: theme.text,
             fontSize: 11,
             formatter(params: { value: number }) {
-              return formatCompactNumber(params.value, props.uiLanguage);
+              return formatUiNumber(params.value, props.uiLanguage);
             }
           }
         }
       ]
     });
-  }, [overview, props.uiLanguage, sessionsLabel]);
+  }, [inline, overview, props.uiLanguage]);
+
+  const flowOption = React.useMemo(() => {
+    if (previewItems.length === 0) {
+      return undefined;
+    }
+
+    const linkCounts = new Map<string, number>();
+    for (const item of previewItems) {
+      const source = autoRenameReasonLabel(item.reason || item.status, props.uiLanguage);
+      const target = autoRenameStatusLabel(item.status, props.uiLanguage);
+      const key = `${source}→${target}`;
+      linkCounts.set(key, (linkCounts.get(key) ?? 0) + 1);
+    }
+
+    const links = Array.from(linkCounts.entries()).map(([key, value]) => {
+      const [source, target] = key.split("→");
+      return {
+        source,
+        target,
+        value
+      };
+    });
+    const nodeNames = Array.from(new Set(links.flatMap((item) => [item.source, item.target])));
+
+    return (theme: ChartTheme): ChartOption => ({
+      backgroundColor: "transparent",
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        textStyle: {
+          color: "#fff",
+          fontSize: 12
+        }
+      },
+      series: [
+        {
+          type: "sankey",
+          left: 16,
+          right: 18,
+          top: 16,
+          bottom: 16,
+          emphasis: {
+            focus: "adjacency"
+          },
+          lineStyle: {
+            color: "gradient",
+            curveness: 0.5,
+            opacity: 0.35
+          },
+          nodeGap: 16,
+          nodeWidth: 14,
+          label: {
+            color: theme.text,
+            fontSize: 11
+          },
+          itemStyle: {
+            borderColor: theme.surfaceAlt,
+            borderWidth: 1
+          },
+          data: nodeNames.map((name) => ({
+            name,
+            itemStyle: {
+              color:
+                name === autoRenameStatusLabel("apply", props.uiLanguage)
+                  ? theme.accent
+                  : name === autoRenameStatusLabel("suggest", props.uiLanguage)
+                    ? theme.warning
+                    : name === autoRenameStatusLabel("skip", props.uiLanguage)
+                      ? theme.muted
+                      : theme.manual
+            }
+          })),
+          links
+        }
+      ]
+    });
+  }, [previewItems, props.uiLanguage]);
 
   return (
     <section className="panel-grid ops-layout">
@@ -736,6 +873,9 @@ export function RenameOpsPanel(props: {
           <span className="chip success">
             {inline("最近应用", "Last apply")}: {formatWhen(overview?.renameHistory.lastAppliedAt, props.uiLanguage)}
           </span>
+          <span className="chip manual">
+            {inline("最近重入队", "Last replay")}: {formatWhen(overview?.replay.lastRunAt, props.uiLanguage)}
+          </span>
           <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
             {inline("活跃 AI 请求", "Active AI requests")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
           </span>
@@ -746,7 +886,7 @@ export function RenameOpsPanel(props: {
 
         <div className="settings-metrics-grid ops-kpis">
           <article className="metric-card">
-            <span className="metric-label">{inline("后台 Sweep", "Daemon sweep")}</span>
+            <span className="metric-label">{inline("上一轮后台 Sweep", "Last daemon sweep")}</span>
             <strong>{formatUiNumber(lastSweepSummary?.total, props.uiLanguage)}</strong>
             <p>
               {formatUiNumber(lastSweepSummary?.suggest, props.uiLanguage)} {inline("建议", "suggest")} / {formatUiNumber(lastSweepSummary?.apply, props.uiLanguage)} {inline("待应用", "apply")} / {formatUiNumber(lastSweepSummary?.skip, props.uiLanguage)} {inline("跳过", "skip")}
@@ -788,7 +928,7 @@ export function RenameOpsPanel(props: {
             </p>
           </article>
           <article className="metric-card">
-            <span className="metric-label">{inline("当前队列", "Current queues")}</span>
+            <span className="metric-label">{inline("当前即时评估", "Live preview queue")}</span>
             <strong>
               {formatUiNumber(previewApplyCount + previewSuggestCount, props.uiLanguage)}
             </strong>
@@ -809,6 +949,16 @@ export function RenameOpsPanel(props: {
       </section>
 
       <ChartCard
+        buildOption={pipelineOption}
+        copy={inline("会话会先落在活跃、候选就绪、可终稿这些阶段里。这里回答的是：现在整体卡在哪一段。", "Sessions first land in stages like active, candidate-ready, and finalize-ready. This chart answers where the system is currently sitting." )}
+        title={inline("会话阶段分布", "Session stage distribution")}
+      />
+      <ChartCard
+        buildOption={flowOption}
+        copy={inline("把当前预览队列里的“原因”映射到“动作”。这里回答的是：为什么是跳过、建议还是应用。", "Maps the current preview reasons to scheduling actions. This answers why items are skipping, suggesting, or applying." )}
+        title={inline("原因到动作的流向", "Reason to action flow")}
+      />
+      <ChartCard
         buildOption={activityOption}
         copy={inline("最近 14 天的 rename 活动，用来区分真正落盘、仅预览和跳过。", "Rename activity over the last 14 days, separating landed applies, preview-only passes, and skips.")}
         title={inline("近期重命名活动", "Recent rename activity")}
@@ -818,17 +968,36 @@ export function RenameOpsPanel(props: {
         copy={inline("真正算作正式命名的来源分布，现在只统计 AI 和手动命名。", "Distribution of accepted rename sources. Only AI and manual names count as official now.")}
         title={inline("应用来源分布", "Applied source mix")}
       />
-      <ChartCard
-        buildOption={workloadOption}
-        copy={inline("按工作区观察当前 token 压力，确认高消耗主要集中在哪些目录。", "Current token load by workspace to see where the heaviest session cost is concentrated.")}
-        title={inline("工作区 Token 压力", "Workspace token load")}
-      />
+
+      <section className="detail-panel ops-span-wide ops-state-guide">
+        <div className="panel-topline">
+          <div>
+            <p className="panel-kicker">{inline("状态说明", "State guide")}</p>
+            <h3>{inline("现在的命名动作是怎么判出来的", "How the rename actions are decided")}</h3>
+          </div>
+        </div>
+        <div className="ops-state-guide-grid">
+          {stateGuide.map((item) => (
+            <article className="ops-state-card" data-tone={item.tone} key={item.key}>
+              <span className="metric-label">{item.title}</span>
+              <strong>{formatUiNumber(item.count, props.uiLanguage)}</strong>
+              <p>{item.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="detail-panel">
         <div className="panel-topline">
           <div>
             <p className="panel-kicker">{tt("scheduler")}</p>
             <h3>{inline("待处理队列", "Action queue")}</h3>
+            <p className="settings-copy">
+              {inline(
+                "这里是当前页面触发的即时评估，不是 daemon 上一轮 sweep 的快照，所以和顶部后台 Sweep 统计可能不同。",
+                "This is the current on-demand evaluation from the page, not the last daemon sweep snapshot, so it can differ from the daemon totals above."
+              )}
+            </p>
           </div>
           <span className="chip manual">
             {previewHasCandidateNames ? inline("含候选名", "with names") : inline("仅状态", "status only")}
@@ -878,16 +1047,93 @@ export function RenameOpsPanel(props: {
               <h3>{inline("为什么没进队", "Why items were skipped")}</h3>
             </div>
           </div>
-          <div className="ops-skip-chip-list">
+          <div className="ops-reason-grid">
             {skipReasonSummary.length === 0 ? (
               <span className="ops-log-summary-chip">{inline("当前没有跳过项", "No skipped items right now")}</span>
             ) : null}
             {skipReasonSummary.slice(0, 8).map((item) => (
-              <span className="ops-log-summary-chip" key={item.reason}>
-                {autoRenameReasonLabel(item.reason, props.uiLanguage)}: {formatUiNumber(item.count, props.uiLanguage)}
-              </span>
+              <article className="ops-reason-card" data-tone={reasonTone(item.reason)} key={item.reason}>
+                <span className="metric-label">{autoRenameReasonLabel(item.reason, props.uiLanguage)}</span>
+                <strong>{formatUiNumber(item.count, props.uiLanguage)}</strong>
+              </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="detail-panel ops-replay-panel">
+        <div className="panel-topline">
+          <div>
+            <p className="panel-kicker">{inline("Replay", "Replay")}</p>
+            <h3>{inline("规则变更后的重新入队", "Rename replay after rule changes")}</h3>
+            <p className="settings-copy">
+              {inline(
+                "当你改了命名规则，可以把某个时间点之后的会话重新打回命名队列。它不会改配置，只会清空旧 candidate 并重新排队。",
+                "After changing naming logic, you can push sessions after a chosen time back into the rename queue. This does not touch config; it only clears stale candidates and requeues them."
+              )}
+            </p>
+          </div>
+          <span className="chip manual">
+            {inline("最近执行", "Last run")}: {formatWhen(overview?.replay.lastRunAt, props.uiLanguage)}
+          </span>
+        </div>
+
+        <div className="ops-replay-form">
+          <label className="ops-log-filter">
+            <span>{inline("起始时间", "Since")}</span>
+            <input
+              type="datetime-local"
+              value={replaySince}
+              onChange={(event) => setReplaySince(event.target.value)}
+            />
+          </label>
+          <label className="ops-log-filter">
+            <span>{inline("基准", "Basis")}</span>
+            <select
+              value={replayBasis}
+              onChange={(event) =>
+                setReplayBasis(event.target.value as "session-updated-at" | "last-applied-at")
+              }
+            >
+              <option value="session-updated-at">{inline("按会话更新时间", "Session updated at")}</option>
+              <option value="last-applied-at">{inline("按上次正式命名时间", "Last applied at")}</option>
+            </select>
+          </label>
+          <button className="btn-sm" type="button" disabled={!replaySince || replaying} onClick={() => void handleReplay()}>
+            {replaying ? inline("重新入队中...", "Requeueing...") : inline("重新入队", "Requeue")}
+          </button>
+        </div>
+
+        <div className="ops-log-summary-row">
+          <span className="ops-log-summary-chip">
+            {inline("最近记录", "Recent runs")}: {formatUiNumber(replayRuns.length, props.uiLanguage)}
+          </span>
+          <span className="ops-log-summary-chip">
+            {inline("最近一轮清空 candidate", "Last cleared candidates")}: {formatUiNumber(replayRuns[0]?.clearedCandidates, props.uiLanguage)}
+          </span>
+        </div>
+
+        <div className="history-stack">
+          {replayRuns.length === 0 ? (
+            <div className="ops-queue-empty">
+              {inline("还没有 replay 记录。", "No replay runs have been recorded yet.")}
+            </div>
+          ) : null}
+          {replayRuns.map((run) => (
+            <article className="history-row" key={`${run.requestedAt}-${run.since}-${run.basis}`}>
+              <div>
+                <strong>{replayBasisLabel(run.basis, props.uiLanguage)}</strong>
+                <p>
+                  {inline("起点", "Since")}: {formatWhen(run.since, props.uiLanguage)}
+                </p>
+              </div>
+              <div className="ops-replay-run-meta">
+                <span>{formatUiNumber(run.queued, props.uiLanguage)} {inline("个会话入队", "queued")}</span>
+                <span>{formatUiNumber(run.clearedCandidates, props.uiLanguage)} {inline("个 candidate 清空", "candidates cleared")}</span>
+                <span>{formatWhen(run.requestedAt, props.uiLanguage)}</span>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 

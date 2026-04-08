@@ -36,6 +36,11 @@ describe("rename replay queue", () => {
       expect(detail?.dirty).toBe(true);
       expect(renameState?.forceRewrite).toBe(true);
       expect(detail?.candidateName).toBeUndefined();
+
+      const overview = await manager.overview();
+      expect(overview.replay.lastRunAt).toBeDefined();
+      expect(overview.replay.recentRuns[0]?.basis).toBe("session-updated-at");
+      expect(overview.replay.recentRuns[0]?.queued).toBe(1);
     } finally {
       await manager.close();
     }

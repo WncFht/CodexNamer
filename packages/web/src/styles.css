@@ -1,4 +1,9 @@
 :root {
+  --font-ui: "JetBrainsMono Nerd Font", "JetBrainsMono NF", "JetBrainsMono Nerd Font Mono",
+    "JetBrainsMono NFM", "LXGW WenKai Mono", "霞鹜文楷等宽", "Noto Sans Mono CJK SC",
+    monospace;
+  --font-display: var(--font-ui);
+  --font-mono: var(--font-ui);
   --bg: #f5f4ed;
   --bg-secondary: #faf9f5;
   --bg-tertiary: #e8e6dc;
@@ -49,7 +54,7 @@ body,
 
 body {
   margin: 0;
-  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
@@ -70,7 +75,7 @@ pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+  font-family: var(--font-mono);
   color: inherit;
 }
 
@@ -168,7 +173,7 @@ pre {
 
 .sidebar-header h1 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   max-width: 12ch;
   font-size: clamp(20px, 2vw, 26px);
   font-weight: 500;
@@ -412,7 +417,7 @@ pre {
 
 .view-header h2 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(18px, 1.55vw, 26px);
   font-weight: 500;
   line-height: 1.14;
@@ -585,7 +590,7 @@ pre {
 
 .settings-header h2 {
   margin: 0 0 10px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(20px, 1.7vw, 28px);
   font-weight: 500;
   line-height: 1.08;
@@ -667,7 +672,7 @@ pre {
 
 .metric-card strong {
   display: block;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 26px;
   font-weight: 500;
   line-height: 1;
@@ -708,7 +713,7 @@ pre {
 
 .settings-inline-stats dd {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 21px;
   line-height: 1.15;
   color: var(--text);
@@ -716,7 +721,7 @@ pre {
 
 .settings-panel h3 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
   line-height: 1.15;
@@ -1054,7 +1059,7 @@ pre {
 .settings-hero-copy h2 {
   margin: 0 0 10px;
   max-width: 18ch;
-  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(24px, 1.9vw, 34px);
   font-weight: 500;
   line-height: 1.06;
@@ -1107,7 +1112,7 @@ pre {
 
 .settings-hero-metric strong {
   display: block;
-  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(21px, 1.55vw, 29px);
   line-height: 1;
   letter-spacing: -0.04em;
@@ -1185,7 +1190,7 @@ pre {
 
 .settings-section-header h3 {
   margin: 4px 0 10px;
-  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(20px, 1.7vw, 28px);
   font-weight: 500;
   line-height: 1.04;
@@ -1383,7 +1388,7 @@ pre {
 }
 
 .settings-builder-chip-separator {
-  font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+  font-family: var(--font-mono);
 }
 
 .settings-custom-separator {
@@ -1456,7 +1461,7 @@ pre {
 }
 
 .settings-preview-card strong {
-  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(19px, 1.45vw, 25px);
   line-height: 1.12;
   color: var(--text);
@@ -1945,7 +1950,7 @@ pre {
 
 .session-item-title {
   margin: 10px 0 5px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
   line-height: 1.24;
@@ -1983,7 +1988,7 @@ pre {
 
 .editable-title {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(22px, 1.9vw, 30px);
   font-weight: 500;
   line-height: 1.12;
@@ -2111,7 +2116,7 @@ pre {
 
 .naming-entry-main strong {
   display: block;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 500;
   line-height: 1.28;
@@ -2298,10 +2303,11 @@ pre {
 
 .detail-panel h3 {
   margin: 0 0 14px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
   line-height: 1.18;
+  text-wrap: balance;
 }
 
 .ops-layout {
@@ -2336,6 +2342,7 @@ pre {
 .ops-chart-panel {
   display: grid;
   gap: 14px;
+  align-content: start;
 }
 
 .ops-chart-header {
@@ -2346,7 +2353,7 @@ pre {
 }
 
 .ops-chart-canvas {
-  min-height: 320px;
+  min-height: 280px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
   border: 1px solid var(--border-strong);
@@ -2473,7 +2480,7 @@ pre {
 }
 
 .ops-log-mono {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
@@ -2545,9 +2552,82 @@ pre {
   background: color-mix(in srgb, var(--bg-secondary) 84%, white 16%);
 }
 
+.ops-state-guide {
+  display: grid;
+  gap: 14px;
+}
+
+.ops-state-guide-grid,
+.ops-reason-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.ops-state-card,
+.ops-reason-card {
+  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.ops-state-card strong,
+.ops-reason-card strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.ops-state-card p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ops-state-card[data-tone="success"],
+.ops-reason-card[data-tone="success"] {
+  background: linear-gradient(180deg, rgba(107, 122, 69, 0.12), rgba(107, 122, 69, 0.04));
+}
+
+.ops-state-card[data-tone="warning"],
+.ops-reason-card[data-tone="warning"] {
+  background: linear-gradient(180deg, rgba(165, 117, 51, 0.14), rgba(165, 117, 51, 0.05));
+}
+
+.ops-state-card[data-tone="manual"],
+.ops-reason-card[data-tone="manual"] {
+  background: linear-gradient(180deg, rgba(143, 112, 97, 0.12), rgba(143, 112, 97, 0.04));
+}
+
 .ops-skip-summary {
   display: grid;
   gap: 10px;
+}
+
+.ops-replay-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.ops-replay-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(200px, 1fr) auto;
+  align-items: end;
+}
+
+.ops-replay-run-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .ops-skip-chip-list {
@@ -2585,6 +2665,17 @@ pre {
   gap: 10px;
 }
 
+@media (max-width: 980px) {
+  .ops-log-toolbar,
+  .ops-replay-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-replay-run-meta {
+    justify-content: flex-start;
+  }
+}
+
 .naming-tray {
   display: grid;
   gap: 14px;
@@ -2618,7 +2709,7 @@ pre {
 
 .naming-value {
   display: block;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
   line-height: 1.3;
@@ -2651,7 +2742,7 @@ pre {
 .history-summary-copy strong {
   display: block;
   margin-bottom: 4px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 500;
   line-height: 1.22;

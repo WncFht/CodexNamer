@@ -58,6 +58,17 @@ type DaemonSweepSnapshot = {
   };
 };
 
+type RenameReplaySnapshot = {
+  lastRunAt?: string;
+  recentRuns: Array<{
+    requestedAt: string;
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+    queued: number;
+    clearedCandidates: number;
+  }>;
+};
+
 const ACCEPTED_OFFICIAL_RENAME_SOURCES = ["ai", "manual"] as const;
 const SCAN_FRESH_WINDOW_MS = 1_200;
 
@@ -820,6 +831,22 @@ export class CodexSessionManager {
       basis: params.basis
     });
 
+    const requestedAt = new Date().toISOString();
+    const previousState = this.db.getMaintenanceState<RenameReplaySnapshot>("rename_replay");
+    this.db.setMaintenanceState("rename_replay", {
+      lastRunAt: requestedAt,
+      recentRuns: [
+        {
+          requestedAt,
+          since: sinceDate.toISOString(),
+          basis: params.basis,
+          queued: result.queued,
+          clearedCandidates: result.clearedCandidates
+        },
+        ...(previousState?.recentRuns ?? [])
+      ].slice(0, 8)
+    } satisfies RenameReplaySnapshot);
+
     return {
       since: sinceDate.toISOString(),
       basis: params.basis,
@@ -941,6 +968,7 @@ export class CodexSessionManager {
       acceptedAppliedSources: [...ACCEPTED_OFFICIAL_RENAME_SOURCES]
     });
     const daemonState = this.db.getMaintenanceState<DaemonSweepSnapshot>("daemon_runtime");
+    const replayState = this.db.getMaintenanceState<RenameReplaySnapshot>("rename_replay");
     const daemonStatus = this.resolveDaemonStatus(daemonState);
     const actualExecution =
       daemonStatus === "running" && daemonState?.summary.execution === "auto-apply"
@@ -962,6 +990,10 @@ export class CodexSessionManager {
           daemonStatus,
           actualExecution
         })
+      },
+      replay: {
+        lastRunAt: replayState?.lastRunAt,
+        recentRuns: Array.isArray(replayState?.recentRuns) ? replayState.recentRuns : []
       }
     };
   }

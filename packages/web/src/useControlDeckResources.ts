@@ -155,7 +155,11 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     setAiRequestLogs(aiRequestLogPayload);
   };
 
-  const reloadPreview = async (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => {
+  const reloadPreview = async (options?: {
+    includeCandidateNames?: boolean;
+    urgent?: boolean;
+    limit?: number;
+  }) => {
     if (options?.urgent) {
       previewUrgentPendingRef.current += 1;
       setPreviewRefreshing(true);
@@ -164,7 +168,14 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     try {
       const previewPayload = await fetchAutoRenamePreview({
         includeCandidateNames: options?.includeCandidateNames ?? false,
-        limit: 50
+        limit:
+          typeof options?.limit === "number"
+            ? options.limit
+            : options?.includeCandidateNames
+              ? 100
+              : latestUiStateRef.current.tab === "maintenance"
+                ? 1000
+                : 50
       });
       if (requestId !== previewRequestIdRef.current) {
         return;

@@ -189,6 +189,16 @@ export type OverviewResponse = {
     autoApplied: number;
     lastAppliedAt?: string;
   };
+  replay: {
+    lastRunAt?: string;
+    recentRuns: Array<{
+      requestedAt: string;
+      since: string;
+      basis: "session-updated-at" | "last-applied-at";
+      queued: number;
+      clearedCandidates: number;
+    }>;
+  };
   activity: {
     windowDays: number;
     buckets: Array<{

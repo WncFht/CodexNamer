@@ -136,6 +136,7 @@ describe("local api", () => {
     expect(overview.json().sessions.total).toBeGreaterThanOrEqual(1);
     expect(overview.json().runtime.daemonStatus).toBe("not_seen");
     expect(overview.json().workload.averageTitleLength).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(overview.json().replay.recentRuns)).toBe(true);
 
     const logId = manager.db.startAiRequestLog({
       threadId: "019d-api-2",
@@ -163,6 +164,25 @@ describe("local api", () => {
     expect(requestLogs.json().activeCount).toBe(0);
     expect(requestLogs.json().items[0].threadId).toBe("019d-api-2");
     expect(requestLogs.json().items[0].status).toBe("succeeded");
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/v1/maintenance/requeue-renames",
+      payload: {
+        since: "2026-04-01T00:00:00.000Z",
+        basis: "session-updated-at"
+      }
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().queued).toBeGreaterThanOrEqual(1);
+
+    const overviewAfterReplay = await app.inject({
+      method: "GET",
+      url: "/api/v1/overview"
+    });
+    expect(overviewAfterReplay.statusCode).toBe(200);
+    expect(overviewAfterReplay.json().replay.recentRuns[0].basis).toBe("session-updated-at");
+    expect(overviewAfterReplay.json().replay.recentRuns[0].queued).toBeGreaterThanOrEqual(1);
   });
 
   it("supports session filters and auto-rename preview endpoint", async () => {

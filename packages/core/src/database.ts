@@ -1188,6 +1188,10 @@ export class StateDatabase {
         autoApplied: Number(renameStatsRow.auto_applied ?? 0),
         lastAppliedAt: (renameStatsRow.last_applied_at as string | null) ?? undefined
       },
+      replay: {
+        lastRunAt: undefined,
+        recentRuns: []
+      },
       activity: {
         windowDays: activityWindowDays,
         buckets: activityBuckets
