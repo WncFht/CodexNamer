@@ -133,7 +133,7 @@ function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: numbe
 
   const half = Math.floor(maxItems / 2);
   let start = Math.max(0, selectedIndex - half);
-  let end = Math.min(items.length, start + maxItems);
+  const end = Math.min(items.length, start + maxItems);
   start = Math.max(0, end - maxItems);
 
   return items.slice(start, end).map((item, offset) => ({
@@ -393,7 +393,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [screenMode, setScreenMode] = useState<ScreenMode>("browser");
   const [browserViewMode, setBrowserViewMode] = useState<BrowserViewMode>("split");
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [message, setMessage] = useState("Loading sessions...");
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<AutoRenamePreviewResponse["items"]>([]);

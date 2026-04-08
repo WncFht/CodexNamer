@@ -1045,10 +1045,10 @@ function AiProviderSection(props: {
     ) ?? props.text.tt("nA");
   const resolvedRequestedBackend = firstNonEmptyString(resolvedProvider.requestedBackend, props.draft.aiBackend) ?? props.text.tt("nA");
   const resolvedTransport = firstNonEmptyString(resolvedProvider.preferredTransport, resolvedProvider.transport) ?? props.text.tt("nA");
-  const resolvedCredential = Boolean(resolvedProvider.hasCredential)
+  const resolvedCredential = resolvedProvider.hasCredential
     ? firstNonEmptyString(resolvedProvider.credentialSource, resolvedProvider.credentialKind) ?? props.text.inline("已配置", "Configured")
     : props.text.inline("未配置", "Missing");
-  const directHttpLabel = Boolean(resolvedProvider.canDirectHttp)
+  const directHttpLabel = resolvedProvider.canDirectHttp
     ? props.text.inline("可直接 HTTP", "Direct HTTP ready")
     : props.text.inline("配置不完整", "Configuration incomplete");
   const requestPath = [props.draft.aiBackend, props.draft.aiProviderSource, selectedProfileLabel, resolvedTransport].filter(Boolean);
@@ -1220,7 +1220,7 @@ function AiProviderSection(props: {
             </div>
             <div>
               <dt>{props.text.inline("requires auth", "Requires auth")}</dt>
-              <dd>{Boolean(resolvedProvider.requiresOpenaiAuth) ? props.text.inline("是", "Yes") : props.text.inline("否", "No")}</dd>
+              <dd>{resolvedProvider.requiresOpenaiAuth ? props.text.inline("是", "Yes") : props.text.inline("否", "No")}</dd>
             </div>
           </dl>
           <details className="settings-disclosure">

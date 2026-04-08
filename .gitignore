@@ -5,6 +5,7 @@ packages/*/dist-ts
 .DS_Store
 .turbo
 coverage
+.eslintcache
 *.log
 tmp
 *.tsbuildinfo

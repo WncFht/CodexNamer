@@ -29,6 +29,11 @@
     "cli": "npm run build:runtime && tsx packages/cli/src/index.ts",
     "daemon": "npm run build:runtime && tsx packages/daemon/src/index.ts",
     "api": "npm run build:runtime && tsx packages/api/src/index.ts",
+    "lint": "eslint . --cache --max-warnings=0",
+    "lint:fix": "eslint . --cache --fix",
+    "check": "npm run lint && npm run build && npm run web:build && npm test",
+    "hooks:install": "node scripts/install-hooks.mjs",
+    "prepare": "node scripts/install-hooks.mjs",
     "web": "tsx scripts/launch-ui.ts web",
     "web:raw": "npm run dev --workspace @codexnamer/web",
     "web:build": "npm run build --workspace @codexnamer/web",
@@ -39,10 +44,16 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.4.0",
+    "lefthook": "^2.1.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.58.1",
     "vitest": "^3.2.4"
   }
 }
