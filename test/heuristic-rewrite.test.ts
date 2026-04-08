@@ -10,8 +10,8 @@ describe("heuristic names are treated as pending AI rewrite", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       ai: {
-        backend: "codex",
-        providerSource: "inherit-codex",
+        backend: "responses",
+        providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
         temperature: 0.2

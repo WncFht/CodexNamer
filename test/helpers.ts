@@ -155,7 +155,7 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
   codexHome: string;
   stateDir: string;
 }): Promise<CodexSessionManager> {
-  return CodexSessionManager.create({
+  const manager = await CodexSessionManager.create({
     overrides: buildConfigForTests({
       general: {
         codexHome: overrides.codexHome,
@@ -163,7 +163,7 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
       },
       ai: {
         backend: "none",
-        providerSource: "inherit-codex",
+        providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
         temperature: 0.2
@@ -172,4 +172,37 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
     }),
     operator: "test"
   });
+
+  (manager as unknown as { requireSuccessfulProviderTest: () => Promise<void> }).requireSuccessfulProviderTest =
+    async () => undefined;
+
+  if ((manager.config.ai.backend as string) === "none") {
+    (
+      manager as unknown as {
+        inferenceService: {
+          suggest: (session: { threadId: string }) => Promise<{
+            threadId: string;
+            name: string;
+            source: "ai";
+            style: "detailed";
+            kind: string;
+            summary: string;
+            generatedAt: string;
+          }>;
+        };
+      }
+    ).inferenceService = {
+      suggest: async (session) => ({
+        threadId: session.threadId,
+        name: `rename ${session.threadId}`,
+        source: "ai",
+        style: "detailed",
+        kind: "chore",
+        summary: `rename ${session.threadId}`,
+        generatedAt: new Date().toISOString()
+      })
+    };
+  }
+
+  return manager;
 }

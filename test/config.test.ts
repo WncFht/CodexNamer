@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 describe("config loading", () => {
-  it("loads inherited Codex auth.json and explicit provider api_key", async () => {
+  it("loads inherited Codex auth.json and manual provider api_key", async () => {
     const root = await makeTempDir();
     const codexHome = path.join(root, ".codex");
     const configPath = path.join(root, "config.toml");
@@ -55,12 +55,11 @@ describe("config loading", () => {
         `state_dir = "${path.join(root, "state")}"`,
         "",
         "[provider.default]",
-        'backend_kind = "openai-compatible"',
+        'request_type = "responses"',
         'display_name = "default"',
-        'provider_source = "explicit"',
-        'base_url = "http://explicit.test/v1"',
-        'model = "gpt-explicit"',
-        'api_key = "explicit-key"'
+        'base_url = "http://manual.test/v1"',
+        'model = "gpt-manual"',
+        'api_key = "manual-key"'
       ].join("\n"),
       "utf8"
     );
@@ -72,7 +71,7 @@ describe("config loading", () => {
 
     expect(effective.inheritedCodex.auth?.authMode).toBe("apikey");
     expect(effective.inheritedCodex.auth?.openaiApiKey).toBe("codex-file-key");
-    expect(effective.providerProfiles[0]?.apiKey).toBe("explicit-key");
+    expect(effective.providerProfiles[0]?.apiKey).toBe("manual-key");
   });
 
   it("preserves provider api keys when config patch uses redacted placeholder", async () => {
@@ -90,11 +89,10 @@ describe("config loading", () => {
         `state_dir = "${path.join(root, "state")}"`,
         "",
         "[provider.default]",
-        'backend_kind = "openai-compatible"',
+        'request_type = "responses"',
         'display_name = "default"',
-        'provider_source = "explicit"',
-        'base_url = "http://explicit.test/v1"',
-        'model = "gpt-explicit"',
+        'base_url = "http://manual.test/v1"',
+        'model = "gpt-manual"',
         'api_key = "keep-me"'
       ].join("\n"),
       "utf8"
@@ -106,7 +104,6 @@ describe("config loading", () => {
       patch: {
         naming: {
           maxLength: 48,
-          defaultStyle: "brief",
           contextStrategy: "user-assistant-transcript",
           contextMaxChars: 4096,
           compositionMode: "prompt-override",
@@ -125,10 +122,9 @@ describe("config loading", () => {
         providerProfiles: [
           {
             profileId: "default",
-            backendKind: "openai-compatible",
+            requestType: "responses",
             displayName: "default",
-            providerSource: "explicit",
-            baseUrl: "http://explicit.test/v1",
+            baseUrl: "http://manual.test/v1",
             model: "gpt-next",
             apiKey: REDACTED_SECRET,
             enabled: true,
@@ -150,7 +146,6 @@ describe("config loading", () => {
     const written = await fs.readFile(configPath, "utf8");
 
     expect(effective.naming.maxLength).toBe(48);
-    expect(effective.naming.defaultStyle).toBe("brief");
     expect(effective.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(effective.naming.contextMaxChars).toBe(4096);
     expect(effective.naming.compositionMode).toBe("prompt-override");
@@ -163,7 +158,6 @@ describe("config loading", () => {
     expect(view.userConfig.providerProfiles?.[0]?.apiKey).toBe(REDACTED_SECRET);
     expect(written).toContain('api_key = "keep-me"');
     expect(written).toContain('model = "gpt-next"');
-    expect(written).toContain('default_style = "brief"');
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
     expect(written).toContain('composition_mode = "prompt-override"');

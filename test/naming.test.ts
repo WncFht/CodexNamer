@@ -8,8 +8,7 @@ describe("naming specificity", () => {
       naming: {
         template: "{{kind}}{{scope_paren}}: {{summary}}",
         maxLength: 80,
-        language: "zh-CN",
-        defaultStyle: "detailed"
+        language: "zh-CN"
       }
     });
 
@@ -31,7 +30,6 @@ describe("naming specificity", () => {
     );
 
     expect(suggestion.kind).toBe("fix");
-    expect(suggestion.style).toBe("detailed");
     expect(suggestion.scope).toBe("settings");
     expect(suggestion.summary).toContain("设置");
     expect(suggestion.summary).toContain("自动重命名逻辑");
@@ -43,8 +41,7 @@ describe("naming specificity", () => {
   it("asks AI for specific names with expanded kind options", () => {
     const config = buildConfigForTests({
       naming: {
-        language: "zh-CN",
-        defaultStyle: "detailed"
+        language: "zh-CN"
       }
     });
 
@@ -64,8 +61,6 @@ describe("naming specificity", () => {
     );
 
     expect(prompt).toContain("Make the rename concrete");
-    expect(prompt).toContain("Preferred naming style: detailed");
-    expect(prompt).toContain("namingStyle: detailed");
     expect(prompt).toContain("namingCompositionMode: structured");
     expect(prompt).toContain("## Naming builder");
     expect(prompt).toContain("1. tag");
@@ -83,8 +78,7 @@ describe("naming specificity", () => {
         uiLanguage: "zh-CN"
       },
       naming: {
-        language: "zh-CN",
-        defaultStyle: "detailed"
+        language: "zh-CN"
       }
     });
 
@@ -135,42 +129,5 @@ describe("naming specificity", () => {
     expect(prompt).toContain("namingCompositionMode: prompt-override");
     expect(prompt).toContain("Custom naming override:");
     expect(prompt).toContain("Always prefer a domain tag first");
-  });
-
-  it("keeps brief style names shorter than detailed ones", () => {
-    const detailedConfig = buildConfigForTests({
-      naming: {
-        template: "{{kind}}{{scope_paren}}: {{summary}}",
-        maxLength: 80,
-        language: "zh-CN",
-        defaultStyle: "detailed"
-      }
-    });
-    const briefConfig = buildConfigForTests({
-      naming: {
-        template: "{{kind}}{{scope_paren}}: {{summary}}",
-        maxLength: 80,
-        language: "zh-CN",
-        defaultStyle: "brief"
-      }
-    });
-    const session = {
-      threadId: "t-style",
-      rolloutPath: "/tmp/r.jsonl",
-      cwd: "/tmp/project",
-      projectName: "project",
-      taskCompleteCount: 0,
-      tokenTotal: 0,
-      firstUserMessage: "把设置页里的 inherit-codex 和中文切换修好",
-      lastUserMessage: "顺便把 rename style 版本切换和历史展示也接起来",
-      lastAgentMessage: "我会先拆 style state，再补 history 和 web 操作。"
-    };
-
-    const detailed = suggestNameHeuristically(session, detailedConfig);
-    const brief = suggestNameHeuristically(session, briefConfig);
-
-    expect(detailed.style).toBe("detailed");
-    expect(brief.style).toBe("brief");
-    expect(detailed.name.length).toBeGreaterThanOrEqual(brief.name.length);
   });
 });

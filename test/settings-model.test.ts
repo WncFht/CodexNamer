@@ -33,7 +33,6 @@ describe("web settings model", () => {
         naming: {
           preset: "conventional",
           language: "zh-CN",
-          defaultStyle: "detailed",
           contextStrategy: "paired-user-turns",
           compositionMode: "structured",
           builder: [
@@ -44,8 +43,8 @@ describe("web settings model", () => {
           tags: [{ id: "bugfix", label: "修复", description: "", promptHint: "bugfix" }]
         },
         ai: {
-          backend: "codex",
-          providerSource: "inherit-codex",
+          backend: "responses",
+          providerSource: "codex-config",
           profile: "default",
           maxConcurrency: 2
         },
@@ -59,10 +58,10 @@ describe("web settings model", () => {
     const baseline = encodeDraft(draft);
     expect(isDraftDirty(draft, baseline)).toBe(false);
 
-    const changed = { ...draft, namingDefaultStyle: "brief" as const };
+    const changed = { ...draft, namingMaxLength: "96" };
     expect(isDraftDirty(changed, baseline)).toBe(true);
 
-    const reverted = { ...changed, namingDefaultStyle: draft.namingDefaultStyle };
+    const reverted = { ...changed, namingMaxLength: draft.namingMaxLength };
     expect(isDraftDirty(reverted, baseline)).toBe(false);
     expect(renderNamingStructurePreview(draft, "zh-CN")).toContain("修复设置保存与语言切换");
   });
@@ -87,7 +86,6 @@ describe("tui settings model", () => {
         },
         naming: {
           template: "{{summary}}",
-          defaultStyle: "detailed",
           contextStrategy: "paired-user-turns",
           language: "en-US"
         },
@@ -98,7 +96,7 @@ describe("tui settings model", () => {
         },
         ai: {
           backend: "openai-compatible",
-          providerSource: "explicit",
+          providerSource: "manual",
           profile: "primary",
           timeoutSeconds: 45,
           temperature: 0.2,
@@ -110,7 +108,7 @@ describe("tui settings model", () => {
             isDefault: true,
             baseUrl: "https://relay.example/v1",
             model: "gpt-5.4",
-            wireApi: "responses"
+            requestType: "responses"
           }
         ]
       }

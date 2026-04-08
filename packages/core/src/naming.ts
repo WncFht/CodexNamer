@@ -185,6 +185,7 @@ const BUILTIN_TAG_LABELS: Record<
 };
 
 export const DEFAULT_NAMING_TIMESTAMP_PRESET: NamingTimestampPreset = "%Y-%m-%d";
+const LEGACY_NAMING_STYLE: NamingStyle = "detailed";
 
 function buildLegacyNamingBuilder(
   components: NamingComponent[] | undefined,
@@ -283,11 +284,8 @@ export function resolveNamingTag(
   });
 }
 
-export function resolveNamingStyle(
-  session: Pick<MaterializedSession, "namingStyle"> | undefined,
-  config: Pick<EffectiveConfig, "naming">
-): NamingStyle {
-  return session?.namingStyle ?? config.naming.defaultStyle;
+export function resolveNamingStyle(_session: unknown, _config: Pick<EffectiveConfig, "naming">): NamingStyle {
+  return LEGACY_NAMING_STYLE;
 }
 
 function normalizeTaskText(value?: string): string | undefined {
@@ -559,8 +557,7 @@ function buildSummary(
   session: MaterializedSession,
   kind: string,
   maxLength: number,
-  language: string,
-  style: NamingStyle
+  language: string
 ): string {
   const topics = detectTopics(session, language);
   const joined = collectTaskTexts(session)
@@ -589,10 +586,6 @@ function buildSummary(
   const joinedSummary = prefersChinese(language)
     ? fragments.join("")
     : fragments.join(" ");
-
-  if (style === "brief") {
-    return excerpt(joinedSummary, maxLength) ?? fallbackExcerptSummary(session, maxLength);
-  }
 
   const focus = chooseConcreteFocus(session, language);
   if (!focus || removeDuplicateFocus(joinedSummary, focus)) {
@@ -751,7 +744,6 @@ export function suggestNameHeuristically(
   config: EffectiveConfig
 ): RenameSuggestion {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
-  const style = resolveNamingStyle(session, config);
   const materialized = {
     ...session,
     renameContext
@@ -760,9 +752,8 @@ export function suggestNameHeuristically(
   const summary = buildSummary(
     materialized,
     kind,
-    Math.min(style === "detailed" ? 72 : 56, config.naming.maxLength),
-    config.naming.language,
-    style
+    Math.min(72, config.naming.maxLength),
+    config.naming.language
   );
   const topicScope = detectTopics(materialized, config.naming.language)[0]?.scope;
   const scope =
@@ -784,7 +775,7 @@ export function suggestNameHeuristically(
     threadId: materialized.threadId,
     name,
     source: "heuristic",
-    style,
+    style: LEGACY_NAMING_STYLE,
     kind,
     summary,
     scope,

@@ -89,17 +89,6 @@ describe("local api", () => {
     expect(suggest.json().threadId).toBe("019d-api-2");
     expect(suggest.json().style).toBe("detailed");
 
-    const namingStyle = await app.inject({
-      method: "POST",
-      url: "/api/v1/sessions/019d-api-2/naming-style",
-      payload: {
-        style: "brief"
-      }
-    });
-    expect(namingStyle.statusCode).toBe(200);
-    expect(namingStyle.json().preferredStyle).toBe("brief");
-    expect(namingStyle.json().effectiveStyle).toBe("brief");
-
     const freeze = await app.inject({
       method: "POST",
       url: "/api/v1/sessions/019d-api-2/freeze"
@@ -327,7 +316,7 @@ describe("local api", () => {
         "",
         "[ai]",
         'backend = "none"',
-        'provider_source = "inherit-codex"',
+        'provider_source = "codex-config"',
         'profile = "default"'
       ].join("\n"),
       "utf8"
@@ -362,7 +351,6 @@ describe("local api", () => {
         },
         naming: {
           maxLength: 48,
-          defaultStyle: "brief",
           template: "{{summary}}",
           contextStrategy: "user-assistant-transcript",
           contextMaxChars: 4096,
@@ -387,7 +375,6 @@ describe("local api", () => {
     expect(update.statusCode).toBe(200);
     expect(update.json().config.effectiveConfig.general.uiLanguage).toBe("zh-CN");
     expect(update.json().config.effectiveConfig.naming.maxLength).toBe(48);
-    expect(update.json().config.effectiveConfig.naming.defaultStyle).toBe("brief");
     expect(update.json().config.effectiveConfig.naming.contextStrategy).toBe("user-assistant-transcript");
     expect(update.json().config.effectiveConfig.naming.contextMaxChars).toBe(4096);
     expect(update.json().config.effectiveConfig.naming.compositionMode).toBe("prompt-override");
@@ -409,7 +396,6 @@ describe("local api", () => {
     const written = await fs.readFile(configPath, "utf8");
     expect(written).toContain('ui_language = "zh-CN"');
     expect(written).toContain('max_length = 48');
-    expect(written).toContain('default_style = "brief"');
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
     expect(written).toContain('composition_mode = "prompt-override"');
