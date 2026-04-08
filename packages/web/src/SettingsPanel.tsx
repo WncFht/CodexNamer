@@ -757,11 +757,11 @@ function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("AI tag presets", "AI tag presets")}</p>
-              <h4>{props.text.inline("像 SubLinkPro 一样把规则做成可编辑预设", "Make rules editable presets, like SubLinkPro")}</h4>
+              <h4>{props.text.inline("把规则做成可编辑预设", "Make rules editable presets")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "Tag 现在不是 heuristic 分类，而是 AI 命名时可选的预设规则。你可以给 AI 明确的选择条件和输出含义，而不需要自己手写整段 prompt。",
-                  "Tags are no longer heuristic classifications. They are AI-selectable presets with explicit selection criteria and output meaning, so you do not have to hand-write a full prompt."
+                  "Tag 是 AI 命名时可选的预设规则。你可以直接定义适用场景和含义，不用自己手写整段 prompt。",
+                  "Tags are presets the AI can choose while naming. You only need to define when each one applies and what it means."
                 )}
               </p>
             </div>

@@ -266,22 +266,6 @@ export function SessionBrowser(props: {
                   </div>
                 </div>
                 <div className="chat-header-right">
-                  <button
-                    className={detailView === "transcript" ? "btn-sm active" : "btn-sm"}
-                    onClick={() => setDetailView("transcript")}
-                    title={tt("transcript")}
-                    type="button"
-                  >
-                    {tt("transcript")}
-                  </button>
-                  <button
-                    className={detailView === "naming" ? "btn-sm active" : "btn-sm"}
-                    onClick={() => setDetailView("naming")}
-                    title={tt("namingActivity")}
-                    type="button"
-                  >
-                    {tt("namingActivity")}
-                  </button>
                   {!props.focusMode ? (
                     <>
                       <button className="btn-sm" onClick={props.onEnterFocusMode} title={tt("focusSession")} type="button">
@@ -320,6 +304,28 @@ export function SessionBrowser(props: {
             <div className="chat-content-shell">
               <div className="chat-primary-stack">
                 {props.loadingDetail ? <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div> : null}
+                <div className="detail-view-switch" role="tablist" aria-label={tt("selectedSession")}>
+                  <button
+                    aria-selected={detailView === "transcript"}
+                    className={detailView === "transcript" ? "btn-sm active" : "btn-sm"}
+                    onClick={() => setDetailView("transcript")}
+                    role="tab"
+                    title={tt("transcript")}
+                    type="button"
+                  >
+                    {tt("transcript")}
+                  </button>
+                  <button
+                    aria-selected={detailView === "naming"}
+                    className={detailView === "naming" ? "btn-sm active" : "btn-sm"}
+                    onClick={() => setDetailView("naming")}
+                    role="tab"
+                    title={tt("namingActivity")}
+                    type="button"
+                  >
+                    {tt("namingActivity")}
+                  </button>
+                </div>
 
                 {detailView === "transcript" ? (
                   <TranscriptPanel
