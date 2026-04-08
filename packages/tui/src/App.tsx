@@ -13,6 +13,7 @@ import {
   type UiLanguage
 } from "./i18n.js";
 import { computeTerminalLayout, measureDisplayWidth, truncateDisplayText, wrapDisplayText } from "./layout.js";
+import { DaemonScreen } from "./DaemonScreen.js";
 import { MaintenanceScreen } from "./MaintenanceScreen.js";
 import { deriveRuntimeDisplay } from "./runtime-display.js";
 import {
@@ -44,7 +45,7 @@ import type {
 type InputMode = "normal" | "search" | "transcript-search" | "rename" | "edit-setting" | "replay-since";
 type FocusPane = "sessions" | "transcript";
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
-type ScreenMode = "browser" | "maintenance" | "settings";
+type ScreenMode = "browser" | "maintenance" | "daemon" | "settings";
 type BrowserViewMode = "split" | "detail" | "sessions";
 
 const TRANSCRIPT_PAGE_SIZE = 18;
@@ -412,6 +413,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [daemonStatus, setDaemonStatus] = useState<DaemonControlStatus | null>(null);
   const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
   const [maintenanceRefreshing, setMaintenanceRefreshing] = useState(false);
+  const [daemonActioning, setDaemonActioning] = useState<"start" | "stop" | null>(null);
   const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const eventCursorRef = useRef(0);
   const metrics = useTerminalMetrics();
@@ -464,6 +466,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       ? inLanguage(uiLanguage, "浏览", "browser")
       : screenMode === "maintenance"
         ? inLanguage(uiLanguage, "Rename Ops", "rename-ops")
+        : screenMode === "daemon"
+          ? inLanguage(uiLanguage, "Daemon", "daemon")
         : tt("settings");
 
   const settingsFields = useMemo(
@@ -663,6 +667,48 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
     } finally {
       setMaintenanceRefreshing(false);
+    }
+  };
+
+  const reloadDaemonData = async () => {
+    setMaintenanceRefreshing(true);
+    try {
+      const [overviewPayload, daemonPayload, previewPayload] = await Promise.all([
+        client.getOverview(),
+        client.getDaemonStatus(),
+        client.getAutoRenamePreview({
+          includeCandidateNames: true,
+          limit: 12
+        })
+      ]);
+      setOverview(overviewPayload);
+      setDaemonStatus(daemonPayload);
+      setPreview(previewPayload.items.slice(0, 12));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setMaintenanceRefreshing(false);
+    }
+  };
+
+  const updateDaemonState = async (action: "start" | "stop") => {
+    setDaemonActioning(action);
+    setError(null);
+    setMessage(action === "start" ? inLanguage(uiLanguage, "正在启动 daemon...", "Starting daemon...") : inLanguage(uiLanguage, "正在停止 daemon...", "Stopping daemon..."));
+    try {
+      const result =
+        action === "start" ? await client.startDaemon() : await client.stopDaemon();
+      setDaemonStatus(result);
+      await reloadDaemonData();
+      setMessage(
+        action === "start"
+          ? inLanguage(uiLanguage, `daemon 已启动${result.pid ? `（pid ${result.pid}）` : ""}`, `Daemon started${result.pid ? ` (pid ${result.pid})` : ""}.`)
+          : inLanguage(uiLanguage, "daemon 已停止", "Daemon stopped.")
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setDaemonActioning(null);
     }
   };
 
@@ -879,6 +925,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   }, [screenMode]);
 
   useEffect(() => {
+    if (screenMode !== "daemon") {
+      return;
+    }
+    void reloadDaemonData();
+  }, [screenMode]);
+
+  useEffect(() => {
     const intervalId = setInterval(() => {
       void client
         .getEvents(eventCursorRef.current)
@@ -896,6 +949,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           }
           if (screenMode === "maintenance") {
             await reloadMaintenanceData();
+            return;
+          }
+          if (screenMode === "daemon") {
+            await reloadDaemonData();
           }
         })
         .catch(async () => {
@@ -905,6 +962,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           }
           if (screenMode === "maintenance") {
             await reloadMaintenanceData();
+            return;
+          }
+          if (screenMode === "daemon") {
+            await reloadDaemonData();
           }
         });
     }, EVENTS_POLL_INTERVAL_MS);
@@ -977,7 +1038,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
     if (input === ",") {
       setScreenMode((current) =>
-        current === "browser" ? "maintenance" : current === "maintenance" ? "settings" : "browser"
+        current === "browser"
+          ? "maintenance"
+          : current === "maintenance"
+            ? "daemon"
+            : current === "daemon"
+              ? "settings"
+              : "browser"
       );
       return;
     }
@@ -1005,6 +1072,26 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       if (input === "y") {
         setReplaySinceDraft(defaultReplaySinceValue());
         setInputMode("replay-since");
+        return;
+      }
+      return;
+    }
+
+    if (screenMode === "daemon") {
+      if (key.escape) {
+        setScreenMode("browser");
+        return;
+      }
+      if (input === "R") {
+        void reloadDaemonData();
+        return;
+      }
+      if (input === "s" && !daemonStatus?.running && !daemonActioning) {
+        void updateDaemonState("start");
+        return;
+      }
+      if (input === "x" && daemonStatus?.running && !daemonActioning) {
+        void updateDaemonState("stop");
         return;
       }
       return;
@@ -1794,6 +1881,16 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           replayBasis={replayBasis}
           uiLanguage={uiLanguage}
         />
+      ) : screenMode === "daemon" ? (
+        <DaemonScreen
+          actioning={daemonActioning}
+          daemon={daemonStatus}
+          layout={layout}
+          overview={overview}
+          preview={preview}
+          refreshing={maintenanceRefreshing}
+          uiLanguage={uiLanguage}
+        />
       ) : layout.compact ? (
         <Box marginTop={1} flexDirection="column" gap={1} height={layout.topSectionHeight}>
           {settingsPanel}
@@ -1869,6 +1966,27 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(
                 `${inLanguage(uiLanguage, "执行态", "runtime")}: ${runtimeDisplay.execution} | ${inLanguage(uiLanguage, "Daemon", "daemon")}: ${runtimeDisplay.daemonStatus}`,
+                layout.columns - 2,
+                ""
+              )}
+            </Text>
+          </>
+        ) : screenMode === "daemon" ? (
+          <>
+            <Text color={THEME.muted} wrap="truncate-end">
+              {fitDisplayLine(
+                inLanguage(
+                  uiLanguage,
+                  ", 下个页面  s 启动 daemon  x 停止 daemon  R 刷新状态  esc 返回浏览",
+                  ", next screen  s start daemon  x stop daemon  R refresh  esc back"
+                ),
+                layout.columns - 2,
+                ""
+              )}
+            </Text>
+            <Text color={THEME.muted} wrap="truncate-end">
+              {fitDisplayLine(
+                `${inLanguage(uiLanguage, "控制器", "controller")}: ${daemonStatus?.running ? inLanguage(uiLanguage, "运行中", "running") : inLanguage(uiLanguage, "未启动", "stopped")} | ${inLanguage(uiLanguage, "运行态", "runtime")}: ${runtimeDisplay.daemonStatus}`,
                 layout.columns - 2,
                 ""
               )}
