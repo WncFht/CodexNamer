@@ -523,7 +523,7 @@ describe("provider backends", () => {
     expect(suggestion.name).toContain("fix");
   });
 
-  it("uses inherited Codex config as the default HTTP source", async () => {
+  it("uses inherited Codex config as the default streaming HTTP source", async () => {
     let runnerCalled = false;
     const service = createRenameInferenceService(
       buildConfigForTests({
@@ -554,17 +554,20 @@ describe("provider backends", () => {
       {
         fetchImpl: async (_input, init) => {
           const headers = init?.headers as Record<string, string>;
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
           expect(headers.Authorization).toBe("Bearer codex-auth-key");
           expect(headers["x-api-key"]).toBe("codex-auth-key");
+          expect(body.stream).toBe(true);
           return new Response(
-            JSON.stringify({
-              output_text:
-                '{"name":"0404 feat: inherited auth","kind":"feat","summary":"inherited auth","scope":"provider"}'
-            }),
+            [
+              'event: response.output_text.done',
+              'data: {"type":"response.output_text.done","text":"{\\"name\\":\\"0404 feat: inherited auth\\",\\"kind\\":\\"feat\\",\\"summary\\":\\"inherited auth\\",\\"scope\\":\\"provider\\"}"}',
+              ""
+            ].join("\n"),
             {
               status: 200,
               headers: {
-                "content-type": "application/json"
+                "content-type": "text/event-stream"
               }
             }
           );

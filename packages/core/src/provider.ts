@@ -600,6 +600,10 @@ function extractChatCompletionText(payload: Record<string, unknown>): string {
   return "";
 }
 
+function shouldPreferStreamingProviderRequest(config: EffectiveConfig): boolean {
+  return config.ai.providerSource === "codex-config";
+}
+
 function resolveProfile(config: EffectiveConfig): ResolvedProvider | undefined {
   const requestedProfileId = config.ai.profile;
   const explicit =
@@ -887,7 +891,7 @@ async function executeProviderRequest(
   prompt: string,
   session: MaterializedSession,
   logger?: RenameInferenceRequestLogger
-): Promise<{ text: string; payload: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }> {
+): Promise<{ text: string; payload?: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }> {
   if (provider.requestType === "responses") {
     return callResponsesApi(fetchImpl, provider, config, prompt, session, logger);
   }
@@ -984,59 +988,134 @@ function extractChatCompletionStreamText(raw: string): string {
   return content.trim();
 }
 
-async function executeStreamingProviderRequest(
+async function callStreamingResponsesApi(
   fetchImpl: FetchLike,
   provider: ResolvedProvider,
   config: EffectiveConfig,
-  prompt: string
-): Promise<string> {
-  const headers = buildProviderAuthHeaders(provider);
+  prompt: string,
+  session: MaterializedSession,
+  logger?: RenameInferenceRequestLogger
+): Promise<{ text: string; logContext: { id?: number; startedAtMs: number } }> {
+  const requestPayload = {
+    model: provider.model,
+    temperature: config.ai.temperature,
+    input: prompt,
+    stream: true
+  };
+  const logContext = startRequestLog(logger, session, {
+    backend: provider.requestedBackend,
+    transport: "responses",
+    baseUrl: provider.baseUrl,
+    model: provider.model,
+    promptChars: prompt.length,
+    promptText: prompt,
+    requestPayload,
+    metadata: {
+      profile: provider.profileId,
+      providerRef: provider.providerRef ?? "",
+      requestedBackend: provider.requestedBackend
+    }
+  });
 
-  if (provider.requestType === "responses") {
+  try {
     const response = await fetchImpl(buildResponsesUrl(provider.baseUrl!), {
       method: "POST",
-      headers,
+      headers: buildProviderAuthHeaders(provider),
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify({
-        model: provider.model,
-        temperature: config.ai.temperature,
-        input: prompt,
-        stream: true
-      })
+      body: JSON.stringify(requestPayload)
     });
     const raw = await response.text();
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${raw.slice(0, 400)}`);
     }
-    return extractResponsesStreamText(raw);
+    return {
+      text: extractResponsesStreamText(raw),
+      logContext
+    };
+  } catch (error) {
+    finishRequestLog(logger, logContext, {
+      status: "failed",
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+    });
+    throw error;
   }
+}
 
-  const response = await fetchImpl(buildChatCompletionsUrl(provider.baseUrl!), {
-    method: "POST",
-    headers,
-    signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-    body: JSON.stringify({
-      model: provider.model,
-      temperature: config.ai.temperature,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      stream: true
-    })
+async function callStreamingChatCompletionsApi(
+  fetchImpl: FetchLike,
+  provider: ResolvedProvider,
+  config: EffectiveConfig,
+  prompt: string,
+  session: MaterializedSession,
+  logger?: RenameInferenceRequestLogger
+): Promise<{ text: string; logContext: { id?: number; startedAtMs: number } }> {
+  const requestPayload = {
+    model: provider.model,
+    temperature: config.ai.temperature,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    stream: true
+  };
+  const logContext = startRequestLog(logger, session, {
+    backend: provider.requestedBackend,
+    transport: "openai-compatible",
+    baseUrl: provider.baseUrl,
+    model: provider.model,
+    promptChars: prompt.length,
+    promptText: prompt,
+    requestPayload,
+    metadata: {
+      profile: provider.profileId,
+      providerRef: provider.providerRef ?? "",
+      requestedBackend: provider.requestedBackend
+    }
   });
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${raw.slice(0, 400)}`);
+
+  try {
+    const response = await fetchImpl(buildChatCompletionsUrl(provider.baseUrl!), {
+      method: "POST",
+      headers: buildProviderAuthHeaders(provider),
+      signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
+      body: JSON.stringify(requestPayload)
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${raw.slice(0, 400)}`);
+    }
+    return {
+      text: extractChatCompletionStreamText(raw),
+      logContext
+    };
+  } catch (error) {
+    finishRequestLog(logger, logContext, {
+      status: "failed",
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+    });
+    throw error;
   }
-  return extractChatCompletionStreamText(raw);
+}
+
+async function executeStreamingProviderRequest(
+  fetchImpl: FetchLike,
+  provider: ResolvedProvider,
+  config: EffectiveConfig,
+  prompt: string,
+  session: MaterializedSession,
+  logger?: RenameInferenceRequestLogger
+): Promise<{ text: string; logContext: { id?: number; startedAtMs: number } }> {
+  if (provider.requestType === "responses") {
+    return callStreamingResponsesApi(fetchImpl, provider, config, prompt, session, logger);
+  }
+  return callStreamingChatCompletionsApi(fetchImpl, provider, config, prompt, session, logger);
 }
 
 export async function probeRenameProvider(
@@ -1101,7 +1180,8 @@ export async function probeRenameProvider(
     ) {
       try {
         const prompt = buildRenamePrompt(probeSession, config);
-        const streamText = await executeStreamingProviderRequest(fetchImpl, provider, config, prompt);
+        const streamResponse = await executeStreamingProviderRequest(fetchImpl, provider, config, prompt, probeSession);
+        const streamText = streamResponse.text;
         if (!streamText.trim()) {
           throw new RenameInferenceError("Model returned an empty response.", "empty-response");
         }
@@ -1165,25 +1245,51 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
     }
 
     const prompt = buildRenamePrompt(session, this.config);
+    const preferStreaming = shouldPreferStreamingProviderRequest(this.config);
     let response:
-      | { text: string; payload: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }
+      | { text: string; payload?: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }
       | undefined;
     try {
-      response = await executeProviderRequest(
-        this.fetchImpl,
-        provider,
-        this.config,
-        prompt,
-        session,
-        this.requestLogger
-      );
+      if (preferStreaming) {
+        const streamingResponse = await executeStreamingProviderRequest(
+          this.fetchImpl,
+          provider,
+          this.config,
+          prompt,
+          session,
+          this.requestLogger
+        );
+        response = {
+          text: streamingResponse.text,
+          payload: undefined,
+          logContext: streamingResponse.logContext
+        };
+      } else {
+        response = await executeProviderRequest(
+          this.fetchImpl,
+          provider,
+          this.config,
+          prompt,
+          session,
+          this.requestLogger
+        );
+      }
       let responseText = response.text;
       let parsedModelOutput = extractFirstJsonObject(responseText);
       const finishMetadata: Record<string, string> = {};
 
-      if (!responseText.trim() || !parsedModelOutput) {
+      if (preferStreaming) {
+        finishMetadata.responseMode = "sse-primary";
+      } else if (!responseText.trim() || !parsedModelOutput) {
         const fallbackReason = !responseText.trim() ? "empty-response" : "invalid-json";
-        const streamText = await executeStreamingProviderRequest(this.fetchImpl, provider, this.config, prompt);
+        const streamResponse = await executeStreamingProviderRequest(
+          this.fetchImpl,
+          provider,
+          this.config,
+          prompt,
+          session
+        );
+        const streamText = streamResponse.text;
         if (!streamText.trim()) {
           throw new RenameInferenceError("Model returned an empty response.", "empty-response");
         }
@@ -1195,6 +1301,12 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
         parsedModelOutput = streamParsedModelOutput;
         finishMetadata.responseMode = "sse-fallback";
         finishMetadata.sseFallbackReason = fallbackReason;
+      }
+      if (!responseText.trim()) {
+        throw new RenameInferenceError("Model returned an empty response.", "empty-response");
+      }
+      if (!parsedModelOutput) {
+        throw new RenameInferenceError("Model output is not valid JSON.", "invalid-json");
       }
 
       const composed = composeAiSuggestion(parsedModelOutput, session, this.config, {
@@ -1216,13 +1328,20 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
       return composed.suggestion;
     } catch (error) {
       if (response) {
-        const metadata =
-          error instanceof RenameInferenceError && (error.code === "empty-response" || error.code === "invalid-json")
-            ? {
-                responseMode: "sse-fallback-failed",
-                sseFallbackReason: error.code
-              }
-            : undefined;
+        let metadata: Record<string, string> | undefined;
+        if (preferStreaming) {
+          metadata = {
+            responseMode: "sse-primary"
+          };
+        } else if (
+          error instanceof RenameInferenceError &&
+          (error.code === "empty-response" || error.code === "invalid-json")
+        ) {
+          metadata = {
+            responseMode: "sse-fallback-failed",
+            sseFallbackReason: error.code
+          };
+        }
         finishRequestLog(this.requestLogger, response.logContext, {
           status: "failed",
           responseChars: response.text.length,
