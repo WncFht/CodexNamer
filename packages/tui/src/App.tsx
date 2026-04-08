@@ -13,6 +13,8 @@ import {
   type UiLanguage
 } from "./i18n.js";
 import { computeTerminalLayout, measureDisplayWidth, truncateDisplayText, wrapDisplayText } from "./layout.js";
+import { MaintenanceScreen } from "./MaintenanceScreen.js";
+import { deriveRuntimeDisplay } from "./runtime-display.js";
 import {
   buildSettingsDraft,
   buildSettingsFields,
@@ -24,9 +26,13 @@ import {
   updateSelectedProfile
 } from "./settings-model.js";
 import type {
+  AiRequestLogResponse,
   AutoRenamePreviewResponse,
   BatchApplyResponse,
   ConfigView,
+  DaemonControlStatus,
+  DoctorResponse,
+  OverviewResponse,
   PromptPreviewResponse,
   ProviderProfile,
   SessionDetail,
@@ -35,10 +41,10 @@ import type {
   SessionTranscriptPage
 } from "./types.js";
 
-type InputMode = "normal" | "search" | "transcript-search" | "rename" | "edit-setting";
+type InputMode = "normal" | "search" | "transcript-search" | "rename" | "edit-setting" | "replay-since";
 type FocusPane = "sessions" | "transcript";
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
-type ScreenMode = "browser" | "settings";
+type ScreenMode = "browser" | "maintenance" | "settings";
 type BrowserViewMode = "split" | "detail" | "sessions";
 
 const TRANSCRIPT_PAGE_SIZE = 18;
@@ -64,6 +70,11 @@ function compactWhitespace(value: string | undefined): string {
 
 function inLanguage(language: UiLanguage, zh: string, en: string): string {
   return language === "zh-CN" ? zh : en;
+}
+
+function defaultReplaySinceValue(): string {
+  const value = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  return value.toISOString().slice(0, 16);
 }
 
 function transcriptRoleLabel(role: SessionTranscriptEntry["role"] | "all", language: UiLanguage): string {
@@ -371,6 +382,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [transcriptQueryDraft, setTranscriptQueryDraft] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
   const [settingDraft, setSettingDraft] = useState("");
+  const [replaySinceDraft, setReplaySinceDraft] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("normal");
   const [focusPane, setFocusPane] = useState<FocusPane>("sessions");
   const [screenMode, setScreenMode] = useState<ScreenMode>("browser");
@@ -395,6 +407,12 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [settingsIndex, setSettingsIndex] = useState(0);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
   const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
+  const [daemonStatus, setDaemonStatus] = useState<DaemonControlStatus | null>(null);
+  const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
+  const [maintenanceRefreshing, setMaintenanceRefreshing] = useState(false);
+  const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const eventCursorRef = useRef(0);
   const metrics = useTerminalMetrics();
   const layout = computeTerminalLayout(metrics, {
@@ -440,6 +458,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const selectedWorkspaceLabel =
     selectedWorkspace?.workspaceLabel ??
     inLanguage(uiLanguage, "全部工作区", "All workspaces");
+  const runtimeDisplay = deriveRuntimeDisplay(overview, daemonStatus);
+  const screenModeLabel =
+    screenMode === "browser"
+      ? inLanguage(uiLanguage, "浏览", "browser")
+      : screenMode === "maintenance"
+        ? inLanguage(uiLanguage, "Rename Ops", "rename-ops")
+        : tt("settings");
 
   const settingsFields = useMemo(
     () =>
@@ -614,6 +639,69 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
   };
 
+  const reloadMaintenanceData = async () => {
+    setMaintenanceRefreshing(true);
+    try {
+      const [overviewPayload, doctorPayload, daemonPayload, aiRequestLogPayload, previewPayload] = await Promise.all([
+        client.getOverview(),
+        client.getDoctor(),
+        client.getDaemonStatus(),
+        client.getAiRequestLogs({
+          pageSize: 8
+        }),
+        client.getAutoRenamePreview({
+          includeCandidateNames: true,
+          limit: 12
+        })
+      ]);
+      setOverview(overviewPayload);
+      setDoctor(doctorPayload);
+      setDaemonStatus(daemonPayload);
+      setAiRequestLogs(aiRequestLogPayload);
+      setPreview(previewPayload.items.slice(0, 12));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setMaintenanceRefreshing(false);
+    }
+  };
+
+  const replayRenamesSince = async (rawValue: string) => {
+    const normalized = rawValue.trim();
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      setError(inLanguage(uiLanguage, "请输入合法的 ISO 时间，例如 2026-04-01T12:00", "Enter a valid ISO timestamp like 2026-04-01T12:00"));
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setMessage(inLanguage(uiLanguage, "正在重新入队命名 backlog...", "Re-queueing rename backlog..."));
+    try {
+      const result = await client.requeueRenamesSince({
+        since: parsed.toISOString(),
+        basis: replayBasis
+      });
+      await Promise.all([
+        reloadSessions(selected?.threadId),
+        reloadDetail(selected?.threadId),
+        reloadPromptPreview(selected?.threadId, { silent: true }),
+        reloadMaintenanceData()
+      ]);
+      setMessage(
+        inLanguage(
+          uiLanguage,
+          `已重新入队 ${result.queued} 个会话，清空 ${result.clearedCandidates} 个旧候选名`,
+          `Queued ${result.queued} sessions and cleared ${result.clearedCandidates} stale candidates`
+        )
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadOlderTranscript = async () => {
     if (!selected?.threadId || !transcriptPage?.hasMore || transcriptLoading) {
       return;
@@ -784,24 +872,40 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   }, [selected?.threadId, transcriptIndex]);
 
   useEffect(() => {
+    if (screenMode !== "maintenance") {
+      return;
+    }
+    void reloadMaintenanceData();
+  }, [screenMode]);
+
+  useEffect(() => {
     const intervalId = setInterval(() => {
       void client
         .getEvents(eventCursorRef.current)
         .then(async (payload) => {
           eventCursorRef.current = payload.nextCursor;
-          if (payload.items.length === 0 || screenMode !== "browser") {
+          if (payload.items.length === 0) {
             return;
           }
-          await reloadSessions(selected?.threadId);
-          await reloadDetail(selected?.threadId);
-          await reloadTranscript(selected?.threadId);
-          await reloadPromptPreview(selected?.threadId, { silent: true });
+          if (screenMode === "browser") {
+            await reloadSessions(selected?.threadId);
+            await reloadDetail(selected?.threadId);
+            await reloadTranscript(selected?.threadId);
+            await reloadPromptPreview(selected?.threadId, { silent: true });
+            return;
+          }
+          if (screenMode === "maintenance") {
+            await reloadMaintenanceData();
+          }
         })
         .catch(async () => {
-          if (screenMode !== "browser") {
+          if (screenMode === "browser") {
+            await reloadSessions(selected?.threadId);
             return;
           }
-          await reloadSessions(selected?.threadId);
+          if (screenMode === "maintenance") {
+            await reloadMaintenanceData();
+          }
         });
     }, EVENTS_POLL_INTERVAL_MS);
 
@@ -815,6 +919,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     dirtyOnly,
     search,
     selectedWorkspaceId,
+    screenMode,
     showHiddenTranscript,
     transcriptRole,
     transcriptQuery
@@ -857,13 +962,51 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       return;
     }
 
+    if (inputMode === "replay-since") {
+      if (key.escape) {
+        setReplaySinceDraft(defaultReplaySinceValue());
+        setInputMode("normal");
+      }
+      return;
+    }
+
     if ((key.ctrl && input === "c") || input === "q") {
       requestExit();
       return;
     }
 
     if (input === ",") {
-      setScreenMode((current) => (current === "browser" ? "settings" : "browser"));
+      setScreenMode((current) =>
+        current === "browser" ? "maintenance" : current === "maintenance" ? "settings" : "browser"
+      );
+      return;
+    }
+
+    if (screenMode === "maintenance") {
+      if (key.escape) {
+        setScreenMode("browser");
+        return;
+      }
+      if (input === "R") {
+        void reloadMaintenanceData();
+        return;
+      }
+      if (input === "p") {
+        void refreshPreview();
+        void reloadMaintenanceData();
+        return;
+      }
+      if (input === "b") {
+        setReplayBasis((current) =>
+          current === "session-updated-at" ? "last-applied-at" : "session-updated-at"
+        );
+        return;
+      }
+      if (input === "y") {
+        setReplaySinceDraft(defaultReplaySinceValue());
+        setInputMode("replay-since");
+        return;
+      }
       return;
     }
 
@@ -1514,7 +1657,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color={THEME.muted}>
           {screenMode === "browser"
             ? `${dirtyOnly ? tt("dirtyOnly") : tt("all")} | ws ${selectedWorkspaceLabel} | focus ${focusPane} | view ${browserViewMode} | api ${props.apiBase}`
-            : `${tt("settings")} | api ${props.apiBase}`}
+            : `${screenModeLabel} | api ${props.apiBase}`}
         </Text>
       </Box>
 
@@ -1597,6 +1740,22 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         </Box>
       ) : null}
 
+      {inputMode === "replay-since" ? (
+        <Box marginTop={1}>
+          <Text color={THEME.manual}>
+            {`${inLanguage(uiLanguage, "Replay 起始时间", "Replay since")} (${replayBasis}): `}
+          </Text>
+          <TextInput
+            value={replaySinceDraft}
+            onChange={setReplaySinceDraft}
+            onSubmit={(value) => {
+              setInputMode("normal");
+              void replayRenamesSince(value);
+            }}
+          />
+        </Box>
+      ) : null}
+
       {screenMode === "browser" ? (
         <>
           <Box
@@ -1623,6 +1782,18 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             </Box>
           ) : null}
         </>
+      ) : screenMode === "maintenance" ? (
+        <MaintenanceScreen
+          aiRequestLogs={aiRequestLogs}
+          daemon={daemonStatus}
+          doctor={doctor}
+          layout={layout}
+          overview={overview}
+          preview={preview}
+          refreshing={maintenanceRefreshing}
+          replayBasis={replayBasis}
+          uiLanguage={uiLanguage}
+        />
       ) : layout.compact ? (
         <Box marginTop={1} flexDirection="column" gap={1} height={layout.topSectionHeight}>
           {settingsPanel}
@@ -1682,13 +1853,34 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               )}
             </Text>
           </>
+        ) : screenMode === "maintenance" ? (
+          <>
+            <Text color={THEME.muted} wrap="truncate-end">
+              {fitDisplayLine(
+                inLanguage(
+                  uiLanguage,
+                  ", 下个页面  R 刷新运行态  p 刷新预览  b 切换 replay 基准  y 重新入队  esc 返回浏览",
+                  ", next screen  R refresh runtime  p refresh preview  b toggle replay basis  y requeue  esc back"
+                ),
+                layout.columns - 2,
+                ""
+              )}
+            </Text>
+            <Text color={THEME.muted} wrap="truncate-end">
+              {fitDisplayLine(
+                `${inLanguage(uiLanguage, "执行态", "runtime")}: ${runtimeDisplay.execution} | ${inLanguage(uiLanguage, "Daemon", "daemon")}: ${runtimeDisplay.daemonStatus}`,
+                layout.columns - 2,
+                ""
+              )}
+            </Text>
+          </>
         ) : (
           <Text color={THEME.muted} wrap="truncate-end">
             {fitDisplayLine(
               inLanguage(
                 uiLanguage,
-                ", 浏览  j/k 字段  e 编辑  space 切换  s 保存  p 刷新 prompt  R 重载  q 退出",
-                ", browser  j/k field  e edit  space cycle  s save  p refresh prompt  R reload  q quit"
+                ", 下个页面  j/k 字段  e 编辑  space 切换  s 保存  p 刷新 prompt  R 重载  esc 返回浏览  q 退出",
+                ", next screen  j/k field  e edit  space cycle  s save  p refresh prompt  R reload  esc back  q quit"
               ),
               layout.columns - 2,
               ""

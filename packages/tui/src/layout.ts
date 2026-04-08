@@ -23,7 +23,7 @@ export interface TerminalLayout {
 }
 
 export interface TerminalLayoutOptions {
-  screenMode?: "browser" | "settings";
+  screenMode?: "browser" | "maintenance" | "settings" | "daemon";
   viewMode?: "split" | "detail" | "sessions";
   showPreview?: boolean;
 }
