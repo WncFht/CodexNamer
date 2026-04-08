@@ -24,6 +24,7 @@ import {
   isSettingsDraftDirty,
   type SettingKey,
   type SettingsDraft,
+  validateSettingsDraft,
   updateSelectedProfile
 } from "./settings-model.js";
 import type {
@@ -34,7 +35,10 @@ import type {
   DaemonControlStatus,
   DoctorResponse,
   OverviewResponse,
+  ParseCodexProviderResponse,
   PromptPreviewResponse,
+  ProviderResponse,
+  ProviderTestResponse,
   ProviderProfile,
   SessionDetail,
   SessionSummary,
@@ -412,6 +416,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
   const [daemonStatus, setDaemonStatus] = useState<DaemonControlStatus | null>(null);
   const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
+  const [providerDiagnostics, setProviderDiagnostics] = useState<ProviderResponse | null>(null);
+  const [providerTestResult, setProviderTestResult] = useState<ProviderTestResponse | null>(null);
+  const [parsedCodexProvider, setParsedCodexProvider] = useState<ParseCodexProviderResponse | null>(null);
   const [maintenanceRefreshing, setMaintenanceRefreshing] = useState(false);
   const [daemonActioning, setDaemonActioning] = useState<"start" | "stop" | null>(null);
   const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
@@ -616,6 +623,70 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       syncSettingsFromConfig(payload, { preserveDirty: true });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    }
+  };
+
+  const reloadProviderDiagnostics = async () => {
+    try {
+      const payload = await client.getProviders();
+      setProviderDiagnostics(payload);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    }
+  };
+
+  const testProviderConnection = async () => {
+    if (!settingsDraft) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setMessage(inLanguage(uiLanguage, "正在测试 provider 连通性...", "Testing provider connectivity..."));
+    try {
+      const payload = await client.testProvider(settingsDraftConfig ?? encodeSettingsDraft(settingsDraft));
+      setProviderTestResult(payload);
+      setMessage(
+        payload.ok
+          ? inLanguage(uiLanguage, `provider 测试成功，耗时 ${payload.latencyMs ?? 0}ms`, `Provider test passed in ${payload.latencyMs ?? 0}ms`)
+          : inLanguage(uiLanguage, "provider 测试失败", "Provider test failed")
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importCodexProvider = async () => {
+    if (!settingsDraft) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setMessage(inLanguage(uiLanguage, "正在导入 Codex provider 配置...", "Importing Codex provider config..."));
+    try {
+      const payload = await client.parseCodexProvider();
+      setParsedCodexProvider(payload);
+      setSettingsDraft((current) => {
+        if (!current) {
+          return current;
+        }
+        return {
+          ...current,
+          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
+            requestType: payload.profile.requestType,
+            providerRef: payload.profile.providerRef,
+            baseUrl: payload.profile.baseUrl,
+            model: payload.profile.model,
+            apiKey: payload.profile.apiKey
+          })
+        };
+      });
+      setMessage(inLanguage(uiLanguage, "已把 Codex provider 导入到当前 profile 草稿", "Imported Codex provider into current profile draft"));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -828,7 +899,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (!settingsDraft) {
       return;
     }
-    if (key === "providerBaseUrl" || key === "providerModel" || key === "providerApiKey" || key === "providerWireApi") {
+    if (
+      key === "providerBaseUrl" ||
+      key === "providerModel" ||
+      key === "providerApiKey" ||
+      key === "providerApiKeyRef" ||
+      key === "providerRef" ||
+      key === "providerWireApi"
+    ) {
       const patch: Partial<ProviderProfile> =
         key === "providerBaseUrl"
           ? { baseUrl: value }
@@ -836,10 +914,30 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             ? { model: value }
             : key === "providerApiKey"
               ? { apiKey: value }
+              : key === "providerApiKeyRef"
+                ? { apiKeyRef: value }
+                : key === "providerRef"
+                  ? { providerRef: value }
               : { requestType: value as ProviderProfile["requestType"] };
       setSettingsDraft({
         ...settingsDraft,
         providerProfiles: updateSelectedProfile(settingsDraft.providerProfiles, settingsDraft.selectedProfileId, patch)
+      });
+      return;
+    }
+
+    if (key === "freezeManualName") {
+      setSettingsDraft({
+        ...settingsDraft,
+        freezeManualName: value.trim().toLowerCase() === "true"
+      });
+      return;
+    }
+
+    if (key === "maintenanceBackupBeforeCompact") {
+      setSettingsDraft({
+        ...settingsDraft,
+        maintenanceBackupBeforeCompact: value.trim().toLowerCase() === "true"
       });
       return;
     }
@@ -861,12 +959,18 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (!settingsDraft) {
       return;
     }
+    const validationError = validateSettingsDraft(settingsDraft);
+    if (validationError) {
+      setError(inLanguage(uiLanguage, `设置校验失败：${validationError}`, `Settings validation failed: ${validationError}`));
+      return;
+    }
     setLoading(true);
     setError(null);
     setMessage(inLanguage(uiLanguage, "正在保存设置...", "Saving settings..."));
     try {
       const payload = await client.updateConfig(settingsDraftConfig ?? encodeSettingsDraft(settingsDraft));
       syncSettingsFromConfig(payload.config);
+      await reloadProviderDiagnostics();
       await reloadPromptPreview(selected?.threadId, { silent: true, userConfig: settingsDraftConfig ?? undefined });
       setMessage(
         payload.restartRequired
@@ -911,6 +1015,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       clearTimeout(timeoutId);
     };
   }, [screenMode, selected?.threadId, settingsDraftConfig, settingsDraft]);
+
+  useEffect(() => {
+    if (screenMode !== "settings") {
+      return;
+    }
+    void reloadProviderDiagnostics();
+  }, [screenMode]);
 
   useEffect(() => {
     setExpandedTranscript(false);
@@ -1131,11 +1242,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         });
         return;
       }
+      if (input === "T") {
+        void testProviderConnection();
+        return;
+      }
+      if (input === "I") {
+        void importCodexProvider();
+        return;
+      }
       if (input === "R") {
         if (configView) {
           syncSettingsFromConfig(configView);
         }
         void reloadConfig();
+        void reloadProviderDiagnostics();
         void reloadPromptPreview(selected?.threadId, { silent: true });
         return;
       }
@@ -1690,6 +1810,28 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(`${tt("resolved")}: ${resolvedProviderSummary}`, layout.detailInnerWidth)}
         </Text>
+        <Text color={THEME.muted} wrap="truncate-end">
+          {truncateDisplayText(
+            `${inLanguage(uiLanguage, "Provider 解析", "Provider route")}: ${JSON.stringify(providerDiagnostics?.resolvedProvider ?? {}) || tt("nA")}`,
+            layout.detailInnerWidth
+          )}
+        </Text>
+        <Text color={providerTestResult?.ok ? THEME.success : THEME.warning} wrap="truncate-end">
+          {fitDisplayLine(
+            providerTestResult
+              ? `${inLanguage(uiLanguage, "连通性测试", "Connectivity")}: ${providerTestResult.ok ? inLanguage(uiLanguage, "成功", "ok") : inLanguage(uiLanguage, "失败", "failed")} | ${providerTestResult.latencyMs ?? 0}ms | ${formatUiWhen(providerTestResult.testedAt, uiLanguage)}`
+              : inLanguage(uiLanguage, "连通性测试: 尚未执行", "Connectivity: not tested"),
+            layout.detailInnerWidth
+          )}
+        </Text>
+        <Text color={THEME.muted} wrap="truncate-end">
+          {fitDisplayLine(
+            parsedCodexProvider
+              ? `${inLanguage(uiLanguage, "Codex 导入", "Codex import")}: ${parsedCodexProvider.profile.requestType ?? "n/a"} | ${parsedCodexProvider.profile.baseUrl ?? "n/a"} | ${parsedCodexProvider.profile.model ?? "n/a"}`
+              : inLanguage(uiLanguage, "Codex 导入: 尚未读取", "Codex import: not loaded"),
+            layout.detailInnerWidth
+          )}
+        </Text>
         <Box marginTop={1}>
           <Text color={THEME.accent} wrap="truncate-end">
             {fitDisplayLine(
@@ -1726,8 +1868,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             {fitDisplayLine(
               inLanguage(
                 uiLanguage,
-                "e 编辑字段  space 枚举切换  s 保存  p 刷新 prompt  R 重载  , 返回浏览",
-                "e edit field  space cycle enum  s save  p refresh prompt  R reload  , back to browser"
+                "e 编辑字段  space 枚举切换  s 保存  p 刷新 prompt  T 测试 provider  I 导入 Codex  R 重载  , 返回浏览",
+                "e edit field  space cycle enum  s save  p refresh prompt  T test provider  I import Codex  R reload  , back to browser"
               ),
               layout.detailInnerWidth
             )}
@@ -1911,7 +2053,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             ))}
             <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(
-                inLanguage(uiLanguage, "e 编辑  space 切换  s 保存  p prompt  R 重载  , 返回", "e edit  space cycle  s save  p prompt  R reload  , back"),
+                inLanguage(
+                  uiLanguage,
+                  "e 编辑  space 切换  s 保存  p prompt  T 测试  I 导入 Codex  R 重载  , 返回",
+                  "e edit  space cycle  s save  p prompt  T test  I import Codex  R reload  , back"
+                ),
                 layout.previewInnerWidth
               )}
             </Text>
@@ -1997,8 +2143,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             {fitDisplayLine(
               inLanguage(
                 uiLanguage,
-                ", 下个页面  j/k 字段  e 编辑  space 切换  s 保存  p 刷新 prompt  R 重载  esc 返回浏览  q 退出",
-                ", next screen  j/k field  e edit  space cycle  s save  p refresh prompt  R reload  esc back  q quit"
+                ", 下个页面  j/k 字段  e 编辑  space 切换  s 保存  p 刷新 prompt  T 测试 provider  I 导入 Codex  R 重载  esc 返回浏览  q 退出",
+                ", next screen  j/k field  e edit  space cycle  s save  p refresh prompt  T test provider  I import Codex  R reload  esc back  q quit"
               ),
               layout.columns - 2,
               ""
