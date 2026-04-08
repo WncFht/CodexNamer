@@ -2390,7 +2390,7 @@ pre {
 .ops-log-toolbar {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.6fr) repeat(2, minmax(140px, 0.7fr)) auto;
+  grid-template-columns: minmax(220px, 1.6fr) repeat(3, minmax(140px, 0.7fr)) auto;
   align-items: end;
 }
 
@@ -2424,6 +2424,25 @@ pre {
   flex-wrap: wrap;
 }
 
+.ops-log-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ops-log-pagination-copy {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.ops-log-pagination-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .ops-log-summary-chip {
   display: inline-flex;
   align-items: center;
@@ -2444,9 +2463,9 @@ pre {
 }
 
 .ops-log-table {
-  width: 100%;
-  min-width: 1180px;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -2472,6 +2491,14 @@ pre {
 
 .ops-log-row:hover td {
   background: color-mix(in srgb, var(--accent) 5%, var(--bg-secondary) 95%);
+}
+
+.ops-log-row {
+  cursor: pointer;
+}
+
+.ops-log-row[data-selected="true"] td {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-secondary) 90%);
 }
 
 .ops-log-row[data-status="running"] td {
@@ -2506,54 +2533,56 @@ pre {
 
 .ops-log-nowrap {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .ops-log-clamp {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
 }
 
 .ops-log-col-time {
-  width: 118px;
+  min-width: 132px;
 }
 
 .ops-log-col-project {
-  width: 132px;
+  min-width: 148px;
 }
 
 .ops-log-col-thread {
-  width: 184px;
+  min-width: 220px;
 }
 
 .ops-log-col-model {
-  width: 126px;
+  min-width: 148px;
 }
 
 .ops-log-col-duration {
-  width: 84px;
+  min-width: 96px;
 }
 
 .ops-log-col-chars {
-  width: 120px;
+  min-width: 132px;
 }
 
 .ops-log-col-transport {
-  width: 126px;
+  min-width: 136px;
 }
 
 .ops-log-col-endpoint {
-  width: 190px;
+  min-width: 280px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .ops-log-col-info {
-  width: 200px;
+  min-width: 280px;
+}
+
+.ops-log-detail-grid dd {
+  overflow-wrap: anywhere;
 }
 
 .ops-log-empty {

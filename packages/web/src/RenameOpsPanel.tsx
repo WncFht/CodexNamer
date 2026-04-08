@@ -286,9 +286,12 @@ export function RenameOpsPanel(props: {
     basis: "session-updated-at" | "last-applied-at";
   }) => Promise<unknown> | unknown;
 }) {
+  const LOGS_PER_PAGE = 10;
   const [logQuery, setLogQuery] = React.useState("");
+  const [logProjectFilter, setLogProjectFilter] = React.useState("all");
   const [logStatusFilter, setLogStatusFilter] = React.useState<"all" | "running" | "succeeded" | "failed">("all");
   const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "openai-compatible">("all");
+  const [logPage, setLogPage] = React.useState(1);
   const [replaySince, setReplaySince] = React.useState("");
   const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
   const [replaying, setReplaying] = React.useState(false);
@@ -353,6 +356,10 @@ export function RenameOpsPanel(props: {
   const filteredAiRequests = React.useMemo(() => {
     const query = logQuery.trim().toLowerCase();
     return (aiRequestLogs?.items ?? []).filter((item) => {
+      const projectKey = item.projectName?.trim() || "__none__";
+      if (logProjectFilter !== "all" && projectKey !== logProjectFilter) {
+        return false;
+      }
       if (logStatusFilter !== "all" && item.status !== logStatusFilter) {
         return false;
       }
@@ -377,10 +384,48 @@ export function RenameOpsPanel(props: {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [aiRequestLogs?.items, logQuery, logStatusFilter, logTransportFilter]);
+  }, [aiRequestLogs?.items, logProjectFilter, logQuery, logStatusFilter, logTransportFilter]);
+  const projectOptions = React.useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const item of aiRequestLogs?.items ?? []) {
+      const label = item.projectName?.trim() || noDataLabel;
+      const key = item.projectName?.trim() || "__none__";
+      if (!labels.has(key)) {
+        labels.set(key, label);
+      }
+    }
+    return Array.from(labels.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => left.label.localeCompare(right.label, props.uiLanguage));
+  }, [aiRequestLogs?.items, noDataLabel, props.uiLanguage]);
+  const totalLogPages = Math.max(1, Math.ceil(filteredAiRequests.length / LOGS_PER_PAGE));
+  const pagedAiRequests = React.useMemo(() => {
+    const startIndex = (logPage - 1) * LOGS_PER_PAGE;
+    return filteredAiRequests.slice(startIndex, startIndex + LOGS_PER_PAGE);
+  }, [filteredAiRequests, logPage]);
   const filteredRunningCount = filteredAiRequests.filter((item) => item.status === "running").length;
   const filteredFailedCount = filteredAiRequests.filter((item) => item.status === "failed").length;
   const filteredSucceededCount = filteredAiRequests.filter((item) => item.status === "succeeded").length;
+
+  React.useEffect(() => {
+    setLogPage(1);
+  }, [logProjectFilter, logQuery, logStatusFilter, logTransportFilter]);
+
+  React.useEffect(() => {
+    if (logPage > totalLogPages) {
+      setLogPage(totalLogPages);
+    }
+  }, [logPage, totalLogPages]);
+
+  React.useEffect(() => {
+    if (!aiRequestLogs || !props.selectedRequestLogId) {
+      return;
+    }
+    const stillVisible = filteredAiRequests.some((item) => item.id === props.selectedRequestLogId);
+    if (!stillVisible) {
+      props.onSelectRequestLog(undefined);
+    }
+  }, [aiRequestLogs, filteredAiRequests, props.onSelectRequestLog, props.selectedRequestLogId]);
 
   const handleReplay = async () => {
     if (!replaySince || replaying) {
@@ -1163,6 +1208,17 @@ export function RenameOpsPanel(props: {
             />
           </label>
           <label className="ops-log-filter">
+            <span>{inline("项目", "Project")}</span>
+            <select onChange={(event) => setLogProjectFilter(event.target.value)} value={logProjectFilter}>
+              <option value="all">{inline("全部", "All")}</option>
+              {projectOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ops-log-filter">
             <span>{inline("状态", "Status")}</span>
             <select
               onChange={(event) =>
@@ -1201,6 +1257,9 @@ export function RenameOpsPanel(props: {
             {inline("筛选结果", "Filtered")}: {formatUiNumber(filteredAiRequests.length, props.uiLanguage)}
           </span>
           <span className="ops-log-summary-chip">
+            {inline("页码", "Page")}: {formatUiNumber(logPage, props.uiLanguage)} / {formatUiNumber(totalLogPages, props.uiLanguage)}
+          </span>
+          <span className="ops-log-summary-chip">
             {inline("进行中", "Running")}: {formatUiNumber(filteredRunningCount, props.uiLanguage)}
           </span>
           <span className="ops-log-summary-chip">
@@ -1214,6 +1273,31 @@ export function RenameOpsPanel(props: {
           </span>
         </div>
 
+        {filteredAiRequests.length > 0 ? (
+          <div className="ops-log-pagination">
+            <span className="ops-log-pagination-copy">
+              {inline("每页 10 条", "10 rows per page")} · {inline("当前显示", "Showing")}{" "}
+              {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + 1, props.uiLanguage)}-
+              {formatUiNumber(Math.min(logPage * LOGS_PER_PAGE, filteredAiRequests.length), props.uiLanguage)} /{" "}
+              {formatUiNumber(filteredAiRequests.length, props.uiLanguage)}
+            </span>
+            <div className="ops-log-pagination-actions">
+              <button className="btn-sm" disabled={logPage <= 1} onClick={() => setLogPage(1)} type="button">
+                {inline("首页", "First")}
+              </button>
+              <button className="btn-sm" disabled={logPage <= 1} onClick={() => setLogPage((page) => Math.max(1, page - 1))} type="button">
+                {inline("上一页", "Prev")}
+              </button>
+              <button className="btn-sm" disabled={logPage >= totalLogPages} onClick={() => setLogPage((page) => Math.min(totalLogPages, page + 1))} type="button">
+                {inline("下一页", "Next")}
+              </button>
+              <button className="btn-sm" disabled={logPage >= totalLogPages} onClick={() => setLogPage(totalLogPages)} type="button">
+                {inline("末页", "Last")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {props.aiRequestLogDetail ? (
           <div className="detail-panel">
             <div className="panel-topline">
@@ -1225,31 +1309,98 @@ export function RenameOpsPanel(props: {
                 {inline("返回日志列表", "Back to logs")}
               </button>
             </div>
-            <dl className="settings-runtime-grid compact">
+            <dl className="settings-runtime-grid compact ops-log-detail-grid">
+              <div>
+                <dt>ID</dt>
+                <dd className="ops-log-mono">{props.aiRequestLogDetail.id}</dd>
+              </div>
+              <div>
+                <dt>{inline("项目", "Project")}</dt>
+                <dd>{props.aiRequestLogDetail.projectName ?? noDataLabel}</dd>
+              </div>
               <div>
                 <dt>Thread</dt>
-                <dd>{props.aiRequestLogDetail.threadId}</dd>
+                <dd className="ops-log-mono">{props.aiRequestLogDetail.threadId}</dd>
               </div>
               <div>
                 <dt>{inline("状态", "Status")}</dt>
                 <dd>{aiRequestStatusLabel(props.aiRequestLogDetail.status, props.uiLanguage)}</dd>
               </div>
               <div>
-                <dt>{inline("请求类型", "Request type")}</dt>
+                <dt>{inline("开始时间", "Started at")}</dt>
+                <dd title={props.aiRequestLogDetail.startedAt}>
+                  {formatWhen(props.aiRequestLogDetail.startedAt, props.uiLanguage)}
+                </dd>
+              </div>
+              <div>
+                <dt>{inline("结束时间", "Finished at")}</dt>
+                <dd title={props.aiRequestLogDetail.finishedAt ?? ""}>
+                  {formatWhen(props.aiRequestLogDetail.finishedAt, props.uiLanguage)}
+                </dd>
+              </div>
+              <div>
+                <dt>{inline("耗时", "Duration")}</dt>
+                <dd>{formatDurationMs(props.aiRequestLogDetail.durationMs)}</dd>
+              </div>
+              <div>
+                <dt>{inline("模型", "Model")}</dt>
+                <dd>{props.aiRequestLogDetail.model ?? noDataLabel}</dd>
+              </div>
+              <div>
+                <dt>{inline("后端", "Backend")}</dt>
+                <dd>{props.aiRequestLogDetail.backend}</dd>
+              </div>
+              <div>
+                <dt>{inline("传输", "Transport")}</dt>
                 <dd>{props.aiRequestLogDetail.transport}</dd>
+              </div>
+              <div>
+                <dt>{inline("请求后端", "Requested backend")}</dt>
+                <dd>{props.aiRequestLogDetail.metadata?.requestedBackend ?? props.aiRequestLogDetail.backend}</dd>
+              </div>
+              <div>
+                <dt>{inline("接口", "Endpoint")}</dt>
+                <dd className="ops-log-mono">{props.aiRequestLogDetail.baseUrl ?? noDataLabel}</dd>
+              </div>
+              <div>
+                <dt>{inline("Provider ref", "Provider ref")}</dt>
+                <dd className="ops-log-mono">{props.aiRequestLogDetail.metadata?.providerRef ?? noDataLabel}</dd>
+              </div>
+              <div>
+                <dt>{inline("Profile", "Profile")}</dt>
+                <dd className="ops-log-mono">{props.aiRequestLogDetail.metadata?.profile ?? noDataLabel}</dd>
+              </div>
+              <div>
+                <dt>{inline("字符", "Chars")}</dt>
+                <dd>
+                  {formatUiNumber(props.aiRequestLogDetail.promptChars, props.uiLanguage)} /{" "}
+                  {formatUiNumber(props.aiRequestLogDetail.responseChars, props.uiLanguage)}
+                </dd>
               </div>
               <div>
                 <dt>{inline("最终标题", "Final name")}</dt>
                 <dd>{props.aiRequestLogDetail.result?.composition?.finalName ?? noDataLabel}</dd>
+              </div>
+              <div>
+                <dt>{inline("信息", "Info")}</dt>
+                <dd>{props.aiRequestLogDetail.error ?? noDataLabel}</dd>
               </div>
             </dl>
             <details className="settings-disclosure" open>
               <summary>{inline("Prompt 输入", "Prompt input")}</summary>
               <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.promptText ?? noDataLabel}</pre>
             </details>
+            <details className="settings-disclosure">
+              <summary>{inline("请求载荷", "Request payload")}</summary>
+              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.requestPayload ?? {}, null, 2)}</pre>
+            </details>
             <details className="settings-disclosure" open>
               <summary>{inline("模型原始输出", "Raw model output")}</summary>
               <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.responseText ?? noDataLabel}</pre>
+            </details>
+            <details className="settings-disclosure">
+              <summary>{inline("响应载荷", "Response payload")}</summary>
+              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.responsePayload ?? {}, null, 2)}</pre>
             </details>
             <details className="settings-disclosure" open>
               <summary>{inline("解析后的结构化结果", "Parsed structured result")}</summary>
@@ -1286,9 +1437,10 @@ export function RenameOpsPanel(props: {
                   </td>
                 </tr>
               ) : null}
-              {filteredAiRequests.map((item) => (
+              {pagedAiRequests.map((item) => (
                 <tr
                   className="ops-log-row"
+                  data-selected={props.selectedRequestLogId === item.id ? "true" : undefined}
                   data-status={item.status}
                   key={item.id}
                   onClick={() => props.onSelectRequestLog(item.id)}
@@ -1327,7 +1479,7 @@ export function RenameOpsPanel(props: {
                   </td>
                   <td className="ops-log-mono ops-log-col-endpoint" title={item.baseUrl ?? ""}>{item.baseUrl ?? noDataLabel}</td>
                   <td className="ops-log-col-info">
-                    <div className={item.error ? "ops-log-primary ops-log-clamp" : "ops-log-primary ops-log-nowrap"} title={item.error ?? ""}>{item.error ?? noDataLabel}</div>
+                    <div className="ops-log-primary" title={item.error ?? ""}>{item.error ?? noDataLabel}</div>
                     <div className="ops-log-secondary ops-log-nowrap" title={item.error ? inline("错误", "error") : item.metadata?.profile ?? ""}>
                       {item.error ? inline("错误", "error") : item.metadata?.profile ?? noDataLabel}
                     </div>
