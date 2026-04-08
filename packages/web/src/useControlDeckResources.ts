@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchDaemonStatus,
@@ -53,6 +53,17 @@ type UseControlDeckResourcesOptions = {
 };
 
 export function useControlDeckResources(options: UseControlDeckResourcesOptions) {
+  const {
+    tab,
+    search,
+    dirtyOnly,
+    selectedWorkspaceId,
+    selectedId,
+    selectedRequestLogId,
+    onSelectSession,
+    onSelectWorkspace,
+    onFailure
+  } = options;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<SessionsResponse["workspaces"]>([]);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
@@ -70,15 +81,20 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
   const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
-  const deferredSearch = useDeferredValue(options.search);
+  const deferredSearch = useDeferredValue(search);
   const eventCursorRef = useRef(0);
   const latestUiStateRef = useRef({
-    tab: options.tab,
+    tab,
     deferredSearch,
-    dirtyOnly: options.dirtyOnly,
-    selectedWorkspaceId: options.selectedWorkspaceId,
-    selectedId: options.selectedId,
-    selectedRequestLogId: options.selectedRequestLogId
+    dirtyOnly,
+    selectedWorkspaceId,
+    selectedId,
+    selectedRequestLogId
+  });
+  const latestCallbacksRef = useRef({
+    onSelectSession,
+    onSelectWorkspace,
+    onFailure
   });
   const sessionsRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
@@ -95,22 +111,27 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const promptPreviewUrgentPendingRef = useRef(0);
 
   latestUiStateRef.current = {
-    tab: options.tab,
+    tab,
     deferredSearch,
-    dirtyOnly: options.dirtyOnly,
-    selectedWorkspaceId: options.selectedWorkspaceId,
-    selectedId: options.selectedId,
-    selectedRequestLogId: options.selectedRequestLogId
+    dirtyOnly,
+    selectedWorkspaceId,
+    selectedId,
+    selectedRequestLogId
+  };
+  latestCallbacksRef.current = {
+    onSelectSession,
+    onSelectWorkspace,
+    onFailure
   };
 
   const selectedSummary = useMemo(
-    () => sessions.find((item) => item.threadId === options.selectedId),
-    [options.selectedId, sessions]
+    () => sessions.find((item) => item.threadId === selectedId),
+    [selectedId, sessions]
   );
 
-  const reportFailure = useEffectEvent((error: unknown) => {
-    options.onFailure(error);
-  });
+  const reportFailure = useCallback((error: unknown) => {
+    latestCallbacksRef.current.onFailure(error);
+  }, []);
 
   const patchSelectedSession = (threadId: string, patch: Partial<SessionSummary & SessionDetail>) => {
     setSessions((previous) =>
@@ -121,61 +142,61 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     );
   };
 
-  const reloadConfigView = async () => {
+  const reloadConfigView = useCallback(async () => {
     const requestId = ++configRequestIdRef.current;
     const configPayload = await fetchConfig();
     if (requestId !== configRequestIdRef.current) {
       return;
     }
     setConfigView(configPayload);
-  };
+  }, []);
 
-  const reloadProviders = async () => {
+  const reloadProviders = useCallback(async () => {
     const requestId = ++providersRequestIdRef.current;
     const providerPayload = await fetchProviders();
     if (requestId !== providersRequestIdRef.current) {
       return;
     }
     setProviders(providerPayload);
-  };
+  }, []);
 
-  const reloadOverview = async () => {
+  const reloadOverview = useCallback(async () => {
     const requestId = ++overviewRequestIdRef.current;
     const overviewPayload = await fetchOverview();
     if (requestId !== overviewRequestIdRef.current) {
       return;
     }
     setOverview(overviewPayload);
-  };
+  }, []);
 
-  const reloadDoctor = async () => {
+  const reloadDoctor = useCallback(async () => {
     const requestId = ++doctorRequestIdRef.current;
     const doctorPayload = await fetchDoctor();
     if (requestId !== doctorRequestIdRef.current) {
       return;
     }
     setDoctor(doctorPayload);
-  };
+  }, []);
 
-  const reloadDaemon = async () => {
+  const reloadDaemon = useCallback(async () => {
     const requestId = ++daemonRequestIdRef.current;
     const daemonPayload = await fetchDaemonStatus();
     if (requestId !== daemonRequestIdRef.current) {
       return;
     }
     setDaemon(daemonPayload);
-  };
+  }, []);
 
-  const reloadAiRequestLogs = async () => {
+  const reloadAiRequestLogs = useCallback(async () => {
     const requestId = ++aiRequestLogsRequestIdRef.current;
     const aiRequestLogPayload = await fetchAiRequestLogs();
     if (requestId !== aiRequestLogsRequestIdRef.current) {
       return;
     }
     setAiRequestLogs(aiRequestLogPayload);
-  };
+  }, []);
 
-  const reloadAiRequestLogDetail = async (requestLogId: number | undefined) => {
+  const reloadAiRequestLogDetail = useCallback(async (requestLogId: number | undefined) => {
     const requestId = ++aiRequestLogDetailRequestIdRef.current;
     if (!requestLogId || Number.isNaN(requestLogId)) {
       setAiRequestLogDetail(null);
@@ -187,9 +208,9 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       return;
     }
     setAiRequestLogDetail(detailPayload);
-  };
+  }, []);
 
-  const reloadPreview = async (options?: {
+  const reloadPreview = useCallback(async (options?: {
     includeCandidateNames?: boolean;
     urgent?: boolean;
     limit?: number;
@@ -225,9 +246,9 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         }
       }
     }
-  };
+  }, []);
 
-  const reloadPromptPreview = async (request?: {
+  const reloadPromptPreview = useCallback(async (request?: {
     threadId?: string;
     urgent?: boolean;
     userConfig?: ConfigDocument;
@@ -254,9 +275,88 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         }
       }
     }
-  };
+  }, []);
 
-  const loadResources = async (
+  const reloadDetail = useCallback(async (threadId: string | undefined) => {
+    const requestId = ++detailRequestIdRef.current;
+
+    if (!threadId) {
+      if (requestId === detailRequestIdRef.current) {
+        setLoadingDetail(false);
+      }
+      setDetail(null);
+      return;
+    }
+
+    setLoadingDetail(true);
+    try {
+      const payload = await fetchSessionDetail(threadId);
+      if (requestId !== detailRequestIdRef.current) {
+        return;
+      }
+      setDetail(payload);
+    } catch (error) {
+      if (requestId === detailRequestIdRef.current) {
+        reportFailure(error);
+      }
+    } finally {
+      if (requestId === detailRequestIdRef.current) {
+        setLoadingDetail(false);
+      }
+    }
+  }, [reportFailure]);
+
+  const reloadSessions = useCallback(async () => {
+    const {
+      deferredSearch: nextSearch,
+      dirtyOnly: nextDirtyOnly,
+      selectedWorkspaceId: nextWorkspaceId,
+      selectedId: nextSelectedId
+    } = latestUiStateRef.current;
+
+    setLoadingSessions(true);
+    const requestId = ++sessionsRequestIdRef.current;
+    try {
+      const filtersEnabled = areSessionFiltersEnabled();
+      const effectiveSearch = filtersEnabled ? nextSearch : "";
+      const effectiveDirtyOnly = filtersEnabled ? nextDirtyOnly : false;
+      const payload = await fetchSessions({
+        search: effectiveSearch,
+        dirtyOnly: effectiveDirtyOnly,
+        workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
+      });
+      if (requestId !== sessionsRequestIdRef.current) {
+        return;
+      }
+
+      setSessions(payload.items);
+      setWorkspaces(payload.workspaces);
+      setLastSyncAt(new Date().toISOString());
+
+      if (
+        nextWorkspaceId !== ALL_WORKSPACES_ID &&
+        !payload.workspaces.some((item) => item.workspaceId === nextWorkspaceId)
+      ) {
+        latestCallbacksRef.current.onSelectWorkspace(ALL_WORKSPACES_ID);
+      }
+
+      if (!nextSelectedId && payload.items[0]) {
+        latestCallbacksRef.current.onSelectSession(payload.items[0].threadId);
+      } else if (nextSelectedId && !payload.items.some((item) => item.threadId === nextSelectedId)) {
+        latestCallbacksRef.current.onSelectSession(payload.items[0]?.threadId);
+      }
+    } catch (error) {
+      if (requestId === sessionsRequestIdRef.current) {
+        reportFailure(error);
+      }
+    } finally {
+      if (requestId === sessionsRequestIdRef.current) {
+        setLoadingSessions(false);
+      }
+    }
+  }, [reportFailure]);
+
+  const loadResources = useCallback(async (
     resources: readonly DataResource[],
     resourceOptions?: {
       threadId?: string;
@@ -309,109 +409,40 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     }
 
     await Promise.all(tasks);
-  };
-
-  const reloadDetail = async (threadId: string | undefined) => {
-    const requestId = ++detailRequestIdRef.current;
-
-    if (!threadId) {
-      if (requestId === detailRequestIdRef.current) {
-        setLoadingDetail(false);
-      }
-      setDetail(null);
-      return;
-    }
-
-    setLoadingDetail(true);
-    try {
-      const payload = await fetchSessionDetail(threadId);
-      if (requestId !== detailRequestIdRef.current) {
-        return;
-      }
-      setDetail(payload);
-    } catch (error) {
-      if (requestId === detailRequestIdRef.current) {
-        reportFailure(error);
-      }
-    } finally {
-      if (requestId === detailRequestIdRef.current) {
-        setLoadingDetail(false);
-      }
-    }
-  };
-
-  const reloadSessions = async () => {
-    const {
-      deferredSearch: nextSearch,
-      dirtyOnly: nextDirtyOnly,
-      selectedWorkspaceId: nextWorkspaceId,
-      selectedId: nextSelectedId
-    } = latestUiStateRef.current;
-
-    setLoadingSessions(true);
-    const requestId = ++sessionsRequestIdRef.current;
-    try {
-      const filtersEnabled = areSessionFiltersEnabled();
-      const effectiveSearch = filtersEnabled ? nextSearch : "";
-      const effectiveDirtyOnly = filtersEnabled ? nextDirtyOnly : false;
-      const payload = await fetchSessions({
-        search: effectiveSearch,
-        dirtyOnly: effectiveDirtyOnly,
-        workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
-      });
-      if (requestId !== sessionsRequestIdRef.current) {
-        return;
-      }
-
-      setSessions(payload.items);
-      setWorkspaces(payload.workspaces);
-      setLastSyncAt(new Date().toISOString());
-
-      if (
-        nextWorkspaceId !== ALL_WORKSPACES_ID &&
-        !payload.workspaces.some((item) => item.workspaceId === nextWorkspaceId)
-      ) {
-        options.onSelectWorkspace(ALL_WORKSPACES_ID);
-      }
-
-      if (!nextSelectedId && payload.items[0]) {
-        options.onSelectSession(payload.items[0].threadId);
-      } else if (nextSelectedId && !payload.items.some((item) => item.threadId === nextSelectedId)) {
-        options.onSelectSession(payload.items[0]?.threadId);
-      }
-    } catch (error) {
-      if (requestId === sessionsRequestIdRef.current) {
-        reportFailure(error);
-      }
-    } finally {
-      if (requestId === sessionsRequestIdRef.current) {
-        setLoadingSessions(false);
-      }
-    }
-  };
+  }, [
+    reloadAiRequestLogs,
+    reloadConfigView,
+    reloadDaemon,
+    reloadDoctor,
+    reloadOverview,
+    reloadPreview,
+    reloadPromptPreview,
+    reloadProviders,
+    reloadSessions
+  ]);
 
   useEffect(() => {
     void reloadSessions();
-  }, [deferredSearch, options.dirtyOnly, options.selectedWorkspaceId]);
+  }, [deferredSearch, dirtyOnly, reloadSessions, selectedWorkspaceId]);
 
   useEffect(() => {
     void loadResources(["preview"]).catch(() => undefined);
-  }, []);
+  }, [loadResources]);
 
   useEffect(() => {
-    const resources = panelResourcesForTab(options.tab);
+    const resources = panelResourcesForTab(tab);
     if (resources.length === 0) {
       return;
     }
 
     void loadResources(resources, {
       threadId: latestUiStateRef.current.selectedId,
-      urgentPromptPreview: options.tab === "settings"
+      urgentPromptPreview: tab === "settings"
     }).catch((error) => {
       reportFailure(error);
     });
 
-    if (options.tab !== "maintenance" && options.tab !== "daemon") {
+    if (tab !== "maintenance" && tab !== "daemon") {
       return;
     }
 
@@ -424,39 +455,39 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     return () => {
       window.clearInterval(timer);
     };
-  }, [options.tab, reportFailure]);
+  }, [loadResources, reportFailure, tab]);
 
   useEffect(() => {
-    if (options.tab !== "settings") {
+    if (tab !== "settings") {
       return;
     }
     void reloadPromptPreview({
-      threadId: options.selectedId,
+      threadId: selectedId,
       urgent: false
     });
-  }, [configView?.effectiveConfig, options.selectedId, options.tab]);
+  }, [configView?.effectiveConfig, reloadPromptPreview, selectedId, tab]);
 
   useEffect(() => {
-    if (options.tab !== "sessions") {
+    if (tab !== "sessions") {
       setLoadingDetail(false);
       return;
     }
-    if (!options.selectedId) {
+    if (!selectedId) {
       setDetail(null);
       return;
     }
-    void reloadDetail(options.selectedId);
-  }, [options.selectedId, options.tab]);
+    void reloadDetail(selectedId);
+  }, [reloadDetail, selectedId, tab]);
 
   useEffect(() => {
-    if (options.tab !== "maintenance") {
+    if (tab !== "maintenance") {
       setAiRequestLogDetail(null);
       return;
     }
-    void reloadAiRequestLogDetail(options.selectedRequestLogId).catch((error) => {
+    void reloadAiRequestLogDetail(selectedRequestLogId).catch((error) => {
       reportFailure(error);
     });
-  }, [options.selectedRequestLogId, options.tab, reportFailure]);
+  }, [reloadAiRequestLogDetail, reportFailure, selectedRequestLogId, tab]);
 
   useEffect(() => {
     let active = true;
@@ -474,9 +505,9 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     return () => {
       active = false;
     };
-  }, [reportFailure]);
+  }, [loadResources, reportFailure]);
 
-  const refreshCurrentView = useEffectEvent(
+  const refreshCurrentView = useCallback(
     (
       refreshOptions?: {
         threadId?: string;
@@ -497,7 +528,8 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         tasks.push(reloadDetail(nextThreadId));
       }
       void Promise.all(tasks).catch(() => undefined);
-    }
+    },
+    [loadResources, reloadDetail]
   );
 
   useEffect(() => {
@@ -519,7 +551,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     return () => {
       window.clearInterval(timer);
     };
-  }, [refreshCurrentView]);
+  }, [loadResources, refreshCurrentView]);
 
   return {
     sessions,
