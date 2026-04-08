@@ -1,103 +1,184 @@
-# Codex Session Manager
+# CodexNamer
 
-Codex Session Manager 是一个独立于 `openai/codex` 的本地工具，用来管理 Codex 会话命名、自动重命名、批量 apply、运行态排障，以及 `session_index.jsonl` 的维护与压缩。
+[English](README.md) | [简体中文](README.zh.md)
 
-它不修改 Codex 源码，也不接管 Codex 启动方式。当前实现通过读取 `~/.codex/sessions/**/rollout-*.jsonl` 理解会话内容，并通过向 `~/.codex/session_index.jsonl` 追加记录写回最终名称。
+Local-first session naming and automation for Codex rollouts.
 
-## 当前状态
+CodexNamer scans local rollout files under `~/.codex/sessions/**/rollout-*.jsonl`, keeps its own SQLite state database, and writes final names back through `~/.codex/session_index.jsonl` — without patching Codex itself or touching Codex's internal SQLite.
 
-当前仓库已经具备完整的本地闭环：
+![TypeScript](https://img.shields.io/static/v1?label=Language&message=TypeScript&color=3178c6&style=flat-square)
+![Node 20+](https://img.shields.io/static/v1?label=Node&message=20%2B&color=43853d&style=flat-square)
+![Local-first](https://img.shields.io/static/v1?label=Mode&message=Local-first&color=7c3aed&style=flat-square)
+![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=2563eb&style=flat-square)
 
-- 扫描 rollout 并维护本地 SQLite 状态库
-- 计算 revision、dirty、status estimate
-- 单个 `suggest / apply / rename / freeze`
-- dirty 批量 apply
-- daemon auto-rename 与 auto-apply
-- builder-first 命名配置与 prompt preview
-- Local API、Web、TUI、CLI 四套入口
-- AI 请求日志、overview 图表、daemon 控制页
-- `session_index.jsonl` compact
+## Why this exists
 
-当前运行逻辑有几条重要约定：
+Codex already stores session history locally, but day-to-day session management quickly becomes messy when you have:
 
-- `evaluateAutoRename()` 统一输出 `skip / suggest / apply`
-- `apply` 只表示“允许正式应用”，不等于已经落盘
-- 真正是否自动落盘，要同时看：
-  - `rename.auto_apply`
-  - daemon 是否运行
-  - runtime `actualExecution`
-- 当前调度保护态只保留 `freeze`
-- `brief / detailed` 不再是当前配置与 UI 的主语义
-- overview 中“近期重命名活动”和“应用来源分布”已按会话去重
+- hundreds of rollout files
+- weak or stale default titles
+- multiple workspaces and providers
+- a need to batch rename, freeze, replay, or audit naming history
+- a desire to auto-apply stable names only when sessions are truly idle
 
-## AI backend 现状
+This project adds an external management layer on top of Codex's local data model:
 
-当前后端是：
+- **read** local rollout files
+- **derive** structured names from heuristics or AI
+- **preview** rename decisions before applying
+- **write back** through the official `session_index.jsonl` rename layer
 
-- `none`
-- `responses`
-- `openai-compatible`
+## Highlights
 
-当前 provider 来源是：
+- **No Codex patching required**  
+  Works as a standalone local tool. It does not wrap Codex startup and does not modify Codex source code.
 
-- `codex-config`
-- `manual`
+- **Local-first and auditable**  
+  Reads rollout files, stores derived state in its own SQLite database, and keeps rename history separate from Codex internals.
 
-这意味着：
+- **Structured AI naming**  
+  Supports structured naming with `tag / kind / scope / summary` composition, prompt preview, context strategies, and per-session style overrides.
 
-- `responses + codex-config` 会直接读取当前 Codex 配置与鉴权
-- `manual` 会读取当前用户配置里的 `[provider.<profile>]`
-- 不再维护 `backend = "codex"` 或 `codex exec` fallback
+- **Multiple operators, one backend**  
+  CLI, Local API, Web UI, TUI, and daemon all share the same core rename engine and state model.
 
-## 命名结构现状
+- **Safe auto-apply model**  
+  Distinguishes between preview status (`skip / suggest / apply`) and real writeback execution (`preview-only` vs `auto-apply`).
 
-当前最终标题结构由 `naming.builder` 决定。
+- **Daemon control in Web UI**  
+  The Web app can start and stop the sweep daemon manually instead of requiring a boot-persistent service.
 
-builder 支持的 component：
+- **Practical queue operations**  
+  Freeze, manual override, replay renames, detect name collisions, compact `session_index.jsonl`, inspect provider diagnostics, and review AI request logs.
 
-- `timestamp`
-- `workspace`
-- `project`
-- `tag`
-- `kind`
-- `scope`
-- `summary`
+## Architecture
 
-AI 或 heuristic 先产出结构化信息，后端再按 builder 组装最终标题。`components / component_separator` 只作为兼容层存在。
+```mermaid
+flowchart LR
+  A["~/.codex/sessions/**/rollout-*.jsonl"] --> B["Core scanner / ingest"]
+  B --> C["SQLite state DB"]
+  C --> D["Rename evaluation"]
+  D --> E["CLI / API / Web / TUI"]
+  D --> F["Daemon sweep"]
+  F --> G["session_index.jsonl writeback"]
+  E --> G
+```
 
-## 文档导航
+## Feature overview
 
-- [文档总览](./docs/README.md)
-- [仓库总览](./docs/spec/repo-overview.md)
-- [系统设计](./docs/spec/system-design.md)
-- [配置与 AI 后端](./docs/spec/config-and-ai.md)
-- [Auto Rename 评估与 Context 构建](./docs/spec/rename-evaluation-and-context.md)
-- [状态页说明](./docs/spec/status-page-guide.md)
-- [CLI / API / UI 设计](./docs/spec/cli-api-ui.md)
-- [WebUI / TUI / Local API 详细设计](./docs/spec/web-tui-local-api-design.md)
+| Capability | Status | Entry points |
+| --- | --- | --- |
+| Rollout scanning and incremental ingest | Available | core |
+| Structured rename candidate generation | Available | core / CLI / API / Web / TUI |
+| Manual rename, freeze, manual override | Available | CLI / API / Web / TUI |
+| Dirty queue preview and batch apply | Available | CLI / API / Web / TUI |
+| Auto-rename sweep with daemon heartbeat | Available | daemon / API / Web |
+| Provider diagnostics and prompt preview | Available | CLI / API / Web / TUI |
+| `session_index.jsonl` compaction | Available | CLI / API / Web |
+| Daemon start/stop from Web UI | Available | API / Web |
 
-## 安装
+## Quick start
 
-前置要求：
+### Requirements
 
 - Node.js `20+`
 - npm `10+`
-- 本机已有可读取的 Codex 目录，默认是 `~/.codex`
+- A local Codex home directory, usually `~/.codex`
+- If you want AI naming via inherited Codex provider settings:
+  - `~/.codex/config.toml`
+  - `~/.codex/auth.json`
 
-安装：
+### Install
 
 ```bash
-git clone <your-repo-url> codex-session-manager
-cd codex-session-manager
+git clone <your-repo-url> codexnamer
+cd codexnamer
 npm install
 npm run build
 ```
 
-## 最小配置示例
+### Start the Web app
 
-默认用户配置路径：
+```bash
+npm run web
+```
+
+The launcher will:
+
+- reuse a healthy local API if one already exists
+- or start a new API on an available `42110+` port
+- clean up stale repo-owned launcher/API/web dev processes
+- open the Vite app against the matching API target
+
+Default Web URL:
+
+- `http://127.0.0.1:43110`
+
+### Start the TUI
+
+```bash
+npm run tui
+```
+
+Or connect the TUI to an explicit API:
+
+```bash
+npm run tui -- --api-base http://127.0.0.1:42110
+```
+
+### Start the Local API directly
+
+```bash
+npm run api -- --host 127.0.0.1 --port 42110
+curl http://127.0.0.1:42110/api/v1/health
+```
+
+### Start the daemon
+
+```bash
+# Continuous sweep
+npm run daemon
+
+# Single sweep only
+npm run daemon -- --once
+
+# Custom interval
+npm run daemon -- --interval 60
+```
+
+## Auto-apply semantics
+
+This project intentionally separates **rename evaluation** from **actual writeback**.
+
+- `skip` → do nothing
+- `suggest` → candidate is ready for preview
+- `apply` → candidate is eligible to be written
+
+But `apply` in preview does **not** automatically mean the rename was written back.
+
+Real auto-apply depends on runtime state:
+
+- `rename.auto_apply = "disabled"` → preview only
+- `rename.auto_apply = "idle-finalize"` + daemon running → eligible `finalize_ready` sessions can be written automatically
+
+The UI exposes:
+
+- configured auto-apply policy
+- actual execution mode
+- daemon heartbeat status
+- last sweep summary
+
+So you can distinguish "configured for auto-apply" from "actually applying now".
+
+## Configuration
+
+Default config path:
 
 - `~/.config/codex-session-manager/config.toml`
+
+> Note: the public project name is now **CodexNamer**, but the current default local config/state paths still use the historical `codex-session-manager` prefix for compatibility.
+
+Minimal example:
 
 ```toml
 [general]
@@ -105,22 +186,15 @@ codex_home = "~/.codex"
 state_dir = "~/.local/state/codex-session-manager"
 ui_language = "zh-CN"
 
-[rename]
-auto_apply = "disabled"
-freeze_manual_name = true
-
-[watch]
-scan_interval_seconds = 300
-candidate_idle_seconds = 120
-finalize_idle_seconds = 600
-rename_cooldown_seconds = 900
-min_rollout_growth_bytes = 4096
-min_task_complete_delta = 1
-max_auto_renames_per_session = 2
+[ai]
+backend = "codex"
+provider_source = "inherit-codex"
+profile = "default"
+max_concurrency = 1
 
 [naming]
-max_length = 72
 language = "zh-CN"
+default_style = "detailed"
 context_strategy = "summary-signals"
 context_max_chars = 8000
 composition_mode = "structured"
@@ -132,120 +206,15 @@ builder = [
   { type = "component", component = "summary" }
 ]
 
-[ai]
-backend = "responses"
-provider_source = "codex-config"
-profile = "default"
-timeout_seconds = 45
-temperature = 0.2
-max_concurrency = 1
+[[naming.tags]]
+id = "settings"
+description = "Settings, provider, config, save, and language related sessions."
+prompt_hint = "setting settings config save language provider"
 ```
 
-如果你想显式指定 provider：
+## Selected commands
 
-```toml
-[ai]
-backend = "openai-compatible"
-provider_source = "manual"
-profile = "default"
-
-[provider.default]
-request_type = "openai-compatible"
-display_name = "Default"
-base_url = "http://127.0.0.1:23141/v1"
-model = "gpt-5.4"
-api_key = "your-api-key"
-enabled = true
-is_default = true
-```
-
-## 启动方式
-
-### Local API
-
-```bash
-npm run api -- --host 127.0.0.1 --port 42110
-```
-
-健康检查：
-
-```bash
-curl http://127.0.0.1:42110/api/v1/health
-```
-
-### Web
-
-```bash
-npm run web
-```
-
-当前 Web 有四个主视图：
-
-- `Sessions`
-- `Settings`
-- `状态 / Rename Ops`
-- `Daemon`
-
-当前 Web 支持：
-
-- workspace 浏览
-- session 详情 / transcript / rename history
-- 会话级 `Suggest / Apply / Freeze`
-- settings 写回
-- overview 图表
-- AI 请求日志
-- daemon start / stop / log tail
-
-请求日志当前行为：
-
-- 后端分页
-- 状态页每页 10 条
-- 支持搜索、项目、状态、传输过滤
-- 支持直接跳页
-
-### TUI
-
-```bash
-npm run tui
-```
-
-也可以显式指定已有 API：
-
-```bash
-npm run tui -- --api-base http://127.0.0.1:42110
-```
-
-常用快捷键：
-
-- `j/k` 移动
-- `/` 搜索
-- `s` suggest
-- `a` apply
-- `r` manual rename
-- `f` freeze / unfreeze
-- `p` 预览 dirty auto-rename
-- `A` 批量 apply dirty
-- `q` 退出
-
-## CLI
-
-当前命令：
-
-- `codex-session list`
-- `codex-session show --id <thread-id>`
-- `codex-session suggest --id <thread-id>`
-- `codex-session apply --id <thread-id>`
-- `codex-session rename --id <thread-id> --name "..."`
-- `codex-session history --id <thread-id>`
-- `codex-session freeze --id <thread-id>`
-- `codex-session unfreeze --id <thread-id>`
-- `codex-session batch apply --dirty`
-- `codex-session compact-index --dry-run`
-- `codex-session doctor`
-- `codex-session config print`
-- `codex-session provider test`
-
-示例：
+### CLI
 
 ```bash
 npm run cli -- list --dirty
@@ -255,28 +224,87 @@ npm run cli -- apply --id <thread-id>
 npm run cli -- rename --id <thread-id> --name "feat(api): add config writeback"
 npm run cli -- batch apply --dirty --preview
 npm run cli -- batch apply --dirty
+npm run cli -- compact-index --dry-run
+npm run cli -- doctor
+npm run cli -- provider test
 ```
 
-## Local API 示例
+### Local API
 
 ```bash
 curl 'http://127.0.0.1:42110/api/v1/sessions?dirty=true&search=api'
 curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/suggest
 curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/apply
-curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/rename \
-  -H 'content-type: application/json' \
-  -d '{"name":"feat(api): add config writeback"}'
-curl 'http://127.0.0.1:42110/api/v1/ai/request-logs?page=1&pageSize=10&project=codex-session-manager'
-curl 'http://127.0.0.1:42110/api/v1/events/since?cursor=0'
+curl http://127.0.0.1:42110/api/v1/overview
+curl http://127.0.0.1:42110/api/v1/daemon
 ```
 
-## 当前不再使用的旧语义
+## Repo layout
 
-下面这些现在只应当被视为历史兼容信息，而不是当前行为：
+```text
+packages/core     core ingest, state, provider, naming, writeback
+packages/shared   shared DTOs and schemas
+packages/api      local Fastify API
+packages/cli      CLI entry point
+packages/daemon   sweep daemon
+packages/web      React + Vite dashboard
+packages/tui      Ink-based terminal UI
+docs/             specs, ADRs, design notes, reviews
+test/             Vitest test suite
+```
 
-- `manual override`
-- `naming.default_style`
-- `brief / detailed`
-- `backend = "codex"`
-- `provider_source = "inherit-codex"`
-- `codex exec` fallback
+## Development
+
+```bash
+npm install
+npm run build
+npm run build:runtime
+npm run web:build
+npm test
+```
+
+Useful local entry points:
+
+```bash
+npm run web
+npm run tui
+npm run api
+npm run daemon
+```
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Repo overview](docs/spec/repo-overview.md)
+- [System design](docs/spec/system-design.md)
+- [Config and AI backend](docs/spec/config-and-ai.md)
+- [Web / TUI / Local API design](docs/spec/web-tui-local-api-design.md)
+- [Rename evaluation and context](docs/spec/rename-evaluation-and-context.md)
+
+## Project status
+
+This repository is already usable for local session management, but it is still early-stage software.
+
+Current strengths:
+
+- the core read/write loop is implemented
+- the Web UI, TUI, CLI, API, and daemon are all functional
+- naming, provider diagnostics, and maintenance flows are test-covered
+
+Still evolving:
+
+- release packaging and distribution
+- long-term compatibility hardening against future Codex data model changes
+- public project polish, docs, and contributor workflows
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security
+
+See [SECURITY.md](SECURITY.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

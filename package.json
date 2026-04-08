@@ -1,8 +1,24 @@
 {
-  "name": "codex-session-manager",
+  "name": "codexnamer",
   "version": "0.1.0",
+  "description": "CodexNamer is a local-first session naming manager for Codex rollouts with structured naming, daemonized auto-apply, Web UI, and TUI.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "keywords": [
+    "codex",
+    "session",
+    "rename",
+    "automation",
+    "sqlite",
+    "tui",
+    "webui",
+    "daemon"
+  ],
   "workspaces": [
     "packages/*"
   ],
