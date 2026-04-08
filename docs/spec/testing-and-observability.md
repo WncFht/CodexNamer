@@ -51,12 +51,12 @@
 
 典型用例包括：
 
-- [test/auto-rename-evaluation.test.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/test/auto-rename-evaluation.test.ts)
-- [test/auto-rename-apply.test.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/test/auto-rename-apply.test.ts)
-- [test/history-freeze.test.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/test/history-freeze.test.ts)
-- [test/overview-dedup.test.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/test/overview-dedup.test.ts)
-- [test/api.test.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/test/api.test.ts)
-- [test/runtime-display.test.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/test/runtime-display.test.ts)
+- [test/auto-rename-evaluation.test.ts](../../test/auto-rename-evaluation.test.ts)
+- [test/auto-rename-apply.test.ts](../../test/auto-rename-apply.test.ts)
+- [test/history-freeze.test.ts](../../test/history-freeze.test.ts)
+- [test/overview-dedup.test.ts](../../test/overview-dedup.test.ts)
+- [test/api.test.ts](../../test/api.test.ts)
+- [test/runtime-display.test.ts](../../test/runtime-display.test.ts)
 
 ## 当前可观测性面
 

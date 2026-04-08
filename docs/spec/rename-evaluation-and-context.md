@@ -13,11 +13,11 @@
 
 ## 2. 当前代码入口
 
-- [packages/core/src/auto-rename.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/packages/core/src/auto-rename.ts)
-- [packages/core/src/rename-context.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/packages/core/src/rename-context.ts)
-- [packages/core/src/naming.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/packages/core/src/naming.ts)
-- [packages/core/src/provider.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/packages/core/src/provider.ts)
-- [packages/core/src/manager.ts](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/packages/core/src/manager.ts)
+- [packages/core/src/auto-rename.ts](../../packages/core/src/auto-rename.ts)
+- [packages/core/src/rename-context.ts](../../packages/core/src/rename-context.ts)
+- [packages/core/src/naming.ts](../../packages/core/src/naming.ts)
+- [packages/core/src/provider.ts](../../packages/core/src/provider.ts)
+- [packages/core/src/manager.ts](../../packages/core/src/manager.ts)
 
 ## 3. 命名结构现状
 

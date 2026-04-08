@@ -6,10 +6,10 @@
 
 源文件已复制到当前目录：
 
-- [README.md](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/README.md)
-- [DESIGN.md](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/DESIGN.md)
-- [preview.html](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/preview.html)
-- [preview-dark.html](/home/fanghaotian/Desktop/src/ai-tools/codex-session-manager/docs/design/claude/preview-dark.html)
+- [README.md](README.md)
+- [DESIGN.md](DESIGN.md)
+- [preview.html](preview.html)
+- [preview-dark.html](preview-dark.html)
 
 ## 我们采纳的部分
 
