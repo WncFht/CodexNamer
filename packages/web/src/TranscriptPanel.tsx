@@ -47,7 +47,7 @@ export function TranscriptPanel(props: {
   uiLanguage: UiLanguage;
 }) {
   const [query, setQuery] = useState("");
-  const [role, setRole] = useState<TranscriptRoleFilter>("all");
+  const [role, setRole] = useState<TranscriptRoleFilter>("user");
   const [pageState, setPageState] = useState<SessionTranscriptPage | null>(null);
   const [items, setItems] = useState<SessionTranscriptPage["items"]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,7 +57,7 @@ export function TranscriptPanel(props: {
 
   useEffect(() => {
     setQuery("");
-    setRole("all");
+    setRole("user");
   }, [props.detail.threadId]);
 
   useEffect(() => {

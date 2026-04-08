@@ -100,7 +100,7 @@ export function SessionBrowser(props: {
   onApply: () => void | Promise<void>;
   onToggleFreeze: () => void | Promise<void>;
 }) {
-  const [namingDrawerOpen, setNamingDrawerOpen] = React.useState(false);
+  const [detailView, setDetailView] = React.useState<"transcript" | "naming">("transcript");
   const groupedSessions = React.useMemo(
     () => groupSessionsByTime(props.sessions, props.uiLanguage),
     [props.sessions, props.uiLanguage]
@@ -119,6 +119,10 @@ export function SessionBrowser(props: {
       return true;
     });
   }, [props.detail?.renameHistory]);
+
+  React.useEffect(() => {
+    setDetailView("transcript");
+  }, [props.detail?.threadId]);
 
   const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
@@ -263,9 +267,17 @@ export function SessionBrowser(props: {
                 </div>
                 <div className="chat-header-right">
                   <button
-                    className={namingDrawerOpen ? "btn-sm active" : "btn-sm"}
-                    onClick={() => setNamingDrawerOpen((value) => !value)}
-                    title={namingDrawerOpen ? tt("closeNamingActivity") : tt("openNamingActivity")}
+                    className={detailView === "transcript" ? "btn-sm active" : "btn-sm"}
+                    onClick={() => setDetailView("transcript")}
+                    title={tt("transcript")}
+                    type="button"
+                  >
+                    {tt("transcript")}
+                  </button>
+                  <button
+                    className={detailView === "naming" ? "btn-sm active" : "btn-sm"}
+                    onClick={() => setDetailView("naming")}
+                    title={tt("namingActivity")}
                     type="button"
                   >
                     {tt("namingActivity")}
@@ -305,28 +317,24 @@ export function SessionBrowser(props: {
               <div className="error-banner notice-banner error">{props.error}</div>
             ) : null}
 
-            <div className={namingDrawerOpen ? "chat-content-shell naming-drawer-open" : "chat-content-shell"}>
+            <div className="chat-content-shell">
               <div className="chat-primary-stack">
                 {props.loadingDetail ? <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div> : null}
 
-                <TranscriptPanel
-                  detail={props.detail}
-                  showHiddenTranscript={props.showHiddenTranscript}
-                  onToggleShowHiddenTranscript={props.onToggleShowHiddenTranscript}
-                  uiLanguage={props.uiLanguage}
-                />
-              </div>
-
-              {namingDrawerOpen ? (
-                <aside className="naming-drawer detail-panel" role="complementary">
+                {detailView === "transcript" ? (
+                  <TranscriptPanel
+                    detail={props.detail}
+                    showHiddenTranscript={props.showHiddenTranscript}
+                    onToggleShowHiddenTranscript={props.onToggleShowHiddenTranscript}
+                    uiLanguage={props.uiLanguage}
+                  />
+                ) : (
+                  <section className="detail-panel" role="region">
                   <div className="naming-drawer-header">
                     <div>
                       <p className="panel-kicker">{tt("namingActivity")}</p>
                       <h3>{tt("renameHistory")}</h3>
                     </div>
-                    <button className="btn-sm" onClick={() => setNamingDrawerOpen(false)} type="button">
-                      {tt("closeNamingActivity")}
-                    </button>
                   </div>
 
                   <div className="naming-drawer-body">
@@ -389,8 +397,9 @@ export function SessionBrowser(props: {
                       </div>
                     </section>
                   </div>
-                </aside>
-              ) : null}
+                  </section>
+                )}
+              </div>
             </div>
             </>
           </AppViewTransition>
