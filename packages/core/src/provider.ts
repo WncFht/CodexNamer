@@ -1,16 +1,9 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
 import type {
   AiBackend,
   AiRequestStatus,
   AiRequestTransport,
   EffectiveConfig,
   MaterializedSession,
-  ProviderProfile,
   ProviderWireApi,
   RenameContext,
   RenameMode,
@@ -21,15 +14,11 @@ import {
   composeConfiguredSuggestionName,
   describeNamingBuilderItem,
   getEffectiveNamingBuilder,
-  resolveNamingStyle,
   resolveTagDisplayLabel,
-  resolveNamingTag,
-  suggestNameHeuristically
+  resolveNamingTag
 } from "./naming.js";
 import { buildRenameContext } from "./rename-context.js";
 import { stripControl, toUtcIso } from "./util.js";
-
-const execFileAsync = promisify(execFile);
 
 type FetchLike = typeof fetch;
 
@@ -51,6 +40,8 @@ export interface RenameInferenceRequestLogger {
     baseUrl?: string;
     model?: string;
     promptChars?: number;
+    promptText?: string;
+    requestPayload?: Record<string, unknown>;
     metadata?: Record<string, string>;
   }): number;
   finish(entry: {
@@ -59,6 +50,19 @@ export interface RenameInferenceRequestLogger {
     finishedAt: string;
     durationMs: number;
     responseChars?: number;
+    responseText?: string;
+    responsePayload?: Record<string, unknown>;
+    result?: {
+      parsedModelOutput?: Record<string, unknown>;
+      finalSuggestion?: RenameSuggestion;
+      composition?: {
+        mode: EffectiveConfig["naming"]["compositionMode"];
+        builder: EffectiveConfig["naming"]["builder"];
+        explicitName?: string;
+        tagLabel?: string;
+        finalName: string;
+      };
+    };
     error?: string;
     metadata?: Record<string, string>;
   }): void;
@@ -68,8 +72,21 @@ export interface RenameInferenceService {
   suggest(session: MaterializedSession, mode?: RenameMode): Promise<RenameSuggestion>;
 }
 
-export interface CodexCommandRunner {
-  run(args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<void>;
+export class RenameInferenceError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "provider-misconfigured"
+      | "missing-auth"
+      | "request-failed"
+      | "empty-response"
+      | "invalid-json"
+      | "missing-fields"
+      | "unsupported-backend"
+  ) {
+    super(message);
+    this.name = "RenameInferenceError";
+  }
 }
 
 interface ResolvedProvider {
@@ -87,9 +104,9 @@ interface ResolvedProvider {
     | "codex-auth-token";
   headers: Record<string, string>;
   providerRef?: string;
-  wireApi: ProviderWireApi;
+  requestType: ProviderWireApi;
   requiresOpenaiAuth: boolean;
-  requestedBackend: "codex" | "openai-compatible";
+  requestedBackend: Exclude<AiBackend, "none">;
 }
 
 export interface ProviderDiagnostics {
@@ -99,14 +116,13 @@ export interface ProviderDiagnostics {
   providerRef?: string;
   baseUrl?: string;
   model?: string;
-  wireApi?: ProviderWireApi;
+  requestType?: ProviderWireApi;
   requiresOpenaiAuth?: boolean;
   credentialKind?: "api-key" | "bearer-token";
   credentialSource?: ResolvedProvider["credentialSource"];
   hasCredential: boolean;
-  preferredTransport: "none" | "http" | "codex-exec";
+  preferredTransport: "none" | "http";
   canDirectHttp: boolean;
-  codexFallbackEnabled: boolean;
 }
 
 function startRequestLog(
@@ -118,6 +134,8 @@ function startRequestLog(
     baseUrl?: string;
     model?: string;
     promptChars: number;
+    promptText?: string;
+    requestPayload?: Record<string, unknown>;
     metadata?: Record<string, string>;
   }
 ): { id?: number; startedAtMs: number; startedAt: string } {
@@ -133,6 +151,8 @@ function startRequestLog(
       baseUrl: params.baseUrl,
       model: params.model,
       promptChars: params.promptChars,
+      promptText: params.promptText,
+      requestPayload: params.requestPayload,
       metadata: params.metadata
     }),
     startedAtMs,
@@ -146,6 +166,19 @@ function finishRequestLog(
   params: {
     status: Exclude<AiRequestStatus, "running">;
     responseChars?: number;
+    responseText?: string;
+    responsePayload?: Record<string, unknown>;
+    result?: {
+      parsedModelOutput?: Record<string, unknown>;
+      finalSuggestion?: RenameSuggestion;
+      composition?: {
+        mode: EffectiveConfig["naming"]["compositionMode"];
+        builder: EffectiveConfig["naming"]["builder"];
+        explicitName?: string;
+        tagLabel?: string;
+        finalName: string;
+      };
+    };
     error?: string;
     metadata?: Record<string, string>;
   }
@@ -161,6 +194,9 @@ function finishRequestLog(
     finishedAt: toUtcIso(new Date(finishedAtMs)),
     durationMs: finishedAtMs - context.startedAtMs,
     responseChars: params.responseChars,
+    responseText: params.responseText,
+    responsePayload: params.responsePayload,
+    result: params.result,
     error: params.error,
     metadata: params.metadata
   });
@@ -253,7 +289,6 @@ function formatRenameContextLines(renameContext: RenameContext): string[] {
 
 export function buildRenamePrompt(session: MaterializedSession, config: EffectiveConfig): string {
   const renameContext = session.renameContext ?? buildRenameContext(session, config);
-  const style = resolveNamingStyle(session, config);
   const promptLanguage = /^zh\b/i.test(config.general.uiLanguage) ? "zh-CN" : "en-US";
   const promptInChinese = promptLanguage === "zh-CN";
   const builderSummary = getEffectiveNamingBuilder(config)
@@ -268,10 +303,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     return descriptor ? `- ${tag.id} => ${label} | ${descriptor}` : `- ${tag.id} => ${label}`;
   });
   if (promptInChinese) {
-    const styleGuidance =
-      style === "detailed"
-        ? "偏好风格：detailed。尽量利用可用长度，并在确实能区分会话时补一个具体的次焦点。"
-        : "偏好风格：brief。保持短、适合列表扫读，但仍要保留主子系统和实际动作。";
     const promptOverrideDetails = config.naming.customPrompt?.trim()
       ? [
           "当前启用了 Prompt 覆写模式。请把下面这段覆写文本视为最高优先级命名规则，同时仍然遵守只返回 JSON、最大长度和结构化字段约束。",
@@ -296,7 +327,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
         `contextTruncated: ${String(renameContext.truncated)}`,
         `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
         `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
-        `namingStyle: ${style}`,
         `namingCompositionMode: ${config.naming.compositionMode}`,
         `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
         `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
@@ -321,7 +351,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
       `Prompt 语言：中文。`,
       `标题目标语言：${config.naming.language}。`,
       `最终标题最大长度：${config.naming.maxLength}。`,
-      styleGuidance,
       "标题要具体，能体现主子系统以及实际动作、问题或评审焦点。",
       "如果会话有两个紧密相关的目标，可以补一个很短的次级片段，但不要退化成空泛大类词。",
       config.naming.compositionMode === "structured" ? structuredGuidance : promptOverrideDetails[0],
@@ -338,10 +367,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     ].join("\n");
   }
 
-  const styleGuidance =
-    style === "detailed"
-      ? "Preferred naming style: detailed. Use more of the available length budget and include one concrete secondary focus when it materially distinguishes the session."
-      : "Preferred naming style: brief. Keep the name short and list-safe while still preserving the main subsystem and action.";
   const promptOverrideDetails = config.naming.customPrompt?.trim()
     ? [
         "Custom prompt override mode is active. Treat the override below as the highest-priority naming policy while still obeying the JSON-only response contract, max length, and structured fields.",
@@ -366,7 +391,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
       `contextTruncated: ${String(renameContext.truncated)}`,
       `contextChars: ${renameContext.selectedChars}/${renameContext.maxChars}`,
       `contextFallbackReason: ${renameContext.fallbackReason ?? ""}`,
-      `namingStyle: ${style}`,
       `namingCompositionMode: ${config.naming.compositionMode}`,
       `tagIds: ${config.naming.tags.map((tag) => tag.id).join(", ") || "(none)"}`,
       `firstUserMessage: ${normalizePromptField(session.firstUserMessage, 600)}`,
@@ -391,7 +415,6 @@ export function buildRenamePrompt(session: MaterializedSession, config: Effectiv
     "Prompt language: English.",
     `Target title language: ${config.naming.language}.`,
     `Max final name length: ${config.naming.maxLength}.`,
-    styleGuidance,
     "Prefer a short but specific summary suitable for a session list.",
     "Make the rename concrete: capture the main subsystem plus the actual action, issue, or review focus.",
     "If the session has two tightly related goals, use one short secondary fragment rather than a generic umbrella noun.",
@@ -444,38 +467,64 @@ function tryParseJson(text: string): JsonSuggestionPayload | undefined {
   }
 }
 
-function sanitizeSuggestion(
-  payload: JsonSuggestionPayload | undefined,
+function composeAiSuggestion(
+  payload: JsonSuggestionPayload,
   session: MaterializedSession,
   config: EffectiveConfig,
-  fallback: RenameSuggestion,
   metadata: Record<string, string>
-): RenameSuggestion {
-  const kind = stripControl(payload?.kind) ?? fallback.kind;
-  const summary = stripControl(payload?.summary) ?? fallback.summary;
-  const scope = stripControl(payload?.scope) ?? fallback.scope;
-  const resolvedTag = resolveNamingTag(config.naming.tags, payload?.tagId, config.naming.language);
-  const rawName =
-    composeConfiguredSuggestionName(session, config, {
-      kind,
-      summary,
-      scope,
-      tagId: resolvedTag?.id,
-      explicitName: stripControl(payload?.name) ?? fallback.name
-    }) || fallback.name;
-  const name = rawName.slice(0, Math.max(1, config.naming.maxLength)).trim();
+): {
+  suggestion: RenameSuggestion;
+  result: NonNullable<Parameters<NonNullable<RenameInferenceRequestLogger>["finish"]>[0]["result"]>;
+} {
+  const kind = stripControl(payload.kind)?.trim();
+  const summary = stripControl(payload.summary)?.trim();
+  if (!kind || !summary) {
+    throw new RenameInferenceError("Model output is missing required `kind` or `summary` fields.", "missing-fields");
+  }
 
-  return {
-    threadId: fallback.threadId,
+  const scope = stripControl(payload.scope)?.trim() || undefined;
+  const explicitName = stripControl(payload.name)?.trim() || undefined;
+  const resolvedTag = resolveNamingTag(config.naming.tags, payload.tagId, config.naming.language);
+  const rawName = composeConfiguredSuggestionName(session, config, {
+    kind,
+    summary,
+    scope,
+    tagId: resolvedTag?.id,
+    explicitName
+  });
+  const name = rawName.slice(0, Math.max(1, config.naming.maxLength)).trim();
+  const suggestion: RenameSuggestion = {
+    threadId: session.threadId,
     name,
     source: "ai",
-    style: fallback.style,
+    style: "detailed",
     kind,
     summary,
     scope,
     tagId: resolvedTag?.id,
     generatedAt: toUtcIso(),
     metadata
+  };
+
+  return {
+    suggestion,
+    result: {
+      parsedModelOutput: {
+        name: explicitName,
+        kind,
+        summary,
+        scope,
+        tagId: resolvedTag?.id ?? payload.tagId
+      },
+      finalSuggestion: suggestion,
+      composition: {
+        mode: config.naming.compositionMode,
+        builder: getEffectiveNamingBuilder(config),
+        explicitName,
+        tagLabel: resolvedTag ? resolveTagDisplayLabel(resolvedTag, config.naming.language) : undefined,
+        finalName: name
+      }
+    }
   };
 }
 
@@ -561,10 +610,10 @@ function resolveProfile(config: EffectiveConfig): ResolvedProvider | undefined {
   if (!explicit) {
     return undefined;
   }
+  const useManualConfig = config.ai.providerSource === "manual";
 
   const inheritedProviderRef =
-    explicit.providerRef ??
-    (config.ai.providerSource !== "explicit" ? config.inheritedCodex.modelProvider : undefined);
+    config.inheritedCodex.modelProvider;
   const inherited =
     inheritedProviderRef && config.inheritedCodex.providers[inheritedProviderRef]
       ? config.inheritedCodex.providers[inheritedProviderRef]
@@ -578,104 +627,101 @@ function resolveProfile(config: EffectiveConfig): ResolvedProvider | undefined {
   const inheritedAccessToken = config.inheritedCodex.auth?.accessToken?.trim() || undefined;
 
   const credentialValue =
-    explicitApiKey ||
-    explicitApiKeyRef ||
-    inheritedEnvApiKey ||
-    inheritedAuthApiKey ||
-    envOpenAiApiKey ||
-    inheritedAccessToken;
+    useManualConfig
+      ? explicitApiKey || explicitApiKeyRef
+      : inheritedEnvApiKey || inheritedAuthApiKey || envOpenAiApiKey || inheritedAccessToken;
   const credentialKind =
-    explicitApiKey ||
-    explicitApiKeyRef ||
-    inheritedEnvApiKey ||
-    inheritedAuthApiKey ||
-    envOpenAiApiKey
-      ? "api-key"
-      : inheritedAccessToken
-        ? "bearer-token"
-        : undefined;
-  const credentialSource = explicitApiKey
-    ? "explicit-api-key"
-    : explicitApiKeyRef
-      ? "explicit-env-ref"
-      : inheritedEnvApiKey
-        ? "inherited-provider-env"
-        : inheritedAuthApiKey
-          ? "codex-auth-json-api-key"
-          : envOpenAiApiKey
-            ? "env-openai-api-key"
-            : inheritedAccessToken
-              ? "codex-auth-token"
-              : undefined;
+    useManualConfig
+      ? explicitApiKey || explicitApiKeyRef
+        ? "api-key"
+        : undefined
+      : inheritedEnvApiKey || inheritedAuthApiKey || envOpenAiApiKey
+        ? "api-key"
+        : inheritedAccessToken
+          ? "bearer-token"
+          : undefined;
+  const credentialSource = useManualConfig
+    ? explicitApiKey
+      ? "explicit-api-key"
+      : explicitApiKeyRef
+        ? "explicit-env-ref"
+        : undefined
+    : inheritedEnvApiKey
+      ? "inherited-provider-env"
+      : inheritedAuthApiKey
+        ? "codex-auth-json-api-key"
+        : envOpenAiApiKey
+          ? "env-openai-api-key"
+          : inheritedAccessToken
+            ? "codex-auth-token"
+            : undefined;
 
   return {
     profileId: explicit.profileId,
-    baseUrl: explicit.baseUrl ?? inherited?.baseUrl,
-    model: explicit.model ?? config.inheritedCodex.model,
+    baseUrl: useManualConfig ? explicit.baseUrl : inherited?.baseUrl,
+    model: useManualConfig ? explicit.model : config.inheritedCodex.model,
     credentialValue,
     credentialKind,
     credentialSource,
-    headers: {
-      ...(inherited?.headers ?? {}),
-      ...(explicit.headers ?? {})
-    },
-    providerRef: inheritedProviderRef,
-    wireApi: explicit.wireApi ?? inherited?.wireApi ?? "auto",
+    headers: useManualConfig ? { ...(explicit.headers ?? {}) } : { ...(inherited?.headers ?? {}) },
+    providerRef: useManualConfig ? explicit.providerRef : inheritedProviderRef,
+    requestType:
+      useManualConfig
+        ? explicit.requestType ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)
+        : inherited?.wireApi ?? (config.ai.backend === "none" ? "responses" : config.ai.backend),
     requiresOpenaiAuth: inherited?.requiresOpenaiAuth ?? false,
     requestedBackend:
-      config.ai.backend === "codex" || explicit.backendKind === "codex"
-        ? "codex"
-      : "openai-compatible"
+      useManualConfig
+        ? explicit.requestType ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)
+        : inherited?.wireApi ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)
   };
 }
 
+export function resolveRenameProvider(config: EffectiveConfig): Omit<ResolvedProvider, "credentialValue"> & {
+  credentialValue?: string;
+} | undefined {
+  const provider = resolveProfile(config);
+  return provider ? { ...provider } : undefined;
+}
+
 export function inspectRenameProvider(config: EffectiveConfig): ProviderDiagnostics {
-  if (config.ai.backend === "none") {
+  const configuredBackend = config.ai.backend;
+  if (configuredBackend === "none") {
     return {
       configuredBackend: "none",
       requestedBackend: "none",
       hasCredential: false,
       preferredTransport: "none",
-      canDirectHttp: false,
-      codexFallbackEnabled: false
-    };
+      canDirectHttp: false
+      };
   }
 
   const provider = resolveProfile(config);
   if (!provider) {
     return {
-      configuredBackend: config.ai.backend,
-      requestedBackend: config.ai.backend,
+      configuredBackend,
+      requestedBackend: configuredBackend,
       hasCredential: false,
-      preferredTransport: config.ai.backend === "codex" ? "codex-exec" : "http",
-      canDirectHttp: false,
-      codexFallbackEnabled: config.ai.backend === "codex"
+      preferredTransport: "http",
+      canDirectHttp: false
     };
   }
 
   const canDirectHttp = Boolean(provider.baseUrl && provider.model && provider.credentialValue);
   return {
-    configuredBackend: config.ai.backend,
+    configuredBackend,
     requestedBackend: provider.requestedBackend,
     profileId: provider.profileId,
     providerRef: provider.providerRef,
     baseUrl: provider.baseUrl,
     model: provider.model,
-    wireApi: provider.wireApi,
+    requestType: provider.requestType,
     requiresOpenaiAuth: provider.requiresOpenaiAuth,
     credentialKind: provider.credentialKind,
     credentialSource: provider.credentialSource,
     hasCredential: Boolean(provider.credentialValue),
-    preferredTransport:
-      provider.requestedBackend === "codex"
-        ? canDirectHttp
-          ? "http"
-          : "codex-exec"
-        : canDirectHttp
-          ? "http"
-          : "none",
-    canDirectHttp,
-    codexFallbackEnabled: provider.requestedBackend === "codex"
+    preferredTransport: canDirectHttp ? "http" : "none",
+    canDirectHttp
   };
 }
 
@@ -707,13 +753,20 @@ async function callResponsesApi(
   prompt: string,
   session: MaterializedSession,
   logger?: RenameInferenceRequestLogger
-): Promise<string> {
+): Promise<{ text: string; payload: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }> {
+  const requestPayload = {
+    model: provider.model,
+    temperature: config.ai.temperature,
+    input: prompt
+  };
   const logContext = startRequestLog(logger, session, {
     backend: provider.requestedBackend,
     transport: "responses",
     baseUrl: provider.baseUrl,
     model: provider.model,
     promptChars: prompt.length,
+    promptText: prompt,
+    requestPayload,
     metadata: {
       profile: provider.profileId,
       providerRef: provider.providerRef ?? "",
@@ -736,20 +789,16 @@ async function callResponsesApi(
       method: "POST",
       headers,
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify({
-        model: provider.model,
-        temperature: config.ai.temperature,
-        input: prompt
-      })
+      body: JSON.stringify(requestPayload)
     });
 
     const parsed = await parseJsonResponse(response);
     const text = extractResponsesText(parsed.payload);
-    finishRequestLog(logger, logContext, {
-      status: "succeeded",
-      responseChars: text.length
-    });
-    return text;
+    return {
+      text,
+      payload: parsed.payload,
+      logContext
+    };
   } catch (error) {
     finishRequestLog(logger, logContext, {
       status: "failed",
@@ -766,13 +815,30 @@ async function callChatCompletionsApi(
   prompt: string,
   session: MaterializedSession,
   logger?: RenameInferenceRequestLogger
-): Promise<string> {
+): Promise<{ text: string; payload: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }> {
+  const requestPayload = {
+    model: provider.model,
+    temperature: config.ai.temperature,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ]
+  };
   const logContext = startRequestLog(logger, session, {
     backend: provider.requestedBackend,
-    transport: "chat_completions",
+    transport: "openai-compatible",
     baseUrl: provider.baseUrl,
     model: provider.model,
     promptChars: prompt.length,
+    promptText: prompt,
+    requestPayload,
     metadata: {
       profile: provider.profileId,
       providerRef: provider.providerRef ?? "",
@@ -795,30 +861,16 @@ async function callChatCompletionsApi(
       method: "POST",
       headers,
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify({
-        model: provider.model,
-        temperature: config.ai.temperature,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
-      })
+      body: JSON.stringify(requestPayload)
     });
 
     const parsed = await parseJsonResponse(response);
     const text = extractChatCompletionText(parsed.payload);
-    finishRequestLog(logger, logContext, {
-      status: "succeeded",
-      responseChars: text.length
-    });
-    return text;
+    return {
+      text,
+      payload: parsed.payload,
+      logContext
+    };
   } catch (error) {
     finishRequestLog(logger, logContext, {
       status: "failed",
@@ -828,268 +880,357 @@ async function callChatCompletionsApi(
   }
 }
 
-export class NoneRenameInferenceService implements RenameInferenceService {
-  constructor(protected readonly config: EffectiveConfig) {}
-
-  async suggest(session: MaterializedSession, _mode?: RenameMode): Promise<RenameSuggestion> {
-    return suggestNameHeuristically(session, this.config);
+async function executeProviderRequest(
+  fetchImpl: FetchLike,
+  provider: ResolvedProvider,
+  config: EffectiveConfig,
+  prompt: string,
+  session: MaterializedSession,
+  logger?: RenameInferenceRequestLogger
+): Promise<{ text: string; payload: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }> {
+  if (provider.requestType === "responses") {
+    return callResponsesApi(fetchImpl, provider, config, prompt, session, logger);
   }
+  return callChatCompletionsApi(fetchImpl, provider, config, prompt, session, logger);
 }
 
-export class OpenAICompatibleRenameInferenceService extends NoneRenameInferenceService {
-  constructor(
-    config: EffectiveConfig,
-    private readonly fetchImpl: FetchLike = fetch,
-    private readonly requestLogger?: RenameInferenceRequestLogger
-  ) {
-    super(config);
+function buildProviderProbeSession(testedAt: string, config: EffectiveConfig): MaterializedSession {
+  return {
+    threadId: "provider-test",
+    rolloutPath: "<provider-test>",
+    cwd: process.cwd(),
+    projectName: "provider-test",
+    createdAt: testedAt,
+    updatedAt: testedAt,
+    modelProvider: config.inheritedCodex.modelProvider,
+    model: config.inheritedCodex.model,
+    firstUserMessage: "为当前会话生成一个简短、清晰的中文标题。",
+    lastUserMessage: "请测试当前 AI rename provider 是否可用，并按结构化字段返回结果。",
+    lastAgentMessage: "这是 provider test 的 synthetic rename 会话。",
+    taskCompleteCount: 1,
+    tokenTotal: 128
+  };
+}
+
+function buildProviderAuthHeaders(provider: ResolvedProvider): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...provider.headers
+  };
+  if (provider.credentialValue) {
+    headers.Authorization = `Bearer ${provider.credentialValue}`;
+    if (provider.credentialKind === "api-key") {
+      headers["x-api-key"] = provider.credentialValue;
+    }
   }
+  return headers;
+}
 
-  override async suggest(session: MaterializedSession, _mode?: RenameMode): Promise<RenameSuggestion> {
-    const fallback = suggestNameHeuristically(session, this.config);
-    const provider = resolveProfile(this.config);
-    if (!provider || !provider.baseUrl || !provider.model) {
-      return {
-        ...fallback,
-        metadata: {
-          backend: "openai-compatible",
-          fallback: "provider-misconfigured"
-        }
-      };
-    }
-    if (!provider.credentialValue) {
-      return {
-        ...fallback,
-        metadata: {
-          backend: "openai-compatible",
-          fallback: "missing-auth"
-        }
-      };
-    }
+function extractSseDataLines(raw: string): string[] {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6).trim())
+    .filter((line) => line.length > 0 && line !== "[DONE]");
+}
 
-    const prompt = buildRenamePrompt(session, this.config);
+function extractResponsesStreamText(raw: string): string {
+  let completedText = "";
+  let deltaText = "";
+
+  for (const line of extractSseDataLines(raw)) {
     try {
-      let text = "";
-      if (provider.wireApi === "responses") {
-        text = await callResponsesApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
-      } else if (provider.wireApi === "chat_completions") {
-        text = await callChatCompletionsApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
-      } else {
-        try {
-          text = await callResponsesApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
-        } catch {
-          text = await callChatCompletionsApi(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
+      const event = JSON.parse(line) as Record<string, unknown>;
+      if (event.type === "response.output_text.done" && typeof event.text === "string") {
+        completedText = event.text;
+        continue;
+      }
+      if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+        deltaText += event.delta;
+        continue;
+      }
+      if (event.type === "response.content_part.done") {
+        const part = event.part;
+        if (part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string") {
+          completedText = (part as Record<string, unknown>).text as string;
         }
       }
-
-      return sanitizeSuggestion(extractFirstJsonObject(text), session, this.config, fallback, {
-        backend: "openai-compatible",
-        profile: provider.profileId,
-        providerRef: provider.providerRef ?? "",
-        authKind: provider.credentialKind ?? "",
-        authSource: provider.credentialSource ?? "",
-        requestedBackend: provider.requestedBackend
-      });
-    } catch (error) {
-      return {
-        ...fallback,
-        metadata: {
-          backend: "openai-compatible",
-          fallback: "request-failed",
-          error: error instanceof Error ? error.message.slice(0, 200) : "unknown"
-        }
-      };
+    } catch {
+      continue;
     }
   }
+
+  return completedText.trim() || deltaText.trim();
 }
 
-class PreferredCodexRenameInferenceService implements RenameInferenceService {
-  constructor(
-    private readonly directService: OpenAICompatibleRenameInferenceService,
-    private readonly fallbackService: CodexRenameInferenceService
-  ) {}
-
-  async suggest(session: MaterializedSession, mode?: RenameMode): Promise<RenameSuggestion> {
-    const directResult = await this.directService.suggest(session, mode);
-    if (directResult.source === "ai") {
-      return {
-        ...directResult,
-        metadata: {
-          ...(directResult.metadata ?? {}),
-          requestedBackend: "codex",
-          transport: "http"
-        }
-      };
-    }
-
-    const fallbackResult = await this.fallbackService.suggest(session, mode);
-    if (fallbackResult.source === "ai") {
-      return {
-        ...fallbackResult,
-        metadata: {
-          ...(fallbackResult.metadata ?? {}),
-          requestedBackend: "codex",
-          transport: "codex-exec",
-          directFallback: directResult.metadata?.fallback ?? "unknown"
-        }
-      };
-    }
-
-    return {
-      ...fallbackResult,
-      metadata: {
-        ...(fallbackResult.metadata ?? {}),
-        requestedBackend: "codex",
-        directFallback: directResult.metadata?.fallback ?? "unknown"
+function extractChatCompletionStreamText(raw: string): string {
+  let content = "";
+  for (const line of extractSseDataLines(raw)) {
+    try {
+      const event = JSON.parse(line) as Record<string, unknown>;
+      const choices = event.choices;
+      if (!Array.isArray(choices) || choices.length === 0) {
+        continue;
       }
+      const delta = (choices[0] as Record<string, unknown>).delta;
+      if (delta && typeof delta === "object" && typeof (delta as Record<string, unknown>).content === "string") {
+        content += (delta as Record<string, unknown>).content as string;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return content.trim();
+}
+
+async function executeStreamingProbeRequest(
+  fetchImpl: FetchLike,
+  provider: ResolvedProvider,
+  config: EffectiveConfig,
+  prompt: string
+): Promise<string> {
+  const headers = buildProviderAuthHeaders(provider);
+
+  if (provider.requestType === "responses") {
+    const response = await fetchImpl(buildResponsesUrl(provider.baseUrl!), {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
+      body: JSON.stringify({
+        model: provider.model,
+        temperature: config.ai.temperature,
+        input: prompt,
+        stream: true
+      })
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${raw.slice(0, 400)}`);
+    }
+    return extractResponsesStreamText(raw);
+  }
+
+  const response = await fetchImpl(buildChatCompletionsUrl(provider.baseUrl!), {
+    method: "POST",
+    headers,
+    signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
+    body: JSON.stringify({
+      model: provider.model,
+      temperature: config.ai.temperature,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      stream: true
+    })
+  });
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${raw.slice(0, 400)}`);
+  }
+  return extractChatCompletionStreamText(raw);
+}
+
+export async function probeRenameProvider(
+  config: EffectiveConfig,
+  options?: {
+    fetchImpl?: FetchLike;
+  }
+): Promise<{
+  ok: boolean;
+  testedAt: string;
+  latencyMs?: number;
+  diagnostics: ProviderDiagnostics;
+  responseText?: string;
+  error?: string;
+}> {
+  const diagnostics = inspectRenameProvider(config);
+  const testedAt = toUtcIso();
+  if (config.ai.backend === "none") {
+    return {
+      ok: false,
+      testedAt,
+      diagnostics,
+      error: "AI rename is disabled."
+    };
+  }
+
+  const provider = resolveProfile(config);
+  if (!provider || !provider.baseUrl || !provider.model) {
+    return {
+      ok: false,
+      testedAt,
+      diagnostics,
+      error: "Provider is missing base URL or model."
+    };
+  }
+  if (!provider.credentialValue) {
+    return {
+      ok: false,
+      testedAt,
+      diagnostics,
+      error: "Provider is missing an API key or bearer token."
+    };
+  }
+
+  const fetchImpl = options?.fetchImpl ?? fetch;
+  const probeSession = buildProviderProbeSession(testedAt, config);
+  const startedAtMs = Date.now();
+  try {
+    const service = new OpenAICompatibleRenameInferenceService(config, fetchImpl);
+    const suggestion = await service.suggest(probeSession);
+    return {
+      ok: suggestion.name.trim().length > 0,
+      testedAt,
+      latencyMs: Date.now() - startedAtMs,
+      diagnostics,
+      responseText: suggestion.name
+    };
+  } catch (error) {
+    if (
+      error instanceof RenameInferenceError &&
+      (error.code === "empty-response" || error.code === "invalid-json")
+    ) {
+      try {
+        const prompt = buildRenamePrompt(probeSession, config);
+        const streamText = await executeStreamingProbeRequest(fetchImpl, provider, config, prompt);
+        if (!streamText.trim()) {
+          throw new RenameInferenceError("Model returned an empty response.", "empty-response");
+        }
+        const parsedModelOutput = extractFirstJsonObject(streamText);
+        if (!parsedModelOutput) {
+          throw new RenameInferenceError("Model output is not valid JSON.", "invalid-json");
+        }
+        const composed = composeAiSuggestion(parsedModelOutput, probeSession, config, {
+          backend: provider.requestedBackend,
+          profile: provider.profileId,
+          providerRef: provider.providerRef ?? "",
+          requestType: provider.requestType,
+          authKind: provider.credentialKind ?? "",
+          authSource: provider.credentialSource ?? ""
+        });
+        return {
+          ok: true,
+          testedAt,
+          latencyMs: Date.now() - startedAtMs,
+          diagnostics,
+          responseText: composed.suggestion.name
+        };
+      } catch (streamError) {
+        return {
+          ok: false,
+          testedAt,
+          latencyMs: Date.now() - startedAtMs,
+          diagnostics,
+          error: streamError instanceof Error ? streamError.message : "Unknown error"
+        };
+      }
+    }
+    return {
+      ok: false,
+      testedAt,
+      latencyMs: Date.now() - startedAtMs,
+      diagnostics,
+      error: error instanceof Error ? error.message : "Unknown error"
     };
   }
 }
 
-class DefaultCodexCommandRunner implements CodexCommandRunner {
-  async run(args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<void> {
+export class OpenAICompatibleRenameInferenceService implements RenameInferenceService {
+  constructor(
+    private readonly config: EffectiveConfig,
+    private readonly fetchImpl: FetchLike = fetch,
+    private readonly requestLogger?: RenameInferenceRequestLogger
+  ) {}
+
+  async suggest(session: MaterializedSession, _mode?: RenameMode): Promise<RenameSuggestion> {
+    if (this.config.ai.backend === "none") {
+      throw new RenameInferenceError("AI rename is disabled.", "unsupported-backend");
+    }
+
+    const provider = resolveProfile(this.config);
+    if (!provider || !provider.baseUrl || !provider.model) {
+      throw new RenameInferenceError("Provider is missing base URL or model.", "provider-misconfigured");
+    }
+    if (!provider.credentialValue) {
+      throw new RenameInferenceError("Provider is missing an API key or bearer token.", "missing-auth");
+    }
+
+    const prompt = buildRenamePrompt(session, this.config);
+    let response:
+      | { text: string; payload: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }
+      | undefined;
     try {
-      await execFileAsync("codex", args, {
-        cwd: options.cwd,
-        env: options.env
+      response = await executeProviderRequest(
+        this.fetchImpl,
+        provider,
+        this.config,
+        prompt,
+        session,
+        this.requestLogger
+      );
+      if (!response.text.trim()) {
+        throw new RenameInferenceError("Model returned an empty response.", "empty-response");
+      }
+      const parsedModelOutput = extractFirstJsonObject(response.text);
+      if (!parsedModelOutput) {
+        throw new RenameInferenceError("Model output is not valid JSON.", "invalid-json");
+      }
+      const composed = composeAiSuggestion(parsedModelOutput, session, this.config, {
+        backend: provider.requestedBackend,
+        profile: provider.profileId,
+        providerRef: provider.providerRef ?? "",
+        requestType: provider.requestType,
+        authKind: provider.credentialKind ?? "",
+        authSource: provider.credentialSource ?? ""
       });
+      finishRequestLog(this.requestLogger, response.logContext, {
+        status: "succeeded",
+        responseChars: response.text.length,
+        responseText: response.text,
+        responsePayload: response.payload,
+        result: composed.result
+      });
+      return composed.suggestion;
     } catch (error) {
-      const execError = error as Error & { stderr?: string; stdout?: string };
-      const stderr = execError.stderr?.trim();
-      const stdout = execError.stdout?.trim();
-      throw new Error(
-        [execError.message, stderr, stdout].filter(Boolean).join(" | ").slice(0, 600)
+      if (response) {
+        finishRequestLog(this.requestLogger, response.logContext, {
+          status: "failed",
+          responseChars: response.text.length,
+          responseText: response.text,
+          responsePayload: response.payload,
+          error: error instanceof Error ? error.message : "Unknown provider request failure."
+        });
+      }
+      if (error instanceof RenameInferenceError) {
+        throw error;
+      }
+      throw new RenameInferenceError(
+        error instanceof Error ? error.message : "Unknown provider request failure.",
+        "request-failed"
       );
     }
   }
 }
 
-export class CodexRenameInferenceService extends NoneRenameInferenceService {
-  constructor(
-    config: EffectiveConfig,
-    private readonly runner: CodexCommandRunner = new DefaultCodexCommandRunner(),
-    private readonly requestLogger?: RenameInferenceRequestLogger
-  ) {
-    super(config);
-  }
-
-  override async suggest(session: MaterializedSession, _mode?: RenameMode): Promise<RenameSuggestion> {
-    const fallback = suggestNameHeuristically(session, this.config);
-    const provider = resolveProfile(this.config);
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "csm-codex-"));
-    const outputPath = path.join(tempDir, "rename-output.json");
-    const schemaPath = path.join(tempDir, "schema.json");
-
-    await fs.writeFile(
-      schemaPath,
-      JSON.stringify(
-        {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            name: { type: "string" },
-            kind: { type: "string" },
-            summary: { type: "string" },
-            scope: { type: "string" },
-            tagId: { type: "string" }
-          },
-          required: ["name", "kind", "summary", "scope"]
-        },
-        null,
-        2
-      ),
-      "utf8"
-    );
-
-    const args = [
-      "exec",
-      "--skip-git-repo-check",
-      "--ephemeral",
-      "-s",
-      "read-only",
-      "-c",
-      'model_reasoning_effort="minimal"',
-      "-c",
-      'model_reasoning_summary="none"',
-      "-C",
-      tempDir,
-      "--output-schema",
-      schemaPath,
-      "-o",
-      outputPath
-    ];
-
-    if (provider?.providerRef) {
-      args.push("-c", `model_provider="${provider.providerRef}"`);
-    }
-    if (provider?.model) {
-      args.push("-m", provider.model);
-    }
-
-    args.push(buildRenamePrompt(session, this.config));
-    const prompt = args[args.length - 1] ?? "";
-    const logContext = startRequestLog(this.requestLogger, session, {
-      backend: "codex",
-      transport: "codex-exec",
-      model: provider?.model,
-      promptChars: prompt.length,
-      metadata: {
-        profile: provider?.profileId ?? "default",
-        providerRef: provider?.providerRef ?? ""
-      }
-    });
-
-    try {
-      await this.runner.run(args, {
-        cwd: tempDir,
-        env: process.env
-      });
-      const output = await fs.readFile(outputPath, "utf8");
-      finishRequestLog(this.requestLogger, logContext, {
-        status: "succeeded",
-        responseChars: output.length
-      });
-      return sanitizeSuggestion(extractFirstJsonObject(output), session, this.config, fallback, {
-        backend: "codex",
-        profile: provider?.profileId ?? "default",
-        providerRef: provider?.providerRef ?? ""
-      });
-    } catch (error) {
-      finishRequestLog(this.requestLogger, logContext, {
-        status: "failed",
-        error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
-      });
-      return {
-        ...fallback,
-        metadata: {
-          backend: "codex",
-          fallback: "exec-failed",
-          error: error instanceof Error ? error.message.slice(0, 200) : "unknown"
-        }
-      };
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
-  }
-}
+// Compatibility shim for older imports. The dedicated codex-exec fallback path has been removed.
+export class CodexRenameInferenceService extends OpenAICompatibleRenameInferenceService {}
 
 export function createRenameInferenceService(
   config: EffectiveConfig,
   options?: {
     fetchImpl?: FetchLike;
-    codexRunner?: CodexCommandRunner;
+    codexRunner?: unknown;
     requestLogger?: RenameInferenceRequestLogger;
   }
 ): RenameInferenceService {
-  if (config.ai.backend === "codex") {
-    return new PreferredCodexRenameInferenceService(
-      new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl, options?.requestLogger),
-      new CodexRenameInferenceService(config, options?.codexRunner, options?.requestLogger)
-    );
-  }
-  if (config.ai.backend === "openai-compatible") {
-    return new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl, options?.requestLogger);
-  }
-
-  return new NoneRenameInferenceService(config);
+  return new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl, options?.requestLogger);
 }

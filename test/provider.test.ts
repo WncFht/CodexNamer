@@ -1,14 +1,12 @@
-import fs from "node:fs/promises";
-
 import { describe, expect, it } from "vitest";
 
 import {
-  CodexRenameInferenceService,
   OpenAICompatibleRenameInferenceService,
   buildRenameContext,
   buildRenamePrompt,
   buildConfigForTests,
-  createRenameInferenceService
+  createRenameInferenceService,
+  probeRenameProvider
 } from "@codex-session-manager/core";
 import type { SessionTranscript } from "@codex-session-manager/shared";
 
@@ -24,7 +22,7 @@ describe("provider backends", () => {
         },
         ai: {
           backend: "openai-compatible",
-          providerSource: "explicit",
+          providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
           temperature: 0.2
@@ -32,13 +30,11 @@ describe("provider backends", () => {
         providerProfiles: [
           {
             profileId: "default",
-            backendKind: "openai-compatible",
+            requestType: "responses",
             displayName: "default",
-            providerSource: "explicit",
             baseUrl: "http://example.test/v1",
             model: "gpt-test",
             apiKey: "test-key",
-            wireApi: "responses",
             enabled: true,
             isDefault: true
           }
@@ -81,7 +77,7 @@ describe("provider backends", () => {
       buildConfigForTests({
         ai: {
           backend: "openai-compatible",
-          providerSource: "explicit",
+          providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
           temperature: 0.2
@@ -89,13 +85,11 @@ describe("provider backends", () => {
         providerProfiles: [
           {
             profileId: "default",
-            backendKind: "openai-compatible",
+            requestType: "responses",
             displayName: "default",
-            providerSource: "explicit",
             baseUrl: "http://example.test/v1",
             model: "gpt-test",
             apiKey: "test-key",
-            wireApi: "responses",
             enabled: true,
             isDefault: true
           }
@@ -160,7 +154,7 @@ describe("provider backends", () => {
         },
         ai: {
           backend: "openai-compatible",
-          providerSource: "explicit",
+          providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
           temperature: 0.2
@@ -168,13 +162,11 @@ describe("provider backends", () => {
         providerProfiles: [
           {
             profileId: "default",
-            backendKind: "openai-compatible",
+            requestType: "responses",
             displayName: "default",
-            providerSource: "explicit",
             baseUrl: "http://example.test/v1",
             model: "gpt-test",
             apiKey: "test-key",
-            wireApi: "responses",
             enabled: true,
             isDefault: true
           }
@@ -281,65 +273,112 @@ describe("provider backends", () => {
     expect(prompt).toContain("已经定位到 dirty baseline 比较链路会造成误判");
   });
 
-  it("uses codex exec runner and reads structured output file", async () => {
-    const writes: string[] = [];
-    let schemaPayload = "";
-    let capturedArgs: string[] = [];
-    const service = new CodexRenameInferenceService(
+  it("probes manual provider connectivity with the same request stack used by rename", async () => {
+    const result = await probeRenameProvider(
       buildConfigForTests({
         ai: {
-          backend: "codex",
-          providerSource: "inherit-codex",
+          backend: "responses",
+          providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
           temperature: 0.2
-        }
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            requestType: "responses",
+            displayName: "default",
+            baseUrl: "http://example.test/v1",
+            model: "gpt-test",
+            apiKey: "test-key",
+            enabled: true,
+            isDefault: true
+          }
+        ]
       }),
       {
-        async run(args) {
-          capturedArgs = args;
-          const outputIndex = args.indexOf("-o");
-          const outputPath = outputIndex >= 0 ? args[outputIndex + 1] : undefined;
-          const schemaIndex = args.indexOf("--output-schema");
-          const schemaPath = schemaIndex >= 0 ? args[schemaIndex + 1] : undefined;
-          if (!outputPath) {
-            throw new Error("missing output path");
+        fetchImpl: async () =>
+          new Response(
+            JSON.stringify({
+              output_text:
+                '{"name":"ignored raw name","kind":"debug","summary":"验证 provider test 走真实 rename 请求链路","scope":"provider"}'
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json"
+              }
+            }
+          )
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.responseText).toContain("验证 provider test 走真实 rename 请求链路");
+    expect(result.diagnostics.requestedBackend).toBe("responses");
+  });
+
+  it("falls back to streaming probe parsing when the relay returns empty non-stream text", async () => {
+    const result = await probeRenameProvider(
+      buildConfigForTests({
+        ai: {
+          backend: "responses",
+          providerSource: "manual",
+          profile: "default",
+          timeoutSeconds: 10,
+          temperature: 0.2
+        },
+        providerProfiles: [
+          {
+            profileId: "default",
+            requestType: "responses",
+            displayName: "default",
+            baseUrl: "http://example.test/v1",
+            model: "gpt-test",
+            apiKey: "test-key",
+            enabled: true,
+            isDefault: true
           }
-          if (!schemaPath) {
-            throw new Error("missing schema path");
+        ]
+      }),
+      {
+        fetchImpl: async (_url, init) => {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          if (body.stream === true) {
+            return new Response(
+              [
+                'event: response.output_text.delta',
+                'data: {"type":"response.output_text.delta","delta":"{\\"kind\\":\\"debug\\",\\"summary\\":\\"stream probe 成功\\",\\"scope\\":\\"provider\\",\\"tagId\\":\\"provider\\"}"}',
+                "",
+                'event: response.output_text.done',
+                'data: {"type":"response.output_text.done","text":"{\\"kind\\":\\"debug\\",\\"summary\\":\\"stream probe 成功\\",\\"scope\\":\\"provider\\",\\"tagId\\":\\"provider\\"}"}',
+                ""
+              ].join("\n"),
+              {
+                status: 200,
+                headers: {
+                  "content-type": "text/event-stream"
+                }
+              }
+            );
           }
-          writes.push(outputPath);
-          schemaPayload = await fs.readFile(schemaPath, "utf8");
-          await fs.writeFile(
-            outputPath,
-            '{"name":"0404 research: codex provider","kind":"research","summary":"codex provider","scope":"core","tagId":"provider"}',
-            "utf8"
+          return new Response(
+            JSON.stringify({
+              output_text: ""
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json"
+              }
+            }
           );
         }
       }
     );
 
-    const suggestion = await service.suggest({
-      threadId: "t2",
-      rolloutPath: "/tmp/r2.jsonl",
-      cwd: "/tmp/project",
-      projectName: "project",
-      taskCompleteCount: 2,
-      tokenTotal: 200,
-      firstUserMessage: "实现 codex backend",
-      lastAgentMessage: "已经接上 codex exec"
-    });
-
-    expect(writes).toHaveLength(1);
-    expect(capturedArgs).toContain("--ephemeral");
-    expect(capturedArgs).toContain('model_reasoning_effort="minimal"');
-    expect(capturedArgs).toContain('model_reasoning_summary="none"');
-    expect(JSON.parse(schemaPayload).required).toEqual(["name", "kind", "summary", "scope"]);
-    expect(JSON.parse(schemaPayload).properties.tagId.type).toBe("string");
-    expect(suggestion.source).toBe("ai");
-    expect(suggestion.kind).toBe("research");
-    expect(suggestion.tagId).toBe("provider");
-    expect(suggestion.name).toContain("#Provider");
+    expect(result.ok).toBe(true);
+    expect(result.responseText).toContain("stream probe 成功");
   });
 
   it("uses AI-selected tagId when structured naming mode is active", async () => {
@@ -352,7 +391,7 @@ describe("provider backends", () => {
         },
         ai: {
           backend: "openai-compatible",
-          providerSource: "explicit",
+          providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
           temperature: 0.2
@@ -360,13 +399,11 @@ describe("provider backends", () => {
         providerProfiles: [
           {
             profileId: "default",
-            backendKind: "openai-compatible",
+            requestType: "responses",
             displayName: "default",
-            providerSource: "explicit",
             baseUrl: "http://example.test/v1",
             model: "gpt-test",
             apiKey: "test-key",
-            wireApi: "responses",
             enabled: true,
             isDefault: true
           }
@@ -403,13 +440,13 @@ describe("provider backends", () => {
     expect(suggestion.name).toContain("fix");
   });
 
-  it("prefers direct HTTP when backend=codex can inherit auth from Codex", async () => {
+  it("uses inherited Codex config as the default HTTP source", async () => {
     let runnerCalled = false;
     const service = createRenameInferenceService(
       buildConfigForTests({
         ai: {
-          backend: "codex",
-          providerSource: "inherit-codex",
+          backend: "responses",
+          providerSource: "codex-config",
           profile: "default",
           timeoutSeconds: 10,
           temperature: 0.2
@@ -470,8 +507,8 @@ describe("provider backends", () => {
 
     expect(runnerCalled).toBe(false);
     expect(suggestion.source).toBe("ai");
-    expect(suggestion.metadata?.requestedBackend).toBe("codex");
-    expect(suggestion.metadata?.transport).toBe("http");
+    expect(suggestion.metadata?.backend).toBe("responses");
+    expect(suggestion.metadata?.requestType).toBe("responses");
     expect(suggestion.name).toContain("inherited auth");
   });
 });
