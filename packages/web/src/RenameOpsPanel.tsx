@@ -40,6 +40,13 @@ type LoadedChart = {
   echartsLib: any;
 };
 
+type DataZoomState = {
+  start?: number;
+  end?: number;
+  startValue?: number;
+  endValue?: number;
+};
+
 function readChartTheme(): ChartTheme {
   const rootStyle = getComputedStyle(document.documentElement);
   return {
@@ -71,6 +78,80 @@ function formatDurationMs(value: number | undefined): string {
     return `${Math.max(0, Math.round(value))}ms`;
   }
   return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
+}
+
+function clampIndex(value: number | undefined, maxIndex: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  if (typeof maxIndex !== "number" || !Number.isFinite(maxIndex) || maxIndex < 0) {
+    return value;
+  }
+  return Math.max(0, Math.min(maxIndex, Math.trunc(value)));
+}
+
+function categoryAxisLength(option: ChartOption): number | undefined {
+  const axisConfig = Array.isArray(option.xAxis) ? option.xAxis : option.xAxis ? [option.xAxis] : [];
+  for (const axis of axisConfig) {
+    if (!axis || typeof axis !== "object") {
+      continue;
+    }
+    const axisRecord = axis as { type?: string; data?: unknown };
+    if (axisRecord.type === "category" && Array.isArray(axisRecord.data)) {
+      return axisRecord.data.length;
+    }
+  }
+  return undefined;
+}
+
+function readCurrentDataZoomState(instance: any): DataZoomState[] {
+  const currentOption = instance?.getOption?.();
+  if (!currentOption || !Array.isArray(currentOption.dataZoom)) {
+    return [];
+  }
+
+  return currentOption.dataZoom.map((item: Record<string, unknown>) => ({
+    start: typeof item.start === "number" ? item.start : undefined,
+    end: typeof item.end === "number" ? item.end : undefined,
+    startValue: typeof item.startValue === "number" ? item.startValue : undefined,
+    endValue: typeof item.endValue === "number" ? item.endValue : undefined
+  }));
+}
+
+function applyPreservedDataZoom(option: ChartOption, preservedState: DataZoomState[]): ChartOption {
+  if (preservedState.length === 0 || !Array.isArray(option.dataZoom)) {
+    return option;
+  }
+
+  const axisLength = categoryAxisLength(option);
+  const maxIndex = typeof axisLength === "number" && axisLength > 0 ? axisLength - 1 : undefined;
+  const nextDataZoom = option.dataZoom.map((item: unknown, index: number) => {
+    if (!item || typeof item !== "object") {
+      return item;
+    }
+
+    const preserved = preservedState[index];
+    if (!preserved) {
+      return item;
+    }
+
+    return {
+      ...item,
+      ...(typeof preserved.start === "number" ? { start: preserved.start } : {}),
+      ...(typeof preserved.end === "number" ? { end: preserved.end } : {}),
+      ...(typeof preserved.startValue === "number"
+        ? { startValue: clampIndex(preserved.startValue, maxIndex) }
+        : {}),
+      ...(typeof preserved.endValue === "number"
+        ? { endValue: clampIndex(preserved.endValue, maxIndex) }
+        : {})
+    };
+  });
+
+  return {
+    ...option,
+    dataZoom: nextDataZoom
+  };
 }
 
 function useChart(
@@ -152,7 +233,9 @@ function useChart(
             };
 
       chartRef.current = chart;
-      chart.instance.setOption(buildOption(readChartTheme(), chart.echartsLib), true);
+      const preservedDataZoom = readCurrentDataZoomState(chart.instance);
+      const nextOption = applyPreservedDataZoom(buildOption(readChartTheme(), chart.echartsLib), preservedDataZoom);
+      chart.instance.setOption(nextOption, true);
     });
 
     return () => {
