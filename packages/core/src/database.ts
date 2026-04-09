@@ -48,12 +48,14 @@ type SessionRow = {
   archived_hint: number;
   current_revision: string | null;
   current_candidate_name: string | null;
+  current_candidate_rule_signature: string | null;
   dirty_since_rename: number | null;
   force_rewrite: number | null;
   last_applied_name: string | null;
-  last_applied_source: string | null;
+  last_applied_source: RenameSource | null;
   last_applied_revision: string | null;
   last_applied_at: string | null;
+  last_applied_rule_signature: string | null;
   frozen: number | null;
 };
 
@@ -117,12 +119,14 @@ export class StateDatabase {
         current_candidate_name TEXT,
         current_candidate_source TEXT,
         current_candidate_generated_at TEXT,
+        current_candidate_rule_signature TEXT,
         last_auto_name TEXT,
         last_manual_name TEXT,
         last_applied_name TEXT,
         last_applied_source TEXT,
         last_applied_at TEXT,
         last_applied_revision TEXT,
+        last_applied_rule_signature TEXT,
         dirty_since_rename INTEGER NOT NULL DEFAULT 0,
         force_rewrite INTEGER NOT NULL DEFAULT 0,
         manual_override INTEGER NOT NULL DEFAULT 0,
@@ -144,6 +148,7 @@ export class StateDatabase {
         reason TEXT,
         applied_at TEXT NOT NULL,
         applied_revision TEXT,
+        rule_signature TEXT,
         operator TEXT
       );
 
@@ -187,7 +192,10 @@ export class StateDatabase {
       CREATE INDEX IF NOT EXISTS idx_ai_request_logs_status ON ai_request_logs(status);
     `);
     this.ensureColumn("rename_state", "force_rewrite", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("rename_state", "current_candidate_rule_signature", "TEXT");
+    this.ensureColumn("rename_state", "last_applied_rule_signature", "TEXT");
     this.dropColumnIfExists("rename_state", "manual_override");
+    this.ensureColumn("rename_history", "rule_signature", "TEXT");
     this.ensureColumn("ai_request_logs", "prompt_text", "TEXT");
     this.ensureColumn("ai_request_logs", "request_payload_json", "TEXT");
     this.ensureColumn("ai_request_logs", "response_text", "TEXT");
@@ -421,12 +429,14 @@ export class StateDatabase {
       currentCandidateName: (row.current_candidate_name as string | null) ?? undefined,
       currentCandidateSource: (row.current_candidate_source as RenameSource | null) ?? undefined,
       currentCandidateGeneratedAt: (row.current_candidate_generated_at as string | null) ?? undefined,
+      currentCandidateRuleSignature: (row.current_candidate_rule_signature as string | null) ?? undefined,
       lastAutoName: (row.last_auto_name as string | null) ?? undefined,
       lastManualName: (row.last_manual_name as string | null) ?? undefined,
       lastAppliedName: (row.last_applied_name as string | null) ?? undefined,
       lastAppliedSource: (row.last_applied_source as RenameSource | null) ?? undefined,
       lastAppliedAt: (row.last_applied_at as string | null) ?? undefined,
       lastAppliedRevision: (row.last_applied_revision as string | null) ?? undefined,
+      lastAppliedRuleSignature: (row.last_applied_rule_signature as string | null) ?? undefined,
       dirtySinceRename: toBoolean(row.dirty_since_rename as number | null),
       forceRewrite: toBoolean(row.force_rewrite as number | null),
       frozen: toBoolean(row.frozen as number | null),
@@ -437,19 +447,21 @@ export class StateDatabase {
     };
   }
 
-  saveCandidate(threadId: string, suggestion: { name: string; source: RenameSource; generatedAt: string }): void {
+  saveCandidate(threadId: string, suggestion: { name: string; source: RenameSource; generatedAt: string; ruleSignature?: string }): void {
     this.db
       .prepare(
         `INSERT INTO rename_state (
-           thread_id, current_candidate_name, current_candidate_source, current_candidate_generated_at, dirty_since_rename
+           thread_id, current_candidate_name, current_candidate_source, current_candidate_generated_at,
+           current_candidate_rule_signature, dirty_since_rename
          )
-         VALUES (?, ?, ?, ?, 1)
+         VALUES (?, ?, ?, ?, ?, 1)
          ON CONFLICT(thread_id) DO UPDATE SET
            current_candidate_name = excluded.current_candidate_name,
            current_candidate_source = excluded.current_candidate_source,
-           current_candidate_generated_at = excluded.current_candidate_generated_at`
+           current_candidate_generated_at = excluded.current_candidate_generated_at,
+           current_candidate_rule_signature = excluded.current_candidate_rule_signature`
       )
-      .run(threadId, suggestion.name, suggestion.source, suggestion.generatedAt);
+      .run(threadId, suggestion.name, suggestion.source, suggestion.generatedAt, suggestion.ruleSignature ?? null);
   }
 
   clearCandidate(threadId: string): void {
@@ -458,7 +470,8 @@ export class StateDatabase {
         `UPDATE rename_state
          SET current_candidate_name = NULL,
              current_candidate_source = NULL,
-             current_candidate_generated_at = NULL
+             current_candidate_generated_at = NULL,
+             current_candidate_rule_signature = NULL
          WHERE thread_id = ?`
       )
       .run(threadId);
@@ -470,7 +483,8 @@ export class StateDatabase {
         `UPDATE rename_state
          SET current_candidate_name = NULL,
              current_candidate_source = NULL,
-             current_candidate_generated_at = NULL`
+             current_candidate_generated_at = NULL,
+             current_candidate_rule_signature = NULL`
       )
       .run();
   }
@@ -479,6 +493,7 @@ export class StateDatabase {
     return this.db
       .prepare(
         `SELECT kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
+         , rule_signature
          FROM rename_history
          WHERE thread_id = ?
          ORDER BY id DESC
@@ -497,6 +512,7 @@ export class StateDatabase {
     operator: string;
     appliedAt: string;
     appliedRevision?: string;
+    ruleSignature?: string;
     autoApply?: boolean;
     persistAppliedState?: boolean;
   }): void {
@@ -516,6 +532,7 @@ export class StateDatabase {
         (latest.reason ?? null) === reason &&
         latest.applied_at === params.appliedAt &&
         (latest.applied_revision ?? null) === appliedRevision &&
+        (latest.rule_signature ?? null) === (params.ruleSignature ?? null) &&
         (latest.operator ?? null) === params.operator;
 
       if (!isDuplicateLatestHistory) {
@@ -523,7 +540,8 @@ export class StateDatabase {
           .prepare(
             `INSERT INTO rename_history (
               thread_id, kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            , rule_signature
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             params.threadId,
@@ -535,7 +553,8 @@ export class StateDatabase {
             reason,
             params.appliedAt,
             appliedRevision,
-            params.operator
+            params.operator,
+            params.ruleSignature ?? null
           );
       }
 
@@ -544,14 +563,15 @@ export class StateDatabase {
           .prepare(
             `INSERT INTO rename_state (
               thread_id, last_applied_name, last_applied_source, last_applied_at,
-              last_applied_revision, dirty_since_rename, force_rewrite, auto_apply_count,
+              last_applied_revision, last_applied_rule_signature, dirty_since_rename, force_rewrite, auto_apply_count,
               last_auto_name, last_manual_name, last_auto_apply_success_at
-            ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
             ON CONFLICT(thread_id) DO UPDATE SET
               last_applied_name = excluded.last_applied_name,
               last_applied_source = excluded.last_applied_source,
               last_applied_at = excluded.last_applied_at,
               last_applied_revision = excluded.last_applied_revision,
+              last_applied_rule_signature = excluded.last_applied_rule_signature,
               dirty_since_rename = 0,
               force_rewrite = 0,
               auto_apply_count = excluded.auto_apply_count,
@@ -565,6 +585,7 @@ export class StateDatabase {
             params.source,
             params.appliedAt,
             params.appliedRevision ?? null,
+            params.ruleSignature ?? null,
             params.autoApply ? (previous?.autoApplyCount ?? 0) + 1 : previous?.autoApplyCount ?? 0,
             params.autoApply ? params.newName : previous?.lastAutoName ?? null,
             params.source === "manual" ? params.newName : previous?.lastManualName ?? null,
@@ -595,7 +616,8 @@ export class StateDatabase {
       .prepare(
         `SELECT s.thread_id, s.cwd, s.project_name, s.first_user_message, s.updated_at, s.latest_official_name,
                 s.model_provider, s.model, s.task_complete_count, s.status_estimate,
-                rs.current_candidate_name, rs.last_applied_revision, rs.frozen, rs.force_rewrite,
+                rs.current_candidate_name, rs.current_candidate_rule_signature, rs.last_applied_source,
+                rs.last_applied_revision, rs.last_applied_rule_signature, rs.frozen, rs.force_rewrite,
                 rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -617,12 +639,15 @@ export class StateDatabase {
         updatedAt: (row.updated_at as string | null) ?? undefined,
         officialName: (row.latest_official_name as string | null) ?? undefined,
         candidateName: (row.current_candidate_name as string | null) ?? undefined,
+        candidateRuleSignature: (row.current_candidate_rule_signature as string | null) ?? undefined,
         dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null),
         frozen: toBoolean(row.frozen as number | null),
         taskCompleteCount: Number(row.task_complete_count ?? 0),
         provider: (row.model_provider as string | null) ?? undefined,
         model: (row.model as string | null) ?? undefined,
-        statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined
+        lastAppliedSource: (row.last_applied_source as RenameSource | null) ?? undefined,
+        statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined,
+        lastAppliedRuleSignature: (row.last_applied_rule_signature as string | null) ?? undefined
       }))
       .filter((row) => (filters?.dirty === undefined ? true : row.dirty === filters.dirty));
   }
@@ -669,8 +694,9 @@ export class StateDatabase {
                 s.model_provider, s.model, s.first_user_message, s.last_user_message,
                 s.last_agent_message, s.task_complete_count, s.token_total, s.latest_official_name,
                 s.status_estimate, sr.current_revision, rs.current_candidate_name,
-                rs.last_applied_at,
-                rs.last_applied_revision, rs.frozen, rs.force_rewrite, rs.dirty_since_rename
+                rs.current_candidate_rule_signature, rs.last_applied_at,
+                rs.last_applied_revision, rs.last_applied_rule_signature,
+                rs.last_applied_source, rs.frozen, rs.force_rewrite, rs.dirty_since_rename
          FROM sessions s
          LEFT JOIN session_revisions sr ON sr.thread_id = s.thread_id
          LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
@@ -693,11 +719,13 @@ export class StateDatabase {
       updatedAt: row.updated_at ?? undefined,
       officialName: row.latest_official_name ?? undefined,
       candidateName: row.current_candidate_name ?? undefined,
+      candidateRuleSignature: row.current_candidate_rule_signature ?? undefined,
       dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null),
       frozen: toBoolean(row.frozen as number | null),
       taskCompleteCount: row.task_complete_count,
       provider: row.model_provider ?? undefined,
       model: row.model ?? undefined,
+      lastAppliedSource: row.last_applied_source ?? undefined,
       statusEstimate: (row.status_estimate as SessionStatusEstimate | null) ?? undefined,
       firstUserMessage: row.first_user_message ?? undefined,
       lastUserMessage: row.last_user_message ?? undefined,
@@ -705,7 +733,8 @@ export class StateDatabase {
       tokenTotal: row.token_total,
       revision: row.current_revision ?? undefined,
       lastAppliedAt: row.last_applied_at ?? undefined,
-      lastAppliedRevision: row.last_applied_revision ?? undefined
+      lastAppliedRevision: row.last_applied_revision ?? undefined,
+      lastAppliedRuleSignature: row.last_applied_rule_signature ?? undefined
     };
   }
 
@@ -733,7 +762,7 @@ export class StateDatabase {
   getRenameHistory(threadId: string): RenameHistoryRecord[] {
     return this.db
       .prepare(
-        `SELECT kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator
+        `SELECT kind, old_name, new_name, source, status, reason, applied_at, applied_revision, operator, rule_signature
          FROM rename_history WHERE thread_id = ? ORDER BY applied_at DESC`
       )
       .all(threadId)
@@ -748,6 +777,7 @@ export class StateDatabase {
           reason: (item.reason as string | null) ?? undefined,
           appliedAt: item.applied_at as string,
           appliedRevision: (item.applied_revision as string | null) ?? undefined,
+          ruleSignature: (item.rule_signature as string | null) ?? undefined,
           operator: (item.operator as string | null) ?? undefined
         } satisfies RenameHistoryRecord;
       });
@@ -899,7 +929,7 @@ export class StateDatabase {
     const rows = this.db
       .prepare(
         `SELECT id, thread_id, project_name, backend, transport, status, started_at, finished_at, duration_ms,
-                base_url, model, prompt_chars, response_chars, error, metadata_json
+                base_url, model, prompt_chars, response_chars, result_json, error, metadata_json
          FROM ai_request_logs
          ${whereSql}
          ORDER BY started_at DESC, id DESC
@@ -974,6 +1004,10 @@ export class StateDatabase {
           typeof row.prompt_chars === "number" ? row.prompt_chars : Number.isFinite(Number(row.prompt_chars)) ? Number(row.prompt_chars) : undefined,
         responseChars:
           typeof row.response_chars === "number" ? row.response_chars : Number.isFinite(Number(row.response_chars)) ? Number(row.response_chars) : undefined,
+        finalName:
+          typeof row.result_json === "string" && row.result_json
+            ? (((JSON.parse(row.result_json) as AiRequestLogDetail["result"])?.composition?.finalName as string | undefined) ?? undefined)
+            : undefined,
         error: (row.error as string | null) ?? undefined,
         metadata:
           typeof row.metadata_json === "string" && row.metadata_json
@@ -997,6 +1031,11 @@ export class StateDatabase {
       return undefined;
     }
 
+    const result =
+      typeof row.result_json === "string" && row.result_json
+        ? (JSON.parse(row.result_json) as AiRequestLogDetail["result"])
+        : undefined;
+
     return {
       id: Number(row.id ?? 0),
       threadId: (row.thread_id as string | null) ?? "",
@@ -1019,15 +1058,13 @@ export class StateDatabase {
           : undefined,
       responseChars:
         typeof row.response_chars === "number" ? row.response_chars : Number.isFinite(Number(row.response_chars)) ? Number(row.response_chars) : undefined,
+      finalName: result?.composition?.finalName ?? undefined,
       responseText: (row.response_text as string | null) ?? undefined,
       responsePayload:
         typeof row.response_payload_json === "string" && row.response_payload_json
           ? (JSON.parse(row.response_payload_json) as Record<string, unknown>)
           : undefined,
-      result:
-        typeof row.result_json === "string" && row.result_json
-          ? (JSON.parse(row.result_json) as AiRequestLogDetail["result"])
-          : undefined,
+      result,
       error: (row.error as string | null) ?? undefined,
       metadata:
         typeof row.metadata_json === "string" && row.metadata_json
@@ -1340,10 +1377,19 @@ export class StateDatabase {
         actualExecution: "preview-only",
         daemonAutoApply: false,
         daemonStatus: "not_seen",
+        currentRuleSignature: "",
         lastSweepAt: undefined,
         lastSweepIntervalSeconds: undefined,
         lastSweepSummary: undefined,
+        recentSweeps: [],
         explain: "The current daemon scans sessions and prints preview evaluations, but it does not call apply()."
+      },
+      ruleCoverage: {
+        currentSignature: "",
+        latest: 0,
+        outdated: 0,
+        manual: 0,
+        unknown: 0
       },
       workload: {
         totalTokens,
@@ -1399,27 +1445,55 @@ export class StateDatabase {
       .run(threadId, frozen ? 1 : 0);
   }
 
-  queueRenameReplaySince(params: {
+  listRenameReplayCandidatesSince(params: {
     since: string;
     basis: "session-updated-at" | "last-applied-at";
-  }): { queued: number; clearedCandidates: number; matchedThreadIds: string[] } {
+  }): Array<{
+    threadId: string;
+    updatedAt?: string;
+    officialName?: string;
+    currentRevision?: string;
+    lastAppliedRevision?: string;
+    lastAppliedSource?: RenameSource;
+    lastAppliedRuleSignature?: string;
+    frozen: boolean;
+    dirty: boolean;
+  }> {
     const selectSql =
       params.basis === "last-applied-at"
-        ? `SELECT s.thread_id
+        ? `SELECT s.thread_id, s.updated_at, s.created_at, s.latest_official_name, sr.current_revision,
+                  rs.last_applied_revision, rs.last_applied_source, rs.last_applied_rule_signature,
+                  rs.frozen, rs.dirty_since_rename, rs.force_rewrite
            FROM sessions s
            JOIN rename_state rs ON rs.thread_id = s.thread_id
+           LEFT JOIN session_revisions sr ON sr.thread_id = s.thread_id
            WHERE rs.last_applied_at IS NOT NULL
              AND rs.last_applied_at >= ?`
-        : `SELECT s.thread_id
+        : `SELECT s.thread_id, s.updated_at, s.created_at, s.latest_official_name, sr.current_revision,
+                  rs.last_applied_revision, rs.last_applied_source, rs.last_applied_rule_signature,
+                  rs.frozen, rs.dirty_since_rename, rs.force_rewrite
            FROM sessions s
+           LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id
+           LEFT JOIN session_revisions sr ON sr.thread_id = s.thread_id
            WHERE COALESCE(s.updated_at, s.created_at) >= ?`;
 
-    const threadIds = (
-      this.db.prepare(selectSql).all(params.since) as Array<Record<string, unknown>>
-    )
-      .map((row) => (typeof row.thread_id === "string" ? row.thread_id : undefined))
-      .filter((value): value is string => Boolean(value));
+    const rows = this.db.prepare(selectSql).all(params.since) as Array<Record<string, unknown>>;
+    return rows
+      .map((row) => ({
+        threadId: row.thread_id as string,
+        updatedAt: (row.updated_at as string | null) ?? (row.created_at as string | null) ?? undefined,
+        officialName: (row.latest_official_name as string | null) ?? undefined,
+        currentRevision: (row.current_revision as string | null) ?? undefined,
+        lastAppliedRevision: (row.last_applied_revision as string | null) ?? undefined,
+        lastAppliedSource: (row.last_applied_source as RenameSource | null) ?? undefined,
+        lastAppliedRuleSignature: (row.last_applied_rule_signature as string | null) ?? undefined,
+        frozen: toBoolean(row.frozen as number | null),
+        dirty: toBoolean(row.dirty_since_rename as number | null) || toBoolean(row.force_rewrite as number | null)
+      }))
+      .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
+  }
 
+  queueRenameReplayThreadIds(threadIds: string[]): { queued: number; clearedCandidates: number; matchedThreadIds: string[] } {
     if (threadIds.length === 0) {
       return {
         queued: 0,
@@ -1433,15 +1507,17 @@ export class StateDatabase {
         this.db
           .prepare(
             `INSERT INTO rename_state (
-               thread_id, dirty_since_rename, force_rewrite, current_candidate_name, current_candidate_source, current_candidate_generated_at
+               thread_id, dirty_since_rename, force_rewrite, current_candidate_name, current_candidate_source,
+               current_candidate_generated_at, current_candidate_rule_signature
              )
-             VALUES (?, 1, 1, NULL, NULL, NULL)
+             VALUES (?, 1, 1, NULL, NULL, NULL, NULL)
              ON CONFLICT(thread_id) DO UPDATE SET
                dirty_since_rename = 1,
                force_rewrite = 1,
                current_candidate_name = NULL,
                current_candidate_source = NULL,
-               current_candidate_generated_at = NULL`
+               current_candidate_generated_at = NULL,
+               current_candidate_rule_signature = NULL`
           )
           .run(threadId);
       }

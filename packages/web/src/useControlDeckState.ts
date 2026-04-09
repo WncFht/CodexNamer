@@ -224,7 +224,10 @@ export function useControlDeckState() {
       });
       setNotice({
         tone: "success",
-        text: `Queued ${result.queued} sessions for rename replay.`
+        text:
+          result.skipped > 0
+            ? `Queued ${result.queued} sessions and skipped ${result.skipped} already-up-to-date or protected sessions.`
+            : `Queued ${result.queued} sessions for rename replay.`
       });
       return result;
     } catch (nextError) {
@@ -314,6 +317,7 @@ export function useControlDeckState() {
     refreshPromptPreview: resources.refreshPromptPreview,
     refreshSettings: resources.refreshSettings,
     refreshMaintenance: resources.refreshMaintenance,
+    refreshRequeue: resources.refreshRequeue,
     refreshDaemon: resources.refreshDaemon,
     saveConfig,
     replayRenamesSince,

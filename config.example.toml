@@ -1,0 +1,104 @@
+# Copy this file to ~/.config/codexnamer/config.toml and edit from there.
+# This starter config is intentionally conservative:
+# - it reuses your existing Codex provider/auth by default
+# - it keeps rename in preview mode until you trust the results
+
+[general]
+# Usually you can keep the default Codex home.
+codex_home = "~/.codex"
+
+# CodexNamer keeps its own SQLite state and runtime files here.
+state_dir = "~/.local/state/codexnamer"
+
+# UI language for Web / TUI.
+ui_language = "zh-CN"
+
+[rename]
+# Recommended for first-time use:
+# - "disabled" = preview only
+# - "idle-finalize" = daemon may auto-apply finalize-ready renames
+auto_apply = "disabled"
+
+# Keep manually assigned names untouched.
+freeze_manual_name = true
+
+[ai]
+# "responses" is the recommended default for OpenAI-style providers.
+# Set "none" if you want heuristic naming only.
+backend = "responses"
+
+# Reuse ~/.codex/config.toml and ~/.codex/auth.json.
+# Switch this to "manual" only if you want CodexNamer to use its own provider profile.
+provider_source = "codex-config"
+
+# Used only when provider_source = "manual".
+profile = "default"
+
+# Keep this low at first so provider behavior is easy to inspect.
+timeout_seconds = 45
+temperature = 0.2
+max_concurrency = 1
+
+[naming]
+# Builder-first structured naming is the current recommended path.
+preset = "conventional"
+language = "zh-CN"
+max_length = 72
+
+# Good starter choice for most sessions. Other valid values include:
+# - "last-user-last-assistant"
+# - "user-assistant-transcript"
+# - "user-only-transcript"
+context_strategy = "summary-signals"
+context_max_chars = 8000
+
+# "structured" lets the model return fields and then compose the final title locally.
+# Use "prompt-override" only when you want custom_prompt to fully steer output.
+composition_mode = "structured"
+
+# Final title shape. Empty components are skipped automatically.
+builder = [
+  { type = "component", component = "tag" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "kind" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "summary" }
+]
+
+[[naming.tags]]
+id = "settings"
+description = "Settings, provider, config, save, and language related sessions."
+prompt_hint = "setting settings config save language provider"
+
+[[naming.tags]]
+id = "rename"
+description = "Sessions about rename rules, title structure, and naming quality."
+prompt_hint = "rename naming title structure session name quality"
+
+[[naming.tags]]
+id = "provider"
+description = "Sessions about model providers, relays, base URLs, models, and auth."
+prompt_hint = "provider relay base url model auth api key compatibility"
+
+[[naming.tags]]
+id = "tests"
+description = "Sessions focused on tests, regression coverage, builds, or verification."
+prompt_hint = "test tests regression build lint verify verification"
+
+[[naming.tags]]
+id = "docs"
+description = "Sessions that mainly produce README, docs, specs, or maintenance notes."
+prompt_hint = "readme docs documentation spec maintenance notes"
+
+# If you do not want to inherit the current Codex config, switch:
+#   provider_source = "manual"
+# and then uncomment a profile like this:
+#
+# [provider.default]
+# request_type = "responses"
+# display_name = "My relay"
+# base_url = "https://your-relay.example/v1"
+# model = "gpt-5.4"
+# api_key = "sk-..."
+# enabled = true
+# is_default = true

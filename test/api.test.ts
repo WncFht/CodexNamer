@@ -89,12 +89,28 @@ describe("local api", () => {
     expect(suggest.json().threadId).toBe("019d-api-2");
     expect(suggest.json().source).toBe("ai");
 
-    const freeze = await app.inject({
+    const apply = await app.inject({
       method: "POST",
-      url: "/api/v1/sessions/019d-api-2/freeze"
+      url: "/api/v1/sessions/019d-api-2/apply"
     });
-    expect(freeze.statusCode).toBe(200);
-    expect(freeze.json().frozen).toBe(true);
+    expect(apply.statusCode).toBe(200);
+    expect(apply.json().written).toBe(true);
+    expect(apply.json().name).toContain("019d-api-2");
+
+    const replayPreview = await app.inject({
+      method: "POST",
+      url: "/api/v1/maintenance/requeue-preview",
+      payload: {
+        since: "2026-04-01T00:00:00.000Z",
+        basis: "session-updated-at"
+      }
+    });
+    expect(replayPreview.statusCode).toBe(200);
+    expect(replayPreview.json().queued).toBe(0);
+    expect(replayPreview.json().skipped).toBeGreaterThanOrEqual(1);
+    expect(
+      replayPreview.json().items.find((item: { threadId: string }) => item.threadId === "019d-api-2")?.reason
+    ).toBe("already_latest_rule");
 
     const providerTest = await app.inject({
       method: "POST",
@@ -109,6 +125,19 @@ describe("local api", () => {
     });
     expect(config.statusCode).toBe(200);
     expect(config.json().effectiveConfig.general.codexHome).toBe(workspace.codexHome);
+
+    const configUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/v1/config",
+      payload: {
+        userConfig: {
+          naming: {
+            customPrompt: "Always prefix a workspace-heavy Chinese tag."
+          }
+        }
+      }
+    });
+    expect(configUpdate.statusCode).toBe(200);
 
     const doctor = await app.inject({
       method: "GET",
@@ -142,7 +171,14 @@ describe("local api", () => {
       status: "succeeded",
       finishedAt: "2026-04-04T12:00:01.000Z",
       durationMs: 1000,
-      responseChars: 64
+      responseChars: 64,
+      result: {
+        composition: {
+          mode: "structured",
+          builder: [],
+          finalName: "project-alpha / api log final name"
+        }
+      }
     });
 
     const requestLogs = await app.inject({
@@ -153,6 +189,14 @@ describe("local api", () => {
     expect(requestLogs.json().activeCount).toBe(0);
     expect(requestLogs.json().items[0].threadId).toBe("019d-api-2");
     expect(requestLogs.json().items[0].status).toBe("succeeded");
+    expect(requestLogs.json().items[0].finalName).toBe("project-alpha / api log final name");
+
+    const requestLogDetail = await app.inject({
+      method: "GET",
+      url: `/api/v1/ai/request-logs/${logId}`
+    });
+    expect(requestLogDetail.statusCode).toBe(200);
+    expect(requestLogDetail.json().finalName).toBe("project-alpha / api log final name");
 
     const replay = await app.inject({
       method: "POST",
@@ -164,6 +208,7 @@ describe("local api", () => {
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.json().queued).toBeGreaterThanOrEqual(1);
+    expect(replay.json().skipped).toBeGreaterThanOrEqual(0);
 
     const overviewAfterReplay = await app.inject({
       method: "GET",
@@ -172,6 +217,14 @@ describe("local api", () => {
     expect(overviewAfterReplay.statusCode).toBe(200);
     expect(overviewAfterReplay.json().replay.recentRuns[0].basis).toBe("session-updated-at");
     expect(overviewAfterReplay.json().replay.recentRuns[0].queued).toBeGreaterThanOrEqual(1);
+    expect(overviewAfterReplay.json().ruleCoverage.currentSignature).toBeTruthy();
+
+    const freeze = await app.inject({
+      method: "POST",
+      url: "/api/v1/sessions/019d-api-2/freeze"
+    });
+    expect(freeze.statusCode).toBe(200);
+    expect(freeze.json().frozen).toBe(true);
   });
 
   it("supports session filters and auto-rename preview endpoint", async () => {

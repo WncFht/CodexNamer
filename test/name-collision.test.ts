@@ -60,7 +60,8 @@ describe("rename name collision handling", () => {
       manager.db.saveCandidate("dup-apply-2", {
         name: "Shared title",
         source: "ai",
-        generatedAt: "2026-04-04T12:10:00.000Z"
+        generatedAt: "2026-04-04T12:10:00.000Z",
+        ruleSignature: manager.currentRuleSignature
       });
 
       const result = await manager.apply("dup-apply-2");

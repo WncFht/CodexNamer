@@ -15,6 +15,7 @@ import {
   type OverviewReport,
   type PromptPreview,
   type RenameHistoryRecord,
+  type RenameReplayPreviewResult,
   type RenameReplayResult,
   type RenameSuggestion,
   type ScanReport,
@@ -35,6 +36,7 @@ import {
   resolveRenameProvider
 } from "./provider.js";
 import { buildSessionRevision } from "./revision.js";
+import { computeRenameRuleSignature } from "./rule-signature.js";
 import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "./rollout.js";
 import {
   appendSessionIndexRename,
@@ -55,13 +57,33 @@ type DaemonSweepSnapshot = {
   processId?: number;
   summary: {
     total: number;
+    dirtyTotal: number;
+    pending: number;
     suggest: number;
     apply: number;
     skip: number;
+    failedSuggestions: number;
+    autoApplied: number;
+    unchanged: number;
+    scan: {
+      scannedRollouts: number;
+      updatedSessions: number;
+    };
+    execution: "preview-only" | "auto-apply";
+  };
+  recentSweeps: Array<{
+    at: string;
+    total: number;
+    dirtyTotal: number;
+    pending: number;
+    suggest: number;
+    apply: number;
+    skip: number;
+    failedSuggestions: number;
     autoApplied: number;
     unchanged: number;
     execution: "preview-only" | "auto-apply";
-  };
+  }>;
 };
 
 type RenameReplaySnapshot = {
@@ -72,6 +94,8 @@ type RenameReplaySnapshot = {
     basis: "session-updated-at" | "last-applied-at";
     queued: number;
     clearedCandidates: number;
+    skipped: number;
+    skipCounts?: Record<string, number>;
   }>;
 };
 
@@ -139,6 +163,20 @@ function summarizeSweepErrorReason(error: unknown): string {
     return error.message || "error";
   }
   return "error";
+}
+
+function summarizeRuleStatus(params: {
+  lastAppliedSource?: string;
+  lastAppliedRuleSignature?: string;
+  currentRuleSignature: string;
+}): "latest" | "outdated" | "manual" | "unknown" {
+  if (params.lastAppliedSource === "manual") {
+    return "manual";
+  }
+  if (!params.lastAppliedRuleSignature) {
+    return "unknown";
+  }
+  return params.lastAppliedRuleSignature === params.currentRuleSignature ? "latest" : "outdated";
 }
 
 async function mapWithConcurrency<T, R>(
@@ -228,6 +266,10 @@ export class CodexNamer {
 
   get backupDir(): string {
     return path.join(this.config.general.stateDir, "backups");
+  }
+
+  get currentRuleSignature(): string {
+    return computeRenameRuleSignature(this.config);
   }
 
   async close(): Promise<void> {
@@ -439,7 +481,7 @@ export class CodexNamer {
     const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
     return this.db
       .listSessions()
-      .map((session) => this.applyOfficialNamingPolicy(session, blockedOfficialThreadIds))
+      .map((session) => this.applyRuleSignatureState(this.applyOfficialNamingPolicy(session, blockedOfficialThreadIds)))
       .filter((session) => (options?.dirty === undefined ? true : session.dirty === options.dirty));
   }
 
@@ -458,7 +500,7 @@ export class CodexNamer {
       return undefined;
     }
     const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
-    const normalizedDetail = this.applyOfficialNamingPolicy(detail, blockedOfficialThreadIds);
+    const normalizedDetail = this.applyRuleSignatureState(this.applyOfficialNamingPolicy(detail, blockedOfficialThreadIds));
     return {
       ...normalizedDetail,
       renameHistory: this.filterVisibleRenameHistory(this.db.getRenameHistory(threadId)),
@@ -526,6 +568,7 @@ export class CodexNamer {
     }
   ): Promise<RenameSuggestion> {
     await this.requireSuccessfulProviderTest();
+    const currentRuleSignature = this.currentRuleSignature;
     const renameState = this.db.getRenameState(detail.threadId);
     const candidateGeneratedAt = renameState?.currentCandidateGeneratedAt
       ? Date.parse(renameState.currentCandidateGeneratedAt)
@@ -533,6 +576,7 @@ export class CodexNamer {
     const sessionUpdatedAt = detail.updatedAt ? Date.parse(detail.updatedAt) : Number.NaN;
     const canReuseCandidate =
       Boolean(renameState?.currentCandidateName && renameState.currentCandidateGeneratedAt) &&
+      renameState?.currentCandidateRuleSignature === currentRuleSignature &&
       (this.isAcceptedOfficialRenameSource(renameState?.currentCandidateSource) ||
         !this.requiresAcceptedRewrite(renameState)) &&
       (!Number.isFinite(sessionUpdatedAt) ||
@@ -557,7 +601,10 @@ export class CodexNamer {
           }
         );
         if (options?.saveCandidate !== false && reusedSuggestion.name !== renameState?.currentCandidateName) {
-          this.db.saveCandidate(detail.threadId, reusedSuggestion);
+          this.db.saveCandidate(detail.threadId, {
+            ...reusedSuggestion,
+            ruleSignature: currentRuleSignature
+          });
         }
         if (options?.reservedNameKeys) {
           options.reservedNameKeys.add(normalizeComparableName(reusedSuggestion.name));
@@ -583,7 +630,10 @@ export class CodexNamer {
         }
       );
       if (options?.saveCandidate !== false) {
-        this.db.saveCandidate(detail.threadId, suggestion);
+        this.db.saveCandidate(detail.threadId, {
+          ...suggestion,
+          ruleSignature: currentRuleSignature
+        });
       }
       if (options?.reservedNameKeys) {
         options.reservedNameKeys.add(normalizeComparableName(suggestion.name));
@@ -609,6 +659,7 @@ export class CodexNamer {
       operator: this.operator,
       appliedAt: suggestion.generatedAt,
       appliedRevision: detail.revision,
+      ruleSignature: this.currentRuleSignature,
       autoApply: false
     });
     return suggestion;
@@ -651,6 +702,7 @@ export class CodexNamer {
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,
+      ruleSignature: suggestion.source === "manual" ? undefined : this.currentRuleSignature,
       autoApply: options?.autoApply ?? false,
       persistAppliedState
     });
@@ -690,6 +742,7 @@ export class CodexNamer {
       operator: this.operator,
       appliedAt,
       appliedRevision: detail.revision,
+      ruleSignature: undefined,
       autoApply: false,
       persistAppliedState
     });
@@ -862,10 +915,10 @@ export class CodexNamer {
     };
   }
 
-  async requeueRenamesSince(params: {
+  async previewRequeueRenamesSince(params: {
     since: string;
     basis: "session-updated-at" | "last-applied-at";
-  }): Promise<RenameReplayResult> {
+  }): Promise<RenameReplayPreviewResult> {
     await this.scan();
 
     const sinceDate = new Date(params.since);
@@ -873,10 +926,74 @@ export class CodexNamer {
       throw new Error("Invalid replay timestamp.");
     }
 
-    const result = this.db.queueRenameReplaySince({
+    const currentRuleSignature = this.currentRuleSignature;
+    const candidates = this.db.listRenameReplayCandidatesSince({
       since: sinceDate.toISOString(),
       basis: params.basis
     });
+    const queueCounts = new Map<string, number>();
+    const skipCounts = new Map<string, number>();
+    const items: RenameReplayPreviewResult["items"] = candidates.map((candidate) => {
+      const ruleStatus = summarizeRuleStatus({
+        lastAppliedSource: candidate.lastAppliedSource,
+        lastAppliedRuleSignature: candidate.lastAppliedRuleSignature,
+        currentRuleSignature
+      });
+      let action: "queue" | "skip" = "queue";
+      let reason: RenameReplayPreviewResult["items"][number]["reason"] = "rule_mismatch";
+
+      if (candidate.frozen) {
+        action = "skip";
+        reason = "frozen";
+      } else if (candidate.lastAppliedSource === "manual") {
+        action = "skip";
+        reason = "manual_name";
+      } else if (!candidate.lastAppliedRuleSignature) {
+        action = "queue";
+        reason = "legacy_unknown_rule";
+      } else if (candidate.lastAppliedRuleSignature === currentRuleSignature && !candidate.dirty) {
+        action = "skip";
+        reason = "already_latest_rule";
+      } else if (candidate.lastAppliedRuleSignature === currentRuleSignature && candidate.dirty) {
+        action = "queue";
+        reason = "content_changed";
+      } else {
+        action = "queue";
+        reason = "rule_mismatch";
+      }
+
+      const counter = action === "queue" ? queueCounts : skipCounts;
+      counter.set(reason, (counter.get(reason) ?? 0) + 1);
+      return {
+        threadId: candidate.threadId,
+        updatedAt: candidate.updatedAt,
+        officialName: candidate.officialName,
+        ruleStatus,
+        action,
+        reason
+      };
+    });
+
+    return {
+      since: sinceDate.toISOString(),
+      basis: params.basis,
+      currentRuleSignature,
+      matched: items.length,
+      queued: items.filter((item) => item.action === "queue").length,
+      skipped: items.filter((item) => item.action === "skip").length,
+      queueCounts: Object.fromEntries(queueCounts.entries()),
+      skipCounts: Object.fromEntries(skipCounts.entries()),
+      items
+    };
+  }
+
+  async requeueRenamesSince(params: {
+    since: string;
+    basis: "session-updated-at" | "last-applied-at";
+  }): Promise<RenameReplayResult> {
+    const preview = await this.previewRequeueRenamesSince(params);
+    const threadIds = preview.items.filter((item) => item.action === "queue").map((item) => item.threadId);
+    const result = this.db.queueRenameReplayThreadIds(threadIds);
 
     const requestedAt = new Date().toISOString();
     const previousState = this.db.getMaintenanceState<RenameReplaySnapshot>("rename_replay");
@@ -885,21 +1002,25 @@ export class CodexNamer {
       recentRuns: [
         {
           requestedAt,
-          since: sinceDate.toISOString(),
+          since: preview.since,
           basis: params.basis,
           queued: result.queued,
-          clearedCandidates: result.clearedCandidates
+          clearedCandidates: result.clearedCandidates,
+          skipped: preview.skipped,
+          skipCounts: preview.skipCounts
         },
         ...(previousState?.recentRuns ?? [])
       ].slice(0, 8)
     } satisfies RenameReplaySnapshot);
 
     return {
-      since: sinceDate.toISOString(),
+      since: preview.since,
       basis: params.basis,
       queued: result.queued,
       clearedCandidates: result.clearedCandidates,
-      matchedThreadIds: result.matchedThreadIds
+      matchedThreadIds: result.matchedThreadIds,
+      skipped: preview.skipped,
+      skipCounts: preview.skipCounts
     };
   }
 
@@ -1010,6 +1131,36 @@ export class CodexNamer {
       nonAcceptedNamedThreadIds: blockedOfficialThreadIds,
       acceptedAppliedSources: [...ACCEPTED_OFFICIAL_RENAME_SOURCES]
     });
+    const currentRuleSignature = this.currentRuleSignature;
+    const sessions = this.db
+      .listSessions()
+      .map((session) => this.applyRuleSignatureState(this.applyOfficialNamingPolicy(session, blockedOfficialThreadIds)));
+    const ruleCoverage = sessions.reduce(
+      (summary, session) => {
+        switch (session.ruleStatus) {
+          case "latest":
+            summary.latest += 1;
+            break;
+          case "outdated":
+            summary.outdated += 1;
+            break;
+          case "manual":
+            summary.manual += 1;
+            break;
+          default:
+            summary.unknown += 1;
+            break;
+        }
+        return summary;
+      },
+      {
+        currentSignature: currentRuleSignature,
+        latest: 0,
+        outdated: 0,
+        manual: 0,
+        unknown: 0
+      } satisfies OverviewReport["ruleCoverage"]
+    );
     const daemonState = this.db.getMaintenanceState<DaemonSweepSnapshot>("daemon_runtime");
     const replayState = this.db.getMaintenanceState<RenameReplaySnapshot>("rename_replay");
     const daemonStatus = this.resolveDaemonStatus(daemonState);
@@ -1025,15 +1176,19 @@ export class CodexNamer {
         actualExecution,
         daemonAutoApply,
         daemonStatus,
+        currentRuleSignature,
         lastSweepAt: daemonState?.lastSweepAt,
         lastSweepIntervalSeconds: daemonState?.intervalSeconds,
         lastSweepSummary: daemonState?.summary,
+        recentSweeps: Array.isArray(daemonState?.recentSweeps) ? daemonState.recentSweeps : [],
         explain: this.describeRuntimeState({
           configuredAutoApply: this.config.rename.autoApply,
           daemonStatus,
-          actualExecution
+          actualExecution,
+          summary: daemonState?.summary
         })
       },
+      ruleCoverage,
       replay: {
         lastRunAt: replayState?.lastRunAt,
         recentRuns: Array.isArray(replayState?.recentRuns) ? replayState.recentRuns : []
@@ -1052,7 +1207,7 @@ export class CodexNamer {
     previews: AutoRenamePreview[];
     applied: Array<{ threadId: string; written: boolean; name: string; reason?: string }>;
   }> {
-    await this.scan();
+    const scanReport = await this.scan();
     const now = new Date();
     const blockedOfficialThreadIds = this.getBlockedOfficialNameThreadIds();
     const reservedNameKeys = this.collectReservedOfficialNameKeys({
@@ -1065,6 +1220,7 @@ export class CodexNamer {
       typeof options?.limit === "number" && Number.isFinite(options.limit) && options.limit > 0
         ? Math.trunc(options.limit)
         : dirtySessions.length;
+    const pending = Math.max(0, dirtySessions.length - limit);
     const autoApplyEnabled =
       (options?.autoApply ?? true) && this.config.rename.autoApply === "idle-finalize";
     const maxConcurrency = Math.max(1, Math.trunc(this.config.ai.maxConcurrency || 1));
@@ -1164,15 +1320,25 @@ export class CodexNamer {
 
     const summary = {
       total: previews.length,
+      dirtyTotal: dirtySessions.length,
+      pending,
       suggest: previews.filter((item) => item.status === "suggest").length,
       apply: previews.filter((item) => item.status === "apply").length,
       skip: previews.filter((item) => item.status === "skip").length,
+      failedSuggestions: previews.filter((item) =>
+        ["request-failed", "missing-auth", "provider-misconfigured", "empty-response", "invalid-json", "missing-fields", "unsupported-backend", "error"].includes(item.reason)
+      ).length,
       autoApplied: applied.filter((item) => item.written).length,
       unchanged: applied.filter((item) => !item.written).length,
+      scan: {
+        scannedRollouts: scanReport.scannedRollouts,
+        updatedSessions: scanReport.updatedSessions
+      },
       execution: autoApplyEnabled ? "auto-apply" : "preview-only"
     } satisfies DaemonSweepSnapshot["summary"];
 
     if (options?.recordRuntime !== false) {
+      const previousState = this.db.getMaintenanceState<DaemonSweepSnapshot>("daemon_runtime");
       this.db.setMaintenanceState("daemon_runtime", {
         lastSweepAt: now.toISOString(),
         intervalSeconds: Math.max(1, Math.trunc(options?.intervalSeconds ?? this.config.watch.scanIntervalSeconds)),
@@ -1180,7 +1346,23 @@ export class CodexNamer {
           typeof options?.processId === "number" && Number.isFinite(options.processId)
             ? Math.trunc(options.processId)
             : undefined,
-        summary
+        summary,
+        recentSweeps: [
+          {
+            at: now.toISOString(),
+            total: summary.total,
+            dirtyTotal: summary.dirtyTotal,
+            pending: summary.pending,
+            suggest: summary.suggest,
+            apply: summary.apply,
+            skip: summary.skip,
+            failedSuggestions: summary.failedSuggestions,
+            autoApplied: summary.autoApplied,
+            unchanged: summary.unchanged,
+            execution: summary.execution
+          },
+          ...((previousState?.recentSweeps ?? []).filter((item) => item.at !== now.toISOString()))
+        ].slice(0, 32)
       } satisfies DaemonSweepSnapshot);
     }
 
@@ -1337,6 +1519,19 @@ export class CodexNamer {
     };
   }
 
+  private applyRuleSignatureState<T extends SessionSummary | SessionDetail>(session: T): T {
+    const currentRuleSignature = this.currentRuleSignature;
+    return {
+      ...session,
+      currentRuleSignature,
+      ruleStatus: summarizeRuleStatus({
+        lastAppliedSource: session.lastAppliedSource,
+        lastAppliedRuleSignature: session.lastAppliedRuleSignature,
+        currentRuleSignature
+      })
+    };
+  }
+
   private shouldTreatNonAcceptedNamesAsUnnamed(): boolean {
     return this.config.ai.backend !== "none";
   }
@@ -1466,25 +1661,29 @@ export class CodexNamer {
     configuredAutoApply: EffectiveConfig["rename"]["autoApply"];
     daemonStatus: OverviewReport["runtime"]["daemonStatus"];
     actualExecution: OverviewReport["runtime"]["actualExecution"];
+    summary?: OverviewReport["runtime"]["lastSweepSummary"];
   }): string {
+    const summaryCopy = params.summary
+      ? `Last sweep handled ${params.summary.total}/${params.summary.dirtyTotal} dirty sessions, left ${params.summary.pending} pending, and auto-applied ${params.summary.autoApplied}.`
+      : "";
     if (params.actualExecution === "auto-apply") {
-      return "A recent daemon heartbeat is active, and `finalize_ready` sessions are being auto-applied back into session_index.jsonl.";
+      return `${summaryCopy} Auto-apply is live for finalize-ready sessions.`.trim();
     }
 
     if (params.configuredAutoApply === "idle-finalize") {
       if (params.daemonStatus === "running") {
-        return "A recent daemon heartbeat exists, but the latest sweep is still preview-only. Restart or reload the daemon if you expect auto-apply to be active.";
+        return `${summaryCopy} A daemon heartbeat is active, but the latest sweep is still preview-only.`.trim();
       }
       if (params.daemonStatus === "stale") {
-        return "Auto-apply is configured, but the daemon heartbeat is stale. Start `npm run daemon` to resume finalize-ready applies.";
+        return `${summaryCopy} Auto-apply is configured, but the daemon heartbeat is stale.`.trim();
       }
       if (params.daemonStatus === "not_seen") {
-        return "Auto-apply is configured, but no daemon heartbeat has been recorded yet. The API/Web process alone will not apply renames until the daemon starts.";
+        return "Auto-apply is configured, but no daemon heartbeat has been recorded yet.";
       }
     }
 
     if (params.daemonStatus === "running") {
-      return "The daemon is running, but `rename.autoApply` is disabled, so sessions remain preview-only until you apply manually.";
+      return `${summaryCopy} The daemon is running, but auto-apply is disabled, so sessions remain preview-only.`.trim();
     }
 
     return "No active daemon heartbeat is visible. The runtime stays preview-only until a daemon sweep starts.";

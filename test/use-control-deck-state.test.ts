@@ -14,6 +14,10 @@ describe("useControlDeckState resource planning", () => {
     expect(panelResourcesForTab("maintenance")).toEqual(["overview", "daemon", "doctor", "ai-request-logs", "preview"]);
   });
 
+  it("loads only requeue resources for the requeue tab", () => {
+    expect(panelResourcesForTab("requeue")).toEqual(["overview", "daemon"]);
+  });
+
   it("keeps live refresh narrow on the settings tab", () => {
     expect(liveRefreshResourcesForTab("settings")).toEqual(["sessions", "preview", "overview", "daemon"]);
     expect(liveRefreshResourcesForTab("settings", { includePromptPreview: true })).toEqual([
@@ -33,6 +37,15 @@ describe("useControlDeckState resource planning", () => {
       "daemon",
       "doctor",
       "ai-request-logs"
+    ]);
+  });
+
+  it("refreshes overview and daemon on the requeue tab", () => {
+    expect(liveRefreshResourcesForTab("requeue")).toEqual([
+      "sessions",
+      "preview",
+      "overview",
+      "daemon"
     ]);
   });
 });

@@ -19,6 +19,9 @@ const SettingsPanel = React.lazy(() =>
 const RenameOpsPanel = React.lazy(() =>
   import("./RenameOpsPanel.js").then((module) => ({ default: module.RenameOpsPanel }))
 );
+const RequeuePanel = React.lazy(() =>
+  import("./RequeuePanel.js").then((module) => ({ default: module.RequeuePanel }))
+);
 const DaemonPanel = React.lazy(() =>
   import("./DaemonPanel.js").then((module) => ({ default: module.DaemonPanel }))
 );
@@ -61,6 +64,7 @@ export function App() {
   const [sessionFocusMode, setSessionFocusMode] = React.useState(false);
   const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(() => state.tab === "settings");
   const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(() => state.tab === "maintenance");
+  const [requeuePanelLoaded, setRequeuePanelLoaded] = React.useState(() => state.tab === "requeue");
   const [daemonPanelLoaded, setDaemonPanelLoaded] = React.useState(() => state.tab === "daemon");
   const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
   const uiLanguage = normalizeUiLanguage(state.configView);
@@ -106,6 +110,9 @@ export function App() {
     }
     if (state.tab === "maintenance") {
       setMaintenancePanelLoaded(true);
+    }
+    if (state.tab === "requeue") {
+      setRequeuePanelLoaded(true);
     }
     if (state.tab === "daemon") {
       setDaemonPanelLoaded(true);
@@ -229,6 +236,7 @@ export function App() {
 
   const showSettingsPanel = settingsPanelLoaded || state.tab === "settings";
   const showMaintenancePanel = maintenancePanelLoaded || state.tab === "maintenance";
+  const showRequeuePanel = requeuePanelLoaded || state.tab === "requeue";
   const showDaemonPanel = daemonPanelLoaded || state.tab === "daemon";
 
   return (
@@ -272,6 +280,7 @@ export function App() {
             ["sessions", tt("sessions")],
             ["settings", tt("settings")],
             ["maintenance", tt("renameOps")],
+            ["requeue", tt("requeue")],
             ["daemon", tt("daemon")]
           ].map(([id, label]) => (
             <button
@@ -417,6 +426,12 @@ export function App() {
                   daemon={state.daemon}
                   overview={state.overview}
                   onReload={() => void state.refreshSettings()}
+                  onOpenRequeue={() =>
+                    React.startTransition(() => {
+                      addAppTransitionType("nav-lateral");
+                      state.setTab("requeue");
+                    })
+                  }
                   onSave={(patch) => state.saveConfig(patch)}
                   previewApplyCount={previewApplyCount}
                   previewSuggestCount={previewSuggestCount}
@@ -428,7 +443,6 @@ export function App() {
                   onRefreshPromptPreview={(userConfig, options) =>
                     void state.refreshPromptPreview(userConfig, options)
                   }
-                  onReplayRenames={(params) => state.replayRenamesSince(params)}
                 />
               </AppViewTransition>
             </React.Suspense>
@@ -450,7 +464,6 @@ export function App() {
                   aiRequestLogDetail={state.aiRequestLogDetail}
                   daemon={state.daemon}
                   doctor={state.doctor}
-                  onReplayRenames={(params) => state.replayRenamesSince(params)}
                   onRefreshRuntime={() => state.refreshMaintenance()}
                   onRefreshPreview={(options) => state.refreshPreview(options)}
                   onSelectRequestLog={state.setSelectedRequestLogId}
@@ -458,6 +471,27 @@ export function App() {
                   preview={state.preview}
                   previewRefreshing={state.previewRefreshing}
                   selectedRequestLogId={state.selectedRequestLogId}
+                  uiLanguage={uiLanguage}
+                />
+              </AppViewTransition>
+            </React.Suspense>
+          ) : null}
+        </div>
+
+        <div className="app-tab-panel" hidden={state.tab !== "requeue"}>
+          {showRequeuePanel ? (
+            <React.Suspense
+              fallback={
+                <AppViewTransition exit="slide-down">
+                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
+                </AppViewTransition>
+              }
+            >
+              <AppViewTransition default="none" enter="slide-up">
+                <RequeuePanel
+                  onRefresh={() => state.refreshRequeue()}
+                  onRequeue={(params) => state.replayRenamesSince(params)}
+                  overview={state.overview}
                   uiLanguage={uiLanguage}
                 />
               </AppViewTransition>

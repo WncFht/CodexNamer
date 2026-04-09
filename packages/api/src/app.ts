@@ -491,9 +491,22 @@ export async function buildApiServer(options?: {
     eventLog.publish("maintenance.rename_requeued", {
       since: result.since,
       basis: result.basis,
-      queued: result.queued
+      queued: result.queued,
+      skipped: result.skipped
     });
     return result;
+  });
+
+  app.post("/api/v1/maintenance/requeue-preview", async (request) => {
+    const body =
+      (request.body as { since?: string; basis?: "session-updated-at" | "last-applied-at" } | undefined) ?? {};
+    if (!body.since?.trim()) {
+      throw new Error("since is required");
+    }
+    return manager.previewRequeueRenamesSince({
+      since: body.since,
+      basis: body.basis ?? "session-updated-at"
+    });
   });
 
   return app;

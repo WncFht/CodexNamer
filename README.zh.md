@@ -177,6 +177,10 @@ npm run daemon -- --interval 60
 
 > 说明：CodexNamer 现在只使用 `codexnamer` 前缀的配置与状态路径。
 
+仓库里提供了一份带注释的入门配置 [`config.example.toml`](./config.example.toml)。
+第一次使用时，建议先复制到 `~/.config/codexnamer/config.toml` 再按需修改。
+这份示例默认只做预览（`rename.auto_apply = "disabled"`），并优先复用你当前的 Codex provider 配置。
+
 最小示例：
 
 ```toml

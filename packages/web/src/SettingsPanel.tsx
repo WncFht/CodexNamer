@@ -336,14 +336,11 @@ function NamingSection(props: {
   promptPreview: PromptPreviewResponse | null;
   promptPreviewRefreshing: boolean;
   draftConfig: ConfigDocument;
+  onOpenRequeue: () => void;
   onRefreshPromptPreview: (
     userConfig?: ConfigDocument,
     options?: { urgent?: boolean }
   ) => void | Promise<void>;
-  onReplayRenames: (params: {
-    since: string;
-    basis: "session-updated-at" | "last-applied-at";
-  }) => Promise<unknown>;
   updateDraftState: DraftStateUpdater;
   updateDraftField: DraftFieldUpdater;
 }) {
@@ -360,9 +357,6 @@ function NamingSection(props: {
     | null
   >(null);
   const [customSeparator, setCustomSeparator] = useState("");
-  const [replaySince, setReplaySince] = useState("");
-  const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
-  const [replaying, setReplaying] = useState(false);
   const [manualPromptPreviewRefreshing, setManualPromptPreviewRefreshing] = useState(false);
 
   const handleManualPromptPreviewRefresh = async () => {
@@ -842,64 +836,21 @@ function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Replay queue", "Replay queue")}</p>
-              <h4>{props.text.inline("按时间把旧会话重新放回命名队列", "Requeue older sessions by time")}</h4>
+              <h4>{props.text.inline("到独立页面管理规则变更后的归队", "Handle rule-change requeue on its own page")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "当你调整命名逻辑后，可以把某个时间点之后的会话重新标记为待命名。这个动作不会改配置，只会清空对应候选并重新入队。",
-                  "After changing naming logic, you can mark sessions after a chosen time for rename replay. This does not change config; it only clears stale candidates and requeues them."
+                  "设置页只负责编辑规则；重新归队现在在单独页面里先做 preview，再决定哪些会话需要入队。",
+                  "Settings only edit the rule; requeue now lives on a dedicated page where you preview first, then decide which sessions should re-enter the queue."
                 )}
               </p>
             </div>
             <button
               className="btn-sm"
-              disabled={!replaySince || replaying}
-              onClick={async () => {
-                if (!replaySince) {
-                  return;
-                }
-                setReplaying(true);
-                try {
-                  await props.onReplayRenames({
-                    since: new Date(replaySince).toISOString(),
-                    basis: replayBasis
-                  });
-                } finally {
-                  setReplaying(false);
-                }
-              }}
+              onClick={props.onOpenRequeue}
               type="button"
             >
-              {replaying ? props.text.inline("重新入队中...", "Requeueing...") : props.text.inline("重新入队", "Requeue")}
+              {props.text.inline("打开重新入队页", "Open requeue page")}
             </button>
-          </div>
-          <div className="settings-two-up">
-            <label className="settings-field">
-              <span>{props.text.inline("时间起点", "Since")}</span>
-              <input
-                onChange={(event) => {
-                  setReplaySince(event.target.value);
-                }}
-                type="datetime-local"
-                value={replaySince}
-              />
-            </label>
-            <SelectField
-              label={props.text.inline("比较基准", "Compare against")}
-              onChange={(value) => {
-                setReplayBasis(value);
-              }}
-              options={[
-                {
-                  value: "session-updated-at",
-                  label: props.text.inline("会话更新时间", "Session updated time")
-                },
-                {
-                  value: "last-applied-at",
-                  label: props.text.inline("上次正式命名时间", "Last applied rename time")
-                }
-              ]}
-              value={replayBasis}
-            />
           </div>
         </article>
 
@@ -1867,10 +1818,7 @@ export function SettingsPanel(props: {
     userConfig?: ConfigDocument,
     options?: { urgent?: boolean }
   ) => void | Promise<void>;
-  onReplayRenames: (params: {
-    since: string;
-    basis: "session-updated-at" | "last-applied-at";
-  }) => Promise<unknown>;
+  onOpenRequeue: () => void;
   onSave: (patch: ConfigDocument) => void | Promise<void>;
 }) {
   const { draft, dirty, setDirty, draftRef, updateDraftState, updateDraftField } = useSettingsDraft(props.configView);
@@ -1938,8 +1886,8 @@ export function SettingsPanel(props: {
           <NamingSection
             draft={loadedDraft}
             draftConfig={previewDraft ?? encodeDraft(loadedDraft)}
+            onOpenRequeue={props.onOpenRequeue}
             onRefreshPromptPreview={props.onRefreshPromptPreview}
-            onReplayRenames={props.onReplayRenames}
             promptPreview={props.promptPreview}
             promptPreviewRefreshing={props.promptPreviewRefreshing}
             text={text}

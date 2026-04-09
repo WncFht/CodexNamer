@@ -178,6 +178,10 @@ Default config path:
 
 > Note: CodexNamer now uses only the `codexnamer` config and state prefixes.
 
+A commented starter config is available at [`config.example.toml`](./config.example.toml).
+For first-time use, copy it to `~/.config/codexnamer/config.toml` and adjust from there.
+It starts in preview mode (`rename.auto_apply = "disabled"`) and reuses your current Codex provider by default.
+
 Minimal example:
 
 ```toml

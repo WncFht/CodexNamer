@@ -2704,6 +2704,31 @@ pre {
   font-size: 12px;
 }
 
+.requeue-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.requeue-summary-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.requeue-summary-card {
+  display: grid;
+  gap: 12px;
+}
+
+.requeue-summary-card[data-tone="success"] {
+  background: linear-gradient(180deg, rgba(107, 122, 69, 0.12), rgba(107, 122, 69, 0.04));
+}
+
+.requeue-summary-card[data-tone="warning"] {
+  background: linear-gradient(180deg, rgba(165, 117, 51, 0.14), rgba(165, 117, 51, 0.05));
+}
+
 .ops-skip-chip-list {
   display: flex;
   gap: 8px;

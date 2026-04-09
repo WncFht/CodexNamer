@@ -14,6 +14,7 @@ import type {
   ProviderTestResponse,
   ParseCodexProviderResponse,
   RenameApplyResponse,
+  RenameReplayPreviewResult,
   RenameFreezeResponse,
   RenameReplayResult,
   RenameSuggestResponse,
@@ -265,6 +266,16 @@ export async function requeueRenamesSince(params: {
   basis: "session-updated-at" | "last-applied-at";
 }): Promise<RenameReplayResult> {
   return requestJson<RenameReplayResult>("/api/v1/maintenance/requeue-renames", {
+    method: "POST",
+    body: JSON.stringify(params)
+  });
+}
+
+export async function previewRequeueRenamesSince(params: {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+}): Promise<RenameReplayPreviewResult> {
+  return requestJson<RenameReplayPreviewResult>("/api/v1/maintenance/requeue-preview", {
     method: "POST",
     body: JSON.stringify(params)
   });

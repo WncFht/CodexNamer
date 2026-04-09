@@ -234,6 +234,35 @@ export interface RenameReplayResult {
   queued: number;
   clearedCandidates: number;
   matchedThreadIds: string[];
+  skipped: number;
+  skipCounts: Record<string, number>;
+}
+
+export interface RenameReplayPreviewItem {
+  threadId: string;
+  updatedAt?: string;
+  officialName?: string;
+  ruleStatus: "latest" | "outdated" | "manual" | "unknown";
+  action: "queue" | "skip";
+  reason:
+    | "rule_mismatch"
+    | "content_changed"
+    | "legacy_unknown_rule"
+    | "already_latest_rule"
+    | "manual_name"
+    | "frozen";
+}
+
+export interface RenameReplayPreviewResult {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+  currentRuleSignature: string;
+  matched: number;
+  queued: number;
+  skipped: number;
+  queueCounts: Record<string, number>;
+  skipCounts: Record<string, number>;
+  items: RenameReplayPreviewItem[];
 }
 
 export interface SessionIndexEntry {
@@ -353,12 +382,14 @@ export interface RenameStateRecord {
   currentCandidateName?: string;
   currentCandidateSource?: RenameSource;
   currentCandidateGeneratedAt?: string;
+  currentCandidateRuleSignature?: string;
   lastAutoName?: string;
   lastManualName?: string;
   lastAppliedName?: string;
   lastAppliedSource?: RenameSource;
   lastAppliedAt?: string;
   lastAppliedRevision?: string;
+  lastAppliedRuleSignature?: string;
   dirtySinceRename: boolean;
   forceRewrite: boolean;
   frozen: boolean;
@@ -377,6 +408,7 @@ export interface RenameHistoryRecord {
   reason?: string;
   appliedAt: string;
   appliedRevision?: string;
+  ruleSignature?: string;
   operator?: string;
 }
 
@@ -395,7 +427,12 @@ export interface SessionSummary {
   taskCompleteCount: number;
   provider?: string;
   model?: string;
+  lastAppliedSource?: RenameSource;
   statusEstimate?: SessionStatusEstimate;
+  currentRuleSignature?: string;
+  candidateRuleSignature?: string;
+  lastAppliedRuleSignature?: string;
+  ruleStatus?: "latest" | "outdated" | "manual" | "unknown";
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -450,6 +487,7 @@ export interface AiRequestLogRecord {
   model?: string;
   promptChars?: number;
   responseChars?: number;
+  finalName?: string;
   error?: string;
   metadata?: Record<string, string>;
 }
@@ -528,18 +566,46 @@ export interface OverviewReport {
     actualExecution: "preview-only" | "auto-apply";
     daemonAutoApply: boolean;
     daemonStatus: "running" | "stale" | "not_seen";
+    currentRuleSignature: string;
     lastSweepAt?: string;
     lastSweepIntervalSeconds?: number;
     lastSweepSummary?: {
       total: number;
+      dirtyTotal: number;
+      pending: number;
       suggest: number;
       apply: number;
       skip: number;
+      failedSuggestions: number;
+      autoApplied: number;
+      unchanged: number;
+      scan: {
+        scannedRollouts: number;
+        updatedSessions: number;
+      };
+      execution: "preview-only" | "auto-apply";
+    };
+    recentSweeps: Array<{
+      at: string;
+      total: number;
+      dirtyTotal: number;
+      pending: number;
+      suggest: number;
+      apply: number;
+      skip: number;
+      failedSuggestions: number;
       autoApplied: number;
       unchanged: number;
       execution: "preview-only" | "auto-apply";
-    };
+    }>;
     explain: string;
+  };
+  ruleCoverage: {
+    currentSignature: string;
+    latest: number;
+    outdated: number;
+    manual: number;
+    unknown: number;
   };
   workload: {
     totalTokens: number;

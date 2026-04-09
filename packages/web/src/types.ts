@@ -13,6 +13,11 @@ export type SessionSummary = {
   taskCompleteCount: number;
   provider?: string;
   model?: string;
+  lastAppliedSource?: "heuristic" | "ai" | "hybrid" | "manual" | "batch" | "recovered";
+  currentRuleSignature?: string;
+  candidateRuleSignature?: string;
+  lastAppliedRuleSignature?: string;
+  ruleStatus?: "latest" | "outdated" | "manual" | "unknown";
   statusEstimate?: string;
 };
 
@@ -56,6 +61,7 @@ export type SessionDetail = SessionSummary & {
     appliedAt: string;
     appliedRevision?: string;
     operator?: string;
+    ruleSignature?: string;
   }>;
 };
 
@@ -158,18 +164,46 @@ export type OverviewResponse = {
     actualExecution: "preview-only" | "auto-apply";
     daemonAutoApply: boolean;
     daemonStatus: "running" | "stale" | "not_seen";
+    currentRuleSignature: string;
     lastSweepAt?: string;
     lastSweepIntervalSeconds?: number;
     lastSweepSummary?: {
       total: number;
+      dirtyTotal: number;
+      pending: number;
       suggest: number;
       apply: number;
       skip: number;
+      failedSuggestions: number;
+      autoApplied: number;
+      unchanged: number;
+      scan: {
+        scannedRollouts: number;
+        updatedSessions: number;
+      };
+      execution: "preview-only" | "auto-apply";
+    };
+    recentSweeps: Array<{
+      at: string;
+      total: number;
+      dirtyTotal: number;
+      pending: number;
+      suggest: number;
+      apply: number;
+      skip: number;
+      failedSuggestions: number;
       autoApplied: number;
       unchanged: number;
       execution: "preview-only" | "auto-apply";
-    };
+    }>;
     explain: string;
+  };
+  ruleCoverage: {
+    currentSignature: string;
+    latest: number;
+    outdated: number;
+    manual: number;
+    unknown: number;
   };
   workload: {
     totalTokens: number;
@@ -218,6 +252,8 @@ export type OverviewResponse = {
       basis: "session-updated-at" | "last-applied-at";
       queued: number;
       clearedCandidates: number;
+      skipped: number;
+      skipCounts?: Record<string, number>;
     }>;
   };
   activity: {
@@ -326,6 +362,33 @@ export type RenameReplayResult = {
   queued: number;
   clearedCandidates: number;
   matchedThreadIds: string[];
+  skipped: number;
+  skipCounts: Record<string, number>;
+};
+
+export type RenameReplayPreviewResult = {
+  since: string;
+  basis: "session-updated-at" | "last-applied-at";
+  currentRuleSignature: string;
+  matched: number;
+  queued: number;
+  skipped: number;
+  queueCounts: Record<string, number>;
+  skipCounts: Record<string, number>;
+  items: Array<{
+    threadId: string;
+    updatedAt?: string;
+    officialName?: string;
+    ruleStatus: "latest" | "outdated" | "manual" | "unknown";
+    action: "queue" | "skip";
+    reason:
+      | "rule_mismatch"
+      | "content_changed"
+      | "legacy_unknown_rule"
+      | "already_latest_rule"
+      | "manual_name"
+      | "frozen";
+  }>;
 };
 
 export type ConfigView = {
@@ -418,6 +481,7 @@ export type AiRequestLogResponse = {
     model?: string;
     promptChars?: number;
     responseChars?: number;
+    finalName?: string;
     error?: string;
     metadata?: Record<string, string>;
   }>;

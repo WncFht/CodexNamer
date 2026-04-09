@@ -442,7 +442,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       reportFailure(error);
     });
 
-    if (tab !== "maintenance" && tab !== "daemon") {
+    if (tab !== "maintenance" && tab !== "requeue" && tab !== "daemon") {
       return;
     }
 
@@ -592,6 +592,10 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       }),
     refreshMaintenance: () =>
       loadResources(panelResourcesForTab("maintenance"), {
+        threadId: latestUiStateRef.current.selectedId
+      }),
+    refreshRequeue: () =>
+      loadResources(panelResourcesForTab("requeue"), {
         threadId: latestUiStateRef.current.selectedId
       }),
     refreshDaemon: () =>

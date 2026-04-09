@@ -63,10 +63,6 @@ function formatCompactNumber(value: number, language: UiLanguage): string {
   }).format(value);
 }
 
-function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
-}
-
 function formatDurationMs(value: number | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "--";
@@ -225,16 +221,6 @@ function aiRequestStatusLabel(status: string | undefined, language: UiLanguage):
   }
 }
 
-function replayBasisLabel(
-  basis: "session-updated-at" | "last-applied-at",
-  language: UiLanguage
-): string {
-  if (language === "zh-CN") {
-    return basis === "last-applied-at" ? "按上次正式命名时间" : "按会话更新时间";
-  }
-  return basis === "last-applied-at" ? "last applied at" : "session updated at";
-}
-
 function reasonTone(reason: string): "warning" | "manual" | "success" {
   if (reason === "candidate_ready" || reason === "finalize_ready") {
     return "success";
@@ -243,6 +229,25 @@ function reasonTone(reason: string): "warning" | "manual" | "success" {
     return "manual";
   }
   return "warning";
+}
+
+function shortRuleSignature(value: string | undefined): string {
+  if (!value) {
+    return "--";
+  }
+  if (value.length <= 16) {
+    return value;
+  }
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}
+
+function sweepAxisLabel(value: string, language: UiLanguage): string {
+  return new Intl.DateTimeFormat(language, {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 export function RenameOpsPanel(props: {
@@ -258,10 +263,6 @@ export function RenameOpsPanel(props: {
   onSelectRequestLog: (id?: number) => void;
   onRefreshRuntime: () => void | Promise<void>;
   onRefreshPreview: (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => void | Promise<void>;
-  onReplayRenames: (params: {
-    since: string;
-    basis: "session-updated-at" | "last-applied-at";
-  }) => Promise<unknown> | unknown;
 }) {
   const {
     aiRequestLogs: initialAiRequestLogs,
@@ -270,8 +271,7 @@ export function RenameOpsPanel(props: {
     preview,
     uiLanguage,
     selectedRequestLogId,
-    onSelectRequestLog,
-    onReplayRenames
+    onSelectRequestLog
   } = props;
   const LOGS_PER_PAGE = 10;
   const [logQuery, setLogQuery] = React.useState("");
@@ -282,16 +282,12 @@ export function RenameOpsPanel(props: {
   const [logPageInput, setLogPageInput] = React.useState("1");
   const [requestLogReport, setRequestLogReport] = React.useState<AiRequestLogResponse | null>(initialAiRequestLogs);
   const [requestLogLoading, setRequestLogLoading] = React.useState(false);
-  const [replaySince, setReplaySince] = React.useState("");
-  const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
-  const [replaying, setReplaying] = React.useState(false);
   const tt = React.useCallback((key: Parameters<typeof t>[1]) => t(uiLanguage, key), [uiLanguage]);
   const isChinese = uiLanguage === "zh-CN";
   const inline = React.useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]);
   const appliedLabel = isChinese ? "已应用" : "Applied";
   const previewLabel = isChinese ? "仅预览" : "Preview";
   const skippedLabel = isChinese ? "已跳过" : "Skipped";
-  const manualSourceLabel = isChinese ? "手动" : "Manual";
   const noDataLabel = isChinese ? "暂无数据" : "No data";
   const runtimeDisplay = deriveRuntimeDisplay(overview, daemon);
   const aiRequestLogs = requestLogReport ?? initialAiRequestLogs;
@@ -318,8 +314,12 @@ export function RenameOpsPanel(props: {
       .sort((left, right) => right.count - left.count);
   }, [previewItems]);
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
+  const recentSweeps = React.useMemo(
+    () => (overview?.runtime.recentSweeps ?? []).slice().reverse(),
+    [overview?.runtime.recentSweeps]
+  );
   const latestAiRequest = aiRequestLogs?.items[0];
-  const replayRuns = overview?.replay.recentRuns ?? [];
+  const currentRuleSignature = overview?.runtime.currentRuleSignature || overview?.ruleCoverage.currentSignature || "";
   const requestLogRequestIdRef = React.useRef(0);
   const stateGuide = [
     {
@@ -414,21 +414,6 @@ export function RenameOpsPanel(props: {
       onSelectRequestLog(undefined);
     }
   }, [aiRequestLogs, onSelectRequestLog, selectedRequestLogId, visibleAiRequests]);
-
-  const handleReplay = async () => {
-    if (!replaySince || replaying) {
-      return;
-    }
-    setReplaying(true);
-    try {
-      await onReplayRenames({
-        since: new Date(replaySince).toISOString(),
-        basis: replayBasis
-      });
-    } finally {
-      setReplaying(false);
-    }
-  };
 
   const handleLogPageJump = () => {
     const parsed = Number(logPageInput);
@@ -611,90 +596,6 @@ export function RenameOpsPanel(props: {
     });
   }, [appliedLabel, overview, previewLabel, skippedLabel]);
 
-  const sourceOption = React.useMemo(() => {
-    if (!overview) {
-      return undefined;
-    }
-
-    const sourceSeries = [
-      { name: "AI", value: overview.renameHistory.aiApplied, colorKey: "accent" as const },
-      { name: manualSourceLabel, value: overview.renameHistory.manualApplied, colorKey: "manual" as const }
-    ].filter((item) => item.value > 0);
-
-    return (theme: ChartTheme): ChartOption => ({
-      backgroundColor: "transparent",
-      tooltip: {
-        trigger: "item",
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        borderColor: "rgba(255, 255, 255, 0.1)",
-        textStyle: { color: "#fff", fontSize: 12 },
-        formatter(params: { name: string; value: number; percent: number }) {
-          return `${params.name}<br/>${formatCompactNumber(params.value, props.uiLanguage)} (${formatPercent(params.percent)})`;
-        }
-      },
-      legend: {
-        type: "scroll",
-        orient: "vertical",
-        right: 10,
-        top: 16,
-        bottom: 16,
-        textStyle: {
-          color: theme.text,
-          fontSize: 11
-        },
-        pageIconColor: theme.text,
-        pageIconInactiveColor: theme.muted,
-        pageTextStyle: {
-          color: theme.text
-        }
-      },
-      series: [
-        {
-          type: "pie",
-          radius: ["42%", "70%"],
-          center: ["34%", "52%"],
-          avoidLabelOverlap: true,
-          label: {
-            show: false
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: 12,
-              fontWeight: "bold",
-              formatter(params: { percent: number }) {
-                return formatPercent(params.percent);
-              }
-            }
-          },
-          itemStyle: {
-            borderRadius: 4,
-            borderColor: theme.surfaceAlt,
-            borderWidth: 2
-          },
-          data:
-            sourceSeries.length > 0
-              ? sourceSeries.map((item) => ({
-                  name: item.name,
-                  value: item.value,
-                  itemStyle: {
-                    color: theme[item.colorKey]
-                  }
-                }))
-              : [
-                  {
-                    name: noDataLabel,
-                    value: 1,
-                    itemStyle: {
-                      color: theme.border
-                    }
-                  }
-                ]
-        }
-      ]
-    });
-  }, [manualSourceLabel, noDataLabel, overview, props.uiLanguage]);
-
   const pipelineOption = React.useMemo(() => {
     if (!overview) {
       return undefined;
@@ -857,6 +758,423 @@ export function RenameOpsPanel(props: {
     });
   }, [previewItems, props.uiLanguage]);
 
+  const sweepTrendOption = React.useMemo(() => {
+    if (recentSweeps.length === 0) {
+      return undefined;
+    }
+
+    const labels = recentSweeps.map((item) => sweepAxisLabel(item.at, props.uiLanguage));
+    const startIndex = Math.max(0, recentSweeps.length - 10);
+    const handledLabel = inline("本轮处理", "Handled");
+    const dirtyLabel = inline("发现 dirty", "Dirty found");
+    const pendingLabel = inline("剩余待扫", "Pending");
+    const failedLabel = inline("建议失败", "Suggest failed");
+
+    return (theme: ChartTheme, echartsLib: any): ChartOption => ({
+      backgroundColor: "transparent",
+      animationDuration: 280,
+      tooltip: {
+        trigger: "axis",
+        confine: true,
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        textStyle: { color: "#fff", fontSize: 12 }
+      },
+      legend: {
+        top: 8,
+        left: 16,
+        right: 16,
+        data: [handledLabel, dirtyLabel, pendingLabel, failedLabel],
+        textStyle: {
+          color: theme.text,
+          fontSize: 11
+        },
+        type: "scroll",
+        pageIconColor: theme.text,
+        pageIconInactiveColor: theme.muted,
+        pageTextStyle: {
+          color: theme.text
+        }
+      },
+      grid: {
+        left: 16,
+        right: 20,
+        top: 54,
+        bottom: 72,
+        containLabel: true
+      },
+      dataZoom: [
+        {
+          type: "inside",
+          filterMode: "none",
+          zoomLock: recentSweeps.length <= 10,
+          startValue: startIndex,
+          endValue: recentSweeps.length - 1
+        },
+        {
+          type: "slider",
+          filterMode: "none",
+          height: 18,
+          bottom: 18,
+          borderColor: "transparent",
+          backgroundColor: theme.surface,
+          fillerColor: "rgba(201, 100, 66, 0.18)",
+          handleStyle: {
+            color: theme.accent,
+            borderColor: theme.surfaceAlt
+          },
+          moveHandleStyle: {
+            color: theme.accent
+          },
+          textStyle: {
+            color: theme.muted
+          },
+          startValue: startIndex,
+          endValue: recentSweeps.length - 1
+        }
+      ],
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        data: labels,
+        axisLine: {
+          lineStyle: {
+            color: theme.border
+          }
+        },
+        axisLabel: {
+          color: theme.text,
+          fontSize: 11
+        },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: theme.border,
+            type: "dashed"
+          }
+        }
+      },
+      yAxis: {
+        type: "value",
+        minInterval: 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: theme.text,
+          fontSize: 11
+        },
+        splitLine: {
+          lineStyle: {
+            color: theme.border,
+            type: "dashed"
+          }
+        }
+      },
+      series: [
+        {
+          name: handledLabel,
+          type: "line",
+          smooth: true,
+          symbolSize: 7,
+          data: recentSweeps.map((item) => item.total),
+          lineStyle: {
+            width: 2,
+            color: theme.accent
+          },
+          itemStyle: {
+            color: theme.accent
+          },
+          areaStyle: {
+            color: new echartsLib.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: "rgba(201, 100, 66, 0.26)" },
+              { offset: 1, color: "rgba(201, 100, 66, 0.03)" }
+            ])
+          }
+        },
+        {
+          name: dirtyLabel,
+          type: "line",
+          smooth: true,
+          symbolSize: 6,
+          data: recentSweeps.map((item) => item.dirtyTotal),
+          lineStyle: {
+            width: 2,
+            color: theme.success
+          },
+          itemStyle: {
+            color: theme.success
+          }
+        },
+        {
+          name: pendingLabel,
+          type: "line",
+          smooth: true,
+          symbolSize: 6,
+          data: recentSweeps.map((item) => item.pending),
+          lineStyle: {
+            width: 2,
+            color: theme.warning
+          },
+          itemStyle: {
+            color: theme.warning
+          }
+        },
+        {
+          name: failedLabel,
+          type: "line",
+          smooth: true,
+          symbolSize: 6,
+          data: recentSweeps.map((item) => item.failedSuggestions),
+          lineStyle: {
+            width: 2,
+            color: theme.danger
+          },
+          itemStyle: {
+            color: theme.danger
+          }
+        }
+      ]
+    });
+  }, [inline, props.uiLanguage, recentSweeps]);
+
+  const sweepActionOption = React.useMemo(() => {
+    if (recentSweeps.length === 0) {
+      return undefined;
+    }
+
+    const labels = recentSweeps.map((item) => sweepAxisLabel(item.at, props.uiLanguage));
+    const startIndex = Math.max(0, recentSweeps.length - 10);
+    const suggestLabel = inline("建议", "Suggest");
+    const applyLabel = inline("待应用", "Apply");
+    const skipLabel = inline("跳过", "Skip");
+    const autoAppliedLabel = inline("自动落盘", "Auto applied");
+
+    return (theme: ChartTheme): ChartOption => ({
+      backgroundColor: "transparent",
+      animationDuration: 280,
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow"
+        },
+        confine: true,
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        textStyle: { color: "#fff", fontSize: 12 }
+      },
+      legend: {
+        top: 8,
+        left: 16,
+        right: 16,
+        data: [suggestLabel, applyLabel, skipLabel, autoAppliedLabel],
+        textStyle: {
+          color: theme.text,
+          fontSize: 11
+        },
+        type: "scroll",
+        pageIconColor: theme.text,
+        pageIconInactiveColor: theme.muted,
+        pageTextStyle: {
+          color: theme.text
+        }
+      },
+      grid: {
+        left: 16,
+        right: 20,
+        top: 54,
+        bottom: 72,
+        containLabel: true
+      },
+      dataZoom: [
+        {
+          type: "inside",
+          filterMode: "none",
+          zoomLock: recentSweeps.length <= 10,
+          startValue: startIndex,
+          endValue: recentSweeps.length - 1
+        },
+        {
+          type: "slider",
+          filterMode: "none",
+          height: 18,
+          bottom: 18,
+          borderColor: "transparent",
+          backgroundColor: theme.surface,
+          fillerColor: "rgba(201, 100, 66, 0.18)",
+          handleStyle: {
+            color: theme.accent,
+            borderColor: theme.surfaceAlt
+          },
+          moveHandleStyle: {
+            color: theme.accent
+          },
+          textStyle: {
+            color: theme.muted
+          },
+          startValue: startIndex,
+          endValue: recentSweeps.length - 1
+        }
+      ],
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisLine: {
+          lineStyle: {
+            color: theme.border
+          }
+        },
+        axisLabel: {
+          color: theme.text,
+          fontSize: 11
+        }
+      },
+      yAxis: {
+        type: "value",
+        minInterval: 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: theme.text,
+          fontSize: 11
+        },
+        splitLine: {
+          lineStyle: {
+            color: theme.border,
+            type: "dashed"
+          }
+        }
+      },
+      series: [
+        {
+          name: suggestLabel,
+          type: "bar",
+          stack: "queue",
+          barMaxWidth: 24,
+          data: recentSweeps.map((item) => item.suggest),
+          itemStyle: {
+            color: theme.warning,
+            borderRadius: [4, 4, 0, 0]
+          }
+        },
+        {
+          name: applyLabel,
+          type: "bar",
+          stack: "queue",
+          barMaxWidth: 24,
+          data: recentSweeps.map((item) => item.apply),
+          itemStyle: {
+            color: theme.accent,
+            borderRadius: [4, 4, 0, 0]
+          }
+        },
+        {
+          name: skipLabel,
+          type: "bar",
+          stack: "queue",
+          barMaxWidth: 24,
+          data: recentSweeps.map((item) => item.skip),
+          itemStyle: {
+            color: theme.muted,
+            borderRadius: [4, 4, 0, 0]
+          }
+        },
+        {
+          name: autoAppliedLabel,
+          type: "line",
+          smooth: true,
+          symbolSize: 7,
+          data: recentSweeps.map((item) => item.autoApplied),
+          lineStyle: {
+            width: 2,
+            color: theme.success
+          },
+          itemStyle: {
+            color: theme.success
+          }
+        }
+      ]
+    });
+  }, [inline, props.uiLanguage, recentSweeps]);
+
+  const ruleCoverageOption = React.useMemo(() => {
+    if (!overview) {
+      return undefined;
+    }
+
+    const coverageItems = [
+      { label: inline("最新规则", "Latest"), value: overview.ruleCoverage.latest, color: "#4f7d66" },
+      { label: inline("规则落后", "Outdated"), value: overview.ruleCoverage.outdated, color: "#c96442" },
+      { label: inline("手动命名", "Manual"), value: overview.ruleCoverage.manual, color: "#8e5a4f" },
+      { label: inline("未知签名", "Unknown"), value: overview.ruleCoverage.unknown, color: "#a57533" }
+    ];
+
+    return (theme: ChartTheme): ChartOption => ({
+      backgroundColor: "transparent",
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow"
+        },
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        textStyle: { color: "#fff", fontSize: 12 }
+      },
+      grid: {
+        left: 20,
+        right: 20,
+        top: 16,
+        bottom: 16,
+        containLabel: true
+      },
+      xAxis: {
+        type: "value",
+        minInterval: 1,
+        axisLabel: {
+          color: theme.text,
+          fontSize: 11
+        },
+        splitLine: {
+          lineStyle: {
+            color: theme.border,
+            type: "dashed"
+          }
+        }
+      },
+      yAxis: {
+        type: "category",
+        data: coverageItems.map((item) => item.label),
+        axisLabel: {
+          color: theme.text,
+          fontSize: 11
+        },
+        axisLine: { show: false },
+        axisTick: { show: false }
+      },
+      series: [
+        {
+          type: "bar",
+          barWidth: 18,
+          data: coverageItems.map((item) => ({
+            value: item.value,
+            itemStyle: {
+              color: item.color,
+              borderRadius: [0, 10, 10, 0]
+            }
+          })),
+          label: {
+            show: true,
+            position: "right",
+            color: theme.text,
+            fontSize: 11,
+            formatter(params: { value: number }) {
+              return formatUiNumber(params.value, props.uiLanguage);
+            }
+          }
+        }
+      ]
+    });
+  }, [inline, overview, props.uiLanguage]);
+
   return (
     <section className="panel-grid ops-layout">
       <section className="detail-panel ops-runtime-panel ops-span-wide">
@@ -865,12 +1183,13 @@ export function RenameOpsPanel(props: {
             <p className="panel-kicker">{inline("执行状态", "Execution")}</p>
             <h3>{inline("自动重命名运行态", "Auto rename runtime")}</h3>
             <p className="settings-copy">
-              {(runtimeDisplay.sweepRunning ? runtimeProgressExplanation(props.uiLanguage) : "") ||
-                overview?.runtime.explain ||
-                inline(
-                  "当前 daemon 只做 scan + preview。`finalize_ready` 表示允许应用，不表示已经自动落盘。",
-                  "The current daemon only scans and previews. `finalize_ready` means eligible to apply, not already auto-applied."
-                )}
+              {runtimeDisplay.sweepRunning
+                ? runtimeProgressExplanation(props.uiLanguage)
+                : overview?.runtime.explain ||
+                  inline(
+                    "还没有 sweep 摘要。启动 daemon 后，这里会明确告诉你扫了多少、剩了多少、有没有自动落盘。",
+                    "No sweep summary has been recorded yet. Once the daemon runs, this section will show exactly how much was scanned, how much is left, and whether anything auto-applied."
+                  )}
             </p>
           </div>
           <div className="header-actions">
@@ -911,13 +1230,17 @@ export function RenameOpsPanel(props: {
             {inline("Daemon 自动应用", "Daemon auto apply")}: {overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
           </span>
           <span className="chip manual">
+            {inline("当前规则签名", "Current rule signature")}: {shortRuleSignature(currentRuleSignature)}
+          </span>
+          <span className="chip manual">
             {inline("最近一轮 Sweep", "Last sweep")}: {formatWhen(overview?.runtime.lastSweepAt, props.uiLanguage)}
+          </span>
+          <span className={`chip ${(lastSweepSummary?.pending ?? 0) > 0 ? "warning" : "success"}`}>
+            {inline("本轮 dirty / 待扫", "Dirty / pending")}: {formatUiNumber(lastSweepSummary?.dirtyTotal, props.uiLanguage)} /{" "}
+            {formatUiNumber(lastSweepSummary?.pending, props.uiLanguage)}
           </span>
           <span className="chip success">
             {inline("最近应用", "Last apply")}: {formatWhen(overview?.renameHistory.lastAppliedAt, props.uiLanguage)}
-          </span>
-          <span className="chip manual">
-            {inline("最近重入队", "Last replay")}: {formatWhen(overview?.replay.lastRunAt, props.uiLanguage)}
           </span>
           <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
             {inline("活跃 AI 请求", "Active AI requests")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
@@ -929,17 +1252,33 @@ export function RenameOpsPanel(props: {
 
         <div className="settings-metrics-grid ops-kpis">
           <article className="metric-card">
-            <span className="metric-label">{inline("上一轮后台 Sweep", "Last daemon sweep")}</span>
+            <span className="metric-label">{inline("上一轮 Sweep 处理量", "Last sweep handled")}</span>
             <strong>{formatUiNumber(lastSweepSummary?.total, props.uiLanguage)}</strong>
             <p>
-              {formatUiNumber(lastSweepSummary?.suggest, props.uiLanguage)} {inline("建议", "suggest")} / {formatUiNumber(lastSweepSummary?.apply, props.uiLanguage)} {inline("待应用", "apply")} / {formatUiNumber(lastSweepSummary?.skip, props.uiLanguage)} {inline("跳过", "skip")}
+              {formatUiNumber(lastSweepSummary?.dirtyTotal, props.uiLanguage)} {inline("个 dirty 命中", "dirty found")} /{" "}
+              {formatUiNumber(lastSweepSummary?.pending, props.uiLanguage)} {inline("个待下轮", "left pending")}
+            </p>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">{inline("Sweep 扫描触达", "Sweep scan touch")}</span>
+            <strong>{formatUiNumber(lastSweepSummary?.scan.scannedRollouts, props.uiLanguage)}</strong>
+            <p>
+              {formatUiNumber(lastSweepSummary?.scan.updatedSessions, props.uiLanguage)} {inline("个会话内容更新", "sessions updated")}
             </p>
           </article>
           <article className="metric-card">
             <span className="metric-label">{inline("Sweep 落盘结果", "Sweep apply result")}</span>
             <strong>{formatUiNumber(lastSweepSummary?.autoApplied, props.uiLanguage)}</strong>
             <p>
-              {formatUiNumber(lastSweepSummary?.unchanged, props.uiLanguage)} {inline("未变化", "unchanged")} / {lastSweepSummary?.execution ?? "preview-only"}
+              {formatUiNumber(lastSweepSummary?.unchanged, props.uiLanguage)} {inline("未变化", "unchanged")} /{" "}
+              {formatUiNumber(lastSweepSummary?.failedSuggestions, props.uiLanguage)} {inline("建议失败", "suggest failed")}
+            </p>
+          </article>
+          <article className="metric-card">
+            <span className="metric-label">{inline("规则覆盖状态", "Rule coverage")}</span>
+            <strong>{formatUiNumber(overview?.ruleCoverage.outdated, props.uiLanguage)}</strong>
+            <p>
+              {formatUiNumber(overview?.ruleCoverage.latest, props.uiLanguage)} {inline("已对齐最新规则", "already latest")}
             </p>
           </article>
           <article className="metric-card">
@@ -960,37 +1299,37 @@ export function RenameOpsPanel(props: {
             <span className="metric-label">{inline("已应用重命名", "Applied renames")}</span>
             <strong>{formatUiNumber(overview?.renameHistory.applied, props.uiLanguage)}</strong>
             <p>
-              {formatUiNumber(overview?.renameHistory.autoApplied, props.uiLanguage)} {inline("自动应用", "auto")} / {formatUiNumber(overview?.renameHistory.manualApplied, props.uiLanguage)} {inline("手动应用", "manual")}
-            </p>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">{inline("平均标题字数", "Average title length")}</span>
-            <strong>{formatUiNumber(overview?.workload.averageTitleLength, props.uiLanguage)}</strong>
-            <p>
-              {formatUiNumber(overview?.sessions.named, props.uiLanguage)} {inline("个正式标题参与统计", "official titles in sample")}
+              {formatUiNumber(overview?.renameHistory.autoApplied, props.uiLanguage)} {inline("自动应用", "auto")} /{" "}
+              {formatUiNumber(overview?.renameHistory.manualApplied, props.uiLanguage)} {inline("手动应用", "manual")}
             </p>
           </article>
           <article className="metric-card">
             <span className="metric-label">{inline("当前即时评估", "Live preview queue")}</span>
-            <strong>
-              {formatUiNumber(previewApplyCount + previewSuggestCount, props.uiLanguage)}
-            </strong>
+            <strong>{formatUiNumber(previewApplyCount + previewSuggestCount, props.uiLanguage)}</strong>
             <p>
-              {formatUiNumber(previewApplyCount, props.uiLanguage)} {inline("待应用", "apply")} / {formatUiNumber(previewSuggestCount, props.uiLanguage)} {inline("待建议", "suggest")}
-            </p>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">{inline("最近 AI 请求", "Latest AI request")}</span>
-            <strong>{latestAiRequest ? formatDurationMs(latestAiRequest.durationMs) : "--"}</strong>
-            <p>
-              {latestAiRequest
-                ? `${latestAiRequest.transport} / ${latestAiRequest.status}`
-                : inline("还没有请求日志", "No request logs yet")}
+              {formatUiNumber(previewApplyCount, props.uiLanguage)} {inline("待应用", "apply")} /{" "}
+              {formatUiNumber(previewSuggestCount, props.uiLanguage)} {inline("待建议", "suggest")}
             </p>
           </article>
         </div>
       </section>
 
+      <ChartCard
+        buildOption={sweepTrendOption}
+        copy={inline(
+          "这里直接回答后台每轮 sweep 扫了多少 dirty、真正处理了多少、还剩多少待下一轮，以及失败有没有在上升。",
+          "This shows how many dirty sessions each daemon sweep saw, how many it actually handled, how much remained for the next round, and whether failures are climbing."
+        )}
+        title={inline("后台 Sweep 趋势", "Daemon sweep trend")}
+      />
+      <ChartCard
+        buildOption={sweepActionOption}
+        copy={inline(
+          "把每轮 sweep 拆成 suggest / apply / skip / auto-applied，便于看出 daemon 是卡在排队、跳过还是已经开始落盘。",
+          "Breaks each sweep into suggest / apply / skip / auto-applied so you can see whether the daemon is mostly queuing, skipping, or actually landing titles."
+        )}
+        title={inline("Sweep 动作拆分", "Sweep action breakdown")}
+      />
       <ChartCard
         buildOption={pipelineOption}
         copy={inline("会话会先落在活跃、候选就绪、可终稿这些阶段里。这里回答的是：现在整体卡在哪一段。", "Sessions first land in stages like active, candidate-ready, and finalize-ready. This chart answers where the system is currently sitting." )}
@@ -1007,9 +1346,12 @@ export function RenameOpsPanel(props: {
         title={inline("近期重命名活动", "Recent rename activity")}
       />
       <ChartCard
-        buildOption={sourceOption}
-        copy={inline("真正算作正式命名的来源分布，现在只统计 AI 和手动命名。", "Distribution of accepted rename sources. Only AI and manual names count as official now.")}
-        title={inline("应用来源分布", "Applied source mix")}
+        buildOption={ruleCoverageOption}
+        copy={inline(
+          "当前正式标题按规则签名分成已对齐、落后、手动和未知四类。这里能直接看出是不是该去新的 requeue 页面补扫。",
+          "Official titles are grouped by rule signature into latest, outdated, manual, and unknown. This tells you immediately whether it is time to head to the new requeue page."
+        )}
+        title={inline("规则覆盖分布", "Rule coverage")}
       />
 
       <section className="detail-panel ops-span-wide ops-state-guide">
@@ -1101,82 +1443,6 @@ export function RenameOpsPanel(props: {
               </article>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="detail-panel ops-replay-panel">
-        <div className="panel-topline">
-          <div>
-            <p className="panel-kicker">{inline("Replay", "Replay")}</p>
-            <h3>{inline("规则变更后的重新入队", "Rename replay after rule changes")}</h3>
-            <p className="settings-copy">
-              {inline(
-                "当你改了命名规则，可以把某个时间点之后的会话重新打回命名队列。它不会改配置，只会清空旧 candidate 并重新排队。",
-                "After changing naming logic, you can push sessions after a chosen time back into the rename queue. This does not touch config; it only clears stale candidates and requeues them."
-              )}
-            </p>
-          </div>
-          <span className="chip manual">
-            {inline("最近执行", "Last run")}: {formatWhen(overview?.replay.lastRunAt, props.uiLanguage)}
-          </span>
-        </div>
-
-        <div className="ops-replay-form">
-          <label className="ops-log-filter">
-            <span>{inline("起始时间", "Since")}</span>
-            <input
-              type="datetime-local"
-              value={replaySince}
-              onChange={(event) => setReplaySince(event.target.value)}
-            />
-          </label>
-          <label className="ops-log-filter">
-            <span>{inline("基准", "Basis")}</span>
-            <select
-              value={replayBasis}
-              onChange={(event) =>
-                setReplayBasis(event.target.value as "session-updated-at" | "last-applied-at")
-              }
-            >
-              <option value="session-updated-at">{inline("按会话更新时间", "Session updated at")}</option>
-              <option value="last-applied-at">{inline("按上次正式命名时间", "Last applied at")}</option>
-            </select>
-          </label>
-          <button className="btn-sm" type="button" disabled={!replaySince || replaying} onClick={() => void handleReplay()}>
-            {replaying ? inline("重新入队中...", "Requeueing...") : inline("重新入队", "Requeue")}
-          </button>
-        </div>
-
-        <div className="ops-log-summary-row">
-          <span className="ops-log-summary-chip">
-            {inline("最近记录", "Recent runs")}: {formatUiNumber(replayRuns.length, props.uiLanguage)}
-          </span>
-          <span className="ops-log-summary-chip">
-            {inline("最近一轮清空 candidate", "Last cleared candidates")}: {formatUiNumber(replayRuns[0]?.clearedCandidates, props.uiLanguage)}
-          </span>
-        </div>
-
-        <div className="history-stack">
-          {replayRuns.length === 0 ? (
-            <div className="ops-queue-empty">
-              {inline("还没有 replay 记录。", "No replay runs have been recorded yet.")}
-            </div>
-          ) : null}
-          {replayRuns.map((run) => (
-            <article className="history-row" key={`${run.requestedAt}-${run.since}-${run.basis}`}>
-              <div>
-                <strong>{replayBasisLabel(run.basis, props.uiLanguage)}</strong>
-                <p>
-                  {inline("起点", "Since")}: {formatWhen(run.since, props.uiLanguage)}
-                </p>
-              </div>
-              <div className="ops-replay-run-meta">
-                <span>{formatUiNumber(run.queued, props.uiLanguage)} {inline("个会话入队", "queued")}</span>
-                <span>{formatUiNumber(run.clearedCandidates, props.uiLanguage)} {inline("个 candidate 清空", "candidates cleared")}</span>
-                <span>{formatWhen(run.requestedAt, props.uiLanguage)}</span>
-              </div>
-            </article>
-          ))}
         </div>
       </section>
 
@@ -1406,11 +1672,17 @@ export function RenameOpsPanel(props: {
               </div>
               <div>
                 <dt>{inline("最终标题", "Final name")}</dt>
-                <dd>{props.aiRequestLogDetail.result?.composition?.finalName ?? noDataLabel}</dd>
+                <dd>{props.aiRequestLogDetail.finalName ?? props.aiRequestLogDetail.result?.composition?.finalName ?? noDataLabel}</dd>
               </div>
               <div>
                 <dt>{inline("信息", "Info")}</dt>
-                <dd>{props.aiRequestLogDetail.error ?? noDataLabel}</dd>
+                <dd>
+                  {props.aiRequestLogDetail.status === "succeeded"
+                    ? props.aiRequestLogDetail.finalName ??
+                      props.aiRequestLogDetail.result?.composition?.finalName ??
+                      noDataLabel
+                    : props.aiRequestLogDetail.error ?? noDataLabel}
+                </dd>
               </div>
             </dl>
             <details className="settings-disclosure" open>
@@ -1506,9 +1778,15 @@ export function RenameOpsPanel(props: {
                   </td>
                   <td className="ops-log-mono ops-log-col-endpoint" title={item.baseUrl ?? ""}>{item.baseUrl ?? noDataLabel}</td>
                   <td className="ops-log-col-info">
-                    <div className="ops-log-primary" title={item.error ?? ""}>{item.error ?? noDataLabel}</div>
-                    <div className="ops-log-secondary ops-log-nowrap" title={item.error ? inline("错误", "error") : item.metadata?.profile ?? ""}>
-                      {item.error ? inline("错误", "error") : item.metadata?.profile ?? noDataLabel}
+                    <div className="ops-log-primary" title={item.status === "succeeded" ? item.finalName ?? "" : item.error ?? ""}>
+                      {item.status === "succeeded" ? item.finalName ?? noDataLabel : item.error ?? noDataLabel}
+                    </div>
+                    <div className="ops-log-secondary ops-log-nowrap" title={item.status === "succeeded" ? inline("输出标题", "final name") : item.error ? inline("错误", "error") : item.metadata?.profile ?? ""}>
+                      {item.status === "succeeded"
+                        ? inline("输出标题", "final name")
+                        : item.error
+                          ? inline("错误", "error")
+                          : item.metadata?.profile ?? noDataLabel}
                     </div>
                   </td>
                 </tr>
