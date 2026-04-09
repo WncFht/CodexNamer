@@ -155,7 +155,11 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
   codexHome: string;
   stateDir: string;
 }): Promise<CodexNamer> {
+  const workspaceRoot = path.dirname(overrides.codexHome);
+  const configPath = path.join(workspaceRoot, ".config", "codexnamer", "config.toml");
   const manager = await CodexNamer.create({
+    cwd: workspaceRoot,
+    configPath,
     overrides: buildConfigForTests({
       general: {
         codexHome: overrides.codexHome,

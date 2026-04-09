@@ -111,6 +111,7 @@ export function RequeuePanel(props: {
   }) => Promise<unknown> | unknown;
 }) {
   const { onRefresh, onRequeue, overview, uiLanguage } = props;
+  const REQUEUE_PAGE_SIZE = 10;
   const isChinese = uiLanguage === "zh-CN";
   const inline = React.useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]);
   const tt = React.useCallback((key: Parameters<typeof t>[1]) => t(uiLanguage, key), [uiLanguage]);
@@ -120,6 +121,8 @@ export function RequeuePanel(props: {
   const [previewing, setPreviewing] = React.useState(false);
   const [requeueing, setRequeueing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [previewPage, setPreviewPage] = React.useState(1);
+  const [previewPageInput, setPreviewPageInput] = React.useState("1");
 
   const currentRuleSignature =
     preview?.currentRuleSignature ||
@@ -141,6 +144,7 @@ export function RequeuePanel(props: {
         basis: replayBasis
       });
       setPreview(result);
+      setPreviewPage(1);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Unknown error");
     } finally {
@@ -178,6 +182,34 @@ export function RequeuePanel(props: {
       Object.entries(preview?.skipCounts ?? {}).sort((left, right) => right[1] - left[1]),
     [preview?.skipCounts]
   );
+  const totalPreviewItems = preview?.items.length ?? 0;
+  const totalPreviewPages = Math.max(1, Math.ceil(totalPreviewItems / REQUEUE_PAGE_SIZE));
+  const visiblePreviewItems = React.useMemo(() => {
+    const start = (previewPage - 1) * REQUEUE_PAGE_SIZE;
+    return (preview?.items ?? []).slice(start, start + REQUEUE_PAGE_SIZE);
+  }, [REQUEUE_PAGE_SIZE, preview?.items, previewPage]);
+
+  React.useEffect(() => {
+    const nextPage = Math.min(previewPage, totalPreviewPages);
+    if (nextPage !== previewPage) {
+      setPreviewPage(nextPage);
+    }
+  }, [previewPage, totalPreviewPages]);
+
+  React.useEffect(() => {
+    setPreviewPageInput(String(previewPage));
+  }, [previewPage]);
+
+  const handlePreviewPageJump = React.useCallback(() => {
+    const parsed = Number(previewPageInput);
+    if (!Number.isFinite(parsed)) {
+      setPreviewPageInput(String(previewPage));
+      return;
+    }
+    const nextPage = Math.max(1, Math.min(totalPreviewPages, Math.trunc(parsed)));
+    setPreviewPage(nextPage);
+    setPreviewPageInput(String(nextPage));
+  }, [previewPage, previewPageInput, totalPreviewPages]);
 
   return (
     <section className="panel-grid ops-layout">
@@ -373,7 +405,7 @@ export function RequeuePanel(props: {
                   </td>
                 </tr>
               ) : null}
-              {preview?.items.map((item) => (
+              {visiblePreviewItems.map((item) => (
                 <tr className="ops-log-row" data-status={item.action === "queue" ? "running" : undefined} key={`${item.threadId}-${item.reason}`}>
                   <td className="ops-log-col-time">
                     <div className="ops-log-primary ops-log-nowrap" title={item.updatedAt ?? ""}>
@@ -404,6 +436,49 @@ export function RequeuePanel(props: {
             </tbody>
           </table>
         </div>
+
+        {totalPreviewItems > 0 ? (
+          <div className="ops-log-pagination">
+            <span className="ops-log-pagination-copy">
+              {inline("每页 10 条", "10 rows per page")} · {inline("当前显示", "Showing")}{" "}
+              {formatUiNumber((previewPage - 1) * REQUEUE_PAGE_SIZE + 1, uiLanguage)}-
+              {formatUiNumber((previewPage - 1) * REQUEUE_PAGE_SIZE + visiblePreviewItems.length, uiLanguage)} /{" "}
+              {formatUiNumber(totalPreviewItems, uiLanguage)}
+            </span>
+            <div className="ops-log-pagination-actions">
+              <button className="btn-sm" disabled={previewPage <= 1} onClick={() => setPreviewPage(1)} type="button">
+                {inline("首页", "First")}
+              </button>
+              <button className="btn-sm" disabled={previewPage <= 1} onClick={() => setPreviewPage((page) => Math.max(1, page - 1))} type="button">
+                {inline("上一页", "Prev")}
+              </button>
+              <button className="btn-sm" disabled={previewPage >= totalPreviewPages} onClick={() => setPreviewPage((page) => Math.min(totalPreviewPages, page + 1))} type="button">
+                {inline("下一页", "Next")}
+              </button>
+              <button className="btn-sm" disabled={previewPage >= totalPreviewPages} onClick={() => setPreviewPage(totalPreviewPages)} type="button">
+                {inline("末页", "Last")}
+              </button>
+              <div className="ops-log-page-jump">
+                <input
+                  min={1}
+                  onChange={(event) => setPreviewPageInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handlePreviewPageJump();
+                    }
+                  }}
+                  step={1}
+                  type="number"
+                  value={previewPageInput}
+                />
+                <button className="btn-sm" onClick={handlePreviewPageJump} type="button">
+                  {inline("跳转", "Go")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="detail-panel ops-span-wide">

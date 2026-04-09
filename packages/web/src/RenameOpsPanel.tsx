@@ -221,16 +221,6 @@ function aiRequestStatusLabel(status: string | undefined, language: UiLanguage):
   }
 }
 
-function reasonTone(reason: string): "warning" | "manual" | "success" {
-  if (reason === "candidate_ready" || reason === "finalize_ready") {
-    return "success";
-  }
-  if (reason === "frozen" || reason === "max_auto_renames_reached" || reason === "rename_cooldown") {
-    return "manual";
-  }
-  return "warning";
-}
-
 function shortRuleSignature(value: string | undefined): string {
   if (!value) {
     return "--";
@@ -294,25 +284,6 @@ export function RenameOpsPanel(props: {
   const previewItems = React.useMemo(() => preview?.items ?? [], [preview?.items]);
   const previewApplyCount = previewItems.filter((item) => item.status === "apply").length;
   const previewSuggestCount = previewItems.filter((item) => item.status === "suggest").length;
-  const previewSkipCount = previewItems.filter((item) => item.status === "skip").length;
-  const previewHasCandidateNames = previewItems.some((item) => typeof item.candidateName === "string");
-  const actionablePreviewItems = React.useMemo(
-    () => previewItems.filter((item) => item.status === "apply" || item.status === "suggest"),
-    [previewItems]
-  );
-  const skipReasonSummary = React.useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of previewItems) {
-      if (item.status !== "skip") {
-        continue;
-      }
-      const key = item.reason || "skip";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .map(([reason, count]) => ({ reason, count }))
-      .sort((left, right) => right.count - left.count);
-  }, [previewItems]);
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
   const recentSweeps = React.useMemo(
     () => (overview?.runtime.recentSweeps ?? []).slice().reverse(),
@@ -321,29 +292,6 @@ export function RenameOpsPanel(props: {
   const latestAiRequest = aiRequestLogs?.items[0];
   const currentRuleSignature = overview?.runtime.currentRuleSignature || overview?.ruleCoverage.currentSignature || "";
   const requestLogRequestIdRef = React.useRef(0);
-  const stateGuide = [
-    {
-      key: "skip",
-      title: autoRenameStatusLabel("skip", uiLanguage),
-      count: previewSkipCount,
-      tone: "warning" as const,
-      copy: inline("被活跃中、冻结或冷却等保护条件挡住。", "Blocked by guards such as active updates, frozen state, or cooldown.")
-    },
-    {
-      key: "suggest",
-      title: autoRenameStatusLabel("suggest", uiLanguage),
-      count: previewSuggestCount,
-      tone: "manual" as const,
-      copy: inline("已经达到候选阈值，会先生成候选名，但还不到正式落盘时机。", "Past the candidate threshold, so a candidate title is generated, but it is not ready to land yet.")
-    },
-    {
-      key: "apply",
-      title: autoRenameStatusLabel("apply", uiLanguage),
-      count: previewApplyCount,
-      tone: "success" as const,
-      copy: inline("已经达到最终应用阈值；如果 daemon 正在 auto-apply，就会正式写回。", "Past the finalize threshold; if the daemon is auto-applying, this is eligible to land as the official title.")
-    }
-  ];
   const loadRequestLogPage = React.useCallback(async () => {
     const requestId = ++requestLogRequestIdRef.current;
     setRequestLogLoading(true);
@@ -1353,98 +1301,6 @@ export function RenameOpsPanel(props: {
         )}
         title={inline("规则覆盖分布", "Rule coverage")}
       />
-
-      <section className="detail-panel ops-span-wide ops-state-guide">
-        <div className="panel-topline">
-          <div>
-            <p className="panel-kicker">{inline("状态说明", "State guide")}</p>
-            <h3>{inline("现在的命名动作是怎么判出来的", "How the rename actions are decided")}</h3>
-          </div>
-        </div>
-        <div className="ops-state-guide-grid">
-          {stateGuide.map((item) => (
-            <article className="ops-state-card" data-tone={item.tone} key={item.key}>
-              <span className="metric-label">{item.title}</span>
-              <strong>{formatUiNumber(item.count, props.uiLanguage)}</strong>
-              <p>{item.copy}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="detail-panel">
-        <div className="panel-topline">
-          <div>
-            <p className="panel-kicker">{tt("scheduler")}</p>
-            <h3>{inline("待处理队列", "Action queue")}</h3>
-            <p className="settings-copy">
-              {inline(
-                "这里是当前页面触发的即时评估，不是 daemon 上一轮 sweep 的快照，所以和顶部后台 Sweep 统计可能不同。",
-                "This is the current on-demand evaluation from the page, not the last daemon sweep snapshot, so it can differ from the daemon totals above."
-              )}
-            </p>
-          </div>
-          <span className="chip manual">
-            {previewHasCandidateNames ? inline("含候选名", "with names") : inline("仅状态", "status only")}
-          </span>
-        </div>
-        <div className="settings-inline-stats">
-          <div>
-            <dt>{autoRenameStatusLabel("suggest", props.uiLanguage)}</dt>
-            <dd>{formatUiNumber(previewSuggestCount, props.uiLanguage)}</dd>
-          </div>
-          <div>
-            <dt>{autoRenameStatusLabel("apply", props.uiLanguage)}</dt>
-            <dd>{formatUiNumber(previewApplyCount, props.uiLanguage)}</dd>
-          </div>
-          <div>
-            <dt>{autoRenameStatusLabel("skip", props.uiLanguage)}</dt>
-            <dd>{formatUiNumber(previewSkipCount, props.uiLanguage)}</dd>
-          </div>
-          <div>
-            <dt>{inline("AI 应用", "AI applies")}</dt>
-            <dd>{formatUiNumber(overview?.renameHistory.aiApplied, props.uiLanguage)}</dd>
-          </div>
-        </div>
-        <div className="history-stack">
-          {previewItems.length === 0 ? <div className="history-empty">{tt("noPreviewLoaded")}</div> : null}
-          {actionablePreviewItems.length === 0 && previewItems.length > 0 ? (
-            <div className="ops-queue-empty">
-              {inline("当前没有待建议或待应用的会话。", "There are no actionable suggest/apply items right now.")}
-            </div>
-          ) : null}
-          {actionablePreviewItems.slice(0, 16).map((item) => (
-            <article className="history-row" key={`${item.threadId}-${item.status}-${item.reason}`}>
-              <div>
-                <strong>{item.candidateName ?? item.threadId}</strong>
-                <p>{item.threadId}</p>
-              </div>
-              <span>
-                {autoRenameStatusLabel(item.status, props.uiLanguage)}
-              </span>
-            </article>
-          ))}
-        </div>
-        <div className="ops-skip-summary">
-          <div className="panel-topline">
-            <div>
-              <p className="panel-kicker">{inline("跳过摘要", "Skip summary")}</p>
-              <h3>{inline("为什么没进队", "Why items were skipped")}</h3>
-            </div>
-          </div>
-          <div className="ops-reason-grid">
-            {skipReasonSummary.length === 0 ? (
-              <span className="ops-log-summary-chip">{inline("当前没有跳过项", "No skipped items right now")}</span>
-            ) : null}
-            {skipReasonSummary.slice(0, 8).map((item) => (
-              <article className="ops-reason-card" data-tone={reasonTone(item.reason)} key={item.reason}>
-                <span className="metric-label">{autoRenameReasonLabel(item.reason, props.uiLanguage)}</span>
-                <strong>{formatUiNumber(item.count, props.uiLanguage)}</strong>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
 
       <section className="detail-panel ops-span-wide ops-log-panel">
         <div className="panel-topline ops-log-panel-header">
