@@ -16,6 +16,9 @@ import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
 const SESSION_PANE_MIN_WIDTH = 320;
 const SESSION_PANE_MAX_WIDTH = 560;
 const PANE_KEYBOARD_STEP = 24;
+const SESSION_CONTEXT_MENU_WIDTH = 220;
+const SESSION_CONTEXT_MENU_HEIGHT = 56;
+const SESSION_CONTEXT_MENU_MARGIN = 12;
 
 function renameHistoryStatusLabel(status: string, language: UiLanguage): string {
   if (language === "zh-CN") {
@@ -91,6 +94,7 @@ export function SessionBrowser(props: {
   onToggleShowHiddenTranscript: (value: boolean) => void;
   onRefresh: () => void;
   onSelectSession: (threadId: string) => void;
+  onCopySessionId: (threadId: string) => void | Promise<void>;
   onEnterFocusMode: () => void;
   onExitFocusMode: () => void;
   onToggleSessionPane: () => void;
@@ -101,6 +105,9 @@ export function SessionBrowser(props: {
   onToggleFreeze: () => void | Promise<void>;
 }) {
   const [detailView, setDetailView] = React.useState<"transcript" | "naming">("transcript");
+  const [contextMenu, setContextMenu] = React.useState<{ threadId: string; x: number; y: number } | null>(null);
+  const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const contextMenuActionRef = React.useRef<HTMLButtonElement | null>(null);
   const groupedSessions = React.useMemo(
     () => groupSessionsByTime(props.sessions, props.uiLanguage),
     [props.sessions, props.uiLanguage]
@@ -123,6 +130,93 @@ export function SessionBrowser(props: {
   React.useEffect(() => {
     setDetailView("transcript");
   }, [props.detail?.threadId]);
+
+  React.useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    contextMenuActionRef.current?.focus();
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && contextMenuRef.current?.contains(target)) {
+        return;
+      }
+      setContextMenu(null);
+    };
+    const close = () => setContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener("pointerdown", closeOnPointerDown);
+    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("blur", close);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointerDown);
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("blur", close);
+    };
+  }, [contextMenu]);
+
+  const openSessionContextMenu = React.useCallback(
+    (threadId: string, x: number, y: number) => {
+      if (props.selectedId !== threadId) {
+        props.onSelectSession(threadId);
+      }
+      setContextMenu({ threadId, x, y });
+    },
+    [props]
+  );
+
+  const handleSessionContextMenu = (event: React.MouseEvent<HTMLButtonElement>, threadId: string) => {
+    event.preventDefault();
+    openSessionContextMenu(threadId, event.clientX, event.clientY);
+  };
+
+  const handleSessionItemKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, threadId: string) => {
+    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
+      return;
+    }
+
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    openSessionContextMenu(threadId, rect.left + Math.min(rect.width - 16, 120), rect.top + 12);
+  };
+
+  const contextMenuPosition = React.useMemo(() => {
+    if (!contextMenu) {
+      return undefined;
+    }
+
+    const maxX =
+      typeof window === "undefined"
+        ? contextMenu.x
+        : Math.max(
+            SESSION_CONTEXT_MENU_MARGIN,
+            window.innerWidth - SESSION_CONTEXT_MENU_WIDTH - SESSION_CONTEXT_MENU_MARGIN
+          );
+    const maxY =
+      typeof window === "undefined"
+        ? contextMenu.y
+        : Math.max(
+            SESSION_CONTEXT_MENU_MARGIN,
+            window.innerHeight - SESSION_CONTEXT_MENU_HEIGHT - SESSION_CONTEXT_MENU_MARGIN
+          );
+
+    return {
+      left: Math.max(SESSION_CONTEXT_MENU_MARGIN, Math.min(contextMenu.x, maxX)),
+      top: Math.max(SESSION_CONTEXT_MENU_MARGIN, Math.min(contextMenu.y, maxY))
+    };
+  }, [contextMenu]);
 
   const handleSessionSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     switch (event.key) {
@@ -196,17 +290,22 @@ export function SessionBrowser(props: {
                 <button
                   className={props.selectedId === session.threadId ? "session-item active" : "session-item"}
                   key={session.threadId}
+                  onContextMenu={(event) => handleSessionContextMenu(event, session.threadId)}
                   onClick={() =>
                     React.startTransition(() => {
                       addAppTransitionType("nav-forward");
                       props.onSelectSession(session.threadId);
                     })
                   }
+                  onKeyDown={(event) => handleSessionItemKeyDown(event, session.threadId)}
                   type="button"
                 >
                   <div className="session-item-topline">
                     <span className={`session-status-dot ${toneForSession(session)}`} />
                     <span className="session-updated">{formatWhen(session.updatedAt, props.uiLanguage)}</span>
+                    <span className={session.dirty ? "session-health-label dirty" : "session-health-label clean"}>
+                      {session.dirty ? tt("dirty") : tt("clean")}
+                    </span>
                     <span className="session-state-label">{sessionStatusLabel(session.statusEstimate, props.uiLanguage)}</span>
                   </div>
                   <div className="session-item-title">{sessionListTitle(session)}</div>
@@ -221,6 +320,27 @@ export function SessionBrowser(props: {
             </section>
           ))}
         </div>
+        {contextMenu && contextMenuPosition ? (
+          <div
+            className="session-context-menu"
+            ref={contextMenuRef}
+            role="menu"
+            style={contextMenuPosition}
+          >
+            <button
+              className="session-context-menu-item"
+              onClick={() => {
+                void props.onCopySessionId(contextMenu.threadId);
+                setContextMenu(null);
+              }}
+              ref={contextMenuActionRef}
+              role="menuitem"
+              type="button"
+            >
+              {tt("copySessionId")}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {!props.sessionPaneCollapsed && !props.focusMode ? (
@@ -268,15 +388,20 @@ export function SessionBrowser(props: {
                 <div className="chat-header-right">
                   {!props.focusMode ? (
                     <>
-                      <button className="btn-sm" onClick={props.onEnterFocusMode} title={tt("focusSession")} type="button">
-                        {tt("focusSession")}
+                      <button
+                        aria-label={tt("focusSession")}
+                        className="btn-sm btn-icon"
+                        onClick={props.onEnterFocusMode}
+                        title={tt("focusSession")}
+                        type="button"
+                      >
+                        <span aria-hidden="true">⤢</span>
                       </button>
                       <button className="btn-sm" onClick={props.onToggleSessionPane} title={sessionPaneToggleLabel} type="button">
                         {sessionPaneToggleLabel}
                       </button>
                     </>
                   ) : null}
-                  {props.detail.dirty ? <span className="chip danger">{tt("dirty")}</span> : <span className="chip success">{tt("clean")}</span>}
                   {props.detail.frozen ? <span className="chip warning">{tt("frozen")}</span> : null}
                   <button className="btn-sm" disabled={props.actioning} onClick={props.onSuggest} type="button">
                     {props.actioning && props.actionLabel?.includes("Suggest") ? tt("suggesting") : tt("suggest")}

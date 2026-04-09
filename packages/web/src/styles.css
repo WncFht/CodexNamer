@@ -506,6 +506,17 @@ pre {
   box-shadow: var(--ring-accent);
 }
 
+.btn-icon {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
 .btn-refresh:disabled,
 .btn-sm:disabled,
 .btn-chip:disabled {
@@ -1854,6 +1865,36 @@ pre {
   box-shadow: var(--ring-accent), 0 16px 32px rgba(20, 20, 19, 0.08);
 }
 
+.session-context-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, white 8%);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(208, 203, 191, 0.72);
+  backdrop-filter: blur(18px);
+}
+
+.session-context-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.session-context-menu-item:hover,
+.session-context-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--bg-secondary) 72%, white 28%);
+  color: var(--accent);
+  outline: none;
+}
+
 .session-item-topline,
 .session-item-meta,
 .chat-meta-bar,
@@ -1943,6 +1984,7 @@ pre {
 }
 
 .session-updated,
+.session-health-label,
 .session-state-label,
 .session-item-subtitle,
 .session-item-meta,
@@ -1956,6 +1998,18 @@ pre {
 
 .message-time {
   flex-shrink: 0;
+}
+
+.session-health-label {
+  font-weight: 600;
+}
+
+.session-health-label.clean {
+  color: var(--success);
+}
+
+.session-health-label.dirty {
+  color: var(--danger);
 }
 
 .session-item-title {

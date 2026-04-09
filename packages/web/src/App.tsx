@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
+import { copyTextToClipboard } from "./clipboard.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
@@ -238,6 +239,24 @@ export function App() {
   const showMaintenancePanel = maintenancePanelLoaded || state.tab === "maintenance";
   const showRequeuePanel = requeuePanelLoaded || state.tab === "requeue";
   const showDaemonPanel = daemonPanelLoaded || state.tab === "daemon";
+  const { setNotice } = state;
+  const handleCopySessionId = React.useCallback(
+    async (threadId: string) => {
+      try {
+        await copyTextToClipboard(threadId);
+        setNotice({
+          tone: "success",
+          text: t(uiLanguage, "copiedSessionId")
+        });
+      } catch {
+        setNotice({
+          tone: "error",
+          text: t(uiLanguage, "copySessionIdFailed")
+        });
+      }
+    },
+    [setNotice, uiLanguage]
+  );
 
   return (
     <div
@@ -399,6 +418,7 @@ export function App() {
               onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
               onRefresh={() => void state.refreshSessions()}
               onSelectSession={(threadId) => state.setSelectedId(threadId)}
+              onCopySessionId={(threadId) => void handleCopySessionId(threadId)}
               onEnterFocusMode={() => setSessionFocusMode(true)}
               onExitFocusMode={() => setSessionFocusMode(false)}
               onToggleSessionPane={toggleSessionPane}
