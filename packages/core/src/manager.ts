@@ -30,6 +30,7 @@ import {
   buildRenamePrompt,
   createRenameInferenceService,
   inspectRenameProvider,
+  RenameInferenceError,
   probeRenameProvider,
   resolveRenameProvider
 } from "./provider.js";
@@ -118,6 +119,26 @@ function appendDisambiguationSuffix(name: string, index: number, maxLength: numb
   const root =
     trimmedRoot.length > budget ? trimmedRoot.slice(0, budget).trimEnd() : trimmedRoot;
   return `${root}${suffix}`;
+}
+
+function summarizeSweepErrorReason(error: unknown): string {
+  if (error instanceof RenameInferenceError) {
+    return error.code;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    "code" in error &&
+    error.name === "RenameInferenceError" &&
+    typeof error.code === "string"
+  ) {
+    return error.code;
+  }
+  if (error instanceof Error) {
+    return error.message || "error";
+  }
+  return "error";
 }
 
 async function mapWithConcurrency<T, R>(
@@ -1085,42 +1106,59 @@ export class CodexNamer {
     const sweepItems = await mapWithConcurrency(workItems, maxConcurrency, async (item) => {
       const shouldResolveSuggestion =
         options?.includeCandidateNames === true || (autoApplyEnabled && item.evaluation.action === "apply");
-      const suggestion =
-        shouldResolveSuggestion && item.evaluation.action !== "skip"
-          ? await this.resolveSuggestionForDetail(item.detail, {
-              saveCandidate: autoApplyEnabled || options?.includeCandidateNames === true,
-              reservedNameKeys,
-              blockedOfficialThreadIds,
-              reservationScheduler
-            })
-          : undefined;
+      let suggestion: RenameSuggestion | undefined;
+      let failureReason: string | undefined;
+      if (shouldResolveSuggestion && item.evaluation.action !== "skip") {
+        try {
+          suggestion = await this.resolveSuggestionForDetail(item.detail, {
+            saveCandidate: autoApplyEnabled || options?.includeCandidateNames === true,
+            reservedNameKeys,
+            blockedOfficialThreadIds,
+            reservationScheduler
+          });
+        } catch (error) {
+          failureReason = summarizeSweepErrorReason(error);
+        }
+      }
 
       return {
         ...item,
-        suggestion
+        suggestion,
+        failureReason
       };
     });
 
     for (const item of sweepItems) {
+      const previewStatus = item.failureReason ? "skip" : item.evaluation.action;
+      const previewReason = item.failureReason ?? item.evaluation.reason;
       previews.push({
         threadId: item.detail.threadId,
         candidateName: options?.includeCandidateNames ? item.suggestion?.name : undefined,
-        status: item.evaluation.action,
-        reason: item.evaluation.reason
+        status: previewStatus,
+        reason: previewReason
       });
 
-      if (autoApplyEnabled && item.evaluation.action === "apply") {
-        const result = await this.apply(item.detail.threadId, {
-          autoApply: true,
-          skipScan: true,
-          detail: item.detail
-        });
-        applied.push({
-          threadId: item.detail.threadId,
-          written: result.written,
-          name: result.name,
-          reason: result.written ? undefined : "unchanged"
-        });
+      if (autoApplyEnabled && item.evaluation.action === "apply" && !item.failureReason) {
+        try {
+          const result = await this.apply(item.detail.threadId, {
+            autoApply: true,
+            skipScan: true,
+            detail: item.detail
+          });
+          applied.push({
+            threadId: item.detail.threadId,
+            written: result.written,
+            name: result.name,
+            reason: result.written ? undefined : "unchanged"
+          });
+        } catch (error) {
+          applied.push({
+            threadId: item.detail.threadId,
+            written: false,
+            name: item.suggestion?.name ?? item.detail.officialName ?? item.detail.threadId,
+            reason: summarizeSweepErrorReason(error)
+          });
+        }
       }
     }
 

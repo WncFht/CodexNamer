@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { RenameInferenceError } from "@codexnamer/core";
+
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 
 describe("auto rename apply", () => {
@@ -235,6 +237,81 @@ describe("auto rename apply", () => {
 
       expect(sweep.previews).toHaveLength(3);
       expect(maxActive).toBe(2);
+    } finally {
+      await manager.close();
+    }
+  });
+
+  it("keeps sweep alive when one session suggestion fails", async () => {
+    const workspace = await createTempWorkspace();
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir,
+      rename: {
+        autoApply: "idle-finalize",
+        freezeManualName: true
+      }
+    });
+
+    (manager as unknown as {
+      inferenceService: {
+        suggest: (session: { threadId: string }) => Promise<{
+          threadId: string;
+          name: string;
+          source: "ai";
+          kind: string;
+          summary: string;
+          generatedAt: string;
+        }>;
+      };
+    }).inferenceService = {
+      suggest: async (session) => {
+        if (session.threadId === "019d-sweep-timeout") {
+          throw new RenameInferenceError("The operation was aborted due to timeout", "request-failed");
+        }
+        return {
+          threadId: session.threadId,
+          name: `rename ${session.threadId}`,
+          source: "ai",
+          kind: "fix",
+          summary: "rename queue",
+          generatedAt: new Date().toISOString()
+        };
+      }
+    };
+
+    try {
+      await Promise.all([
+        writeRolloutFixture({
+          codexHome: workspace.codexHome,
+          threadId: "019d-sweep-timeout",
+          userMessage: "会话一会超时",
+          lastAgentMessage: "这里会触发 provider timeout",
+          updatedAt: "2026-04-04T12:00:00.000Z"
+        }),
+        writeRolloutFixture({
+          codexHome: workspace.codexHome,
+          threadId: "019d-sweep-ok",
+          userMessage: "会话二应继续正常 apply",
+          lastAgentMessage: "这里应该继续自动写回",
+          updatedAt: "2026-04-04T12:00:00.000Z"
+        })
+      ]);
+
+      const sweep = await manager.runAutoRenameSweep();
+      expect(sweep.previews).toHaveLength(2);
+      expect(sweep.previews.find((item) => item.threadId === "019d-sweep-timeout")).toMatchObject({
+        status: "skip",
+        reason: "request-failed"
+      });
+      expect(sweep.previews.find((item) => item.threadId === "019d-sweep-ok")?.status).toBe("apply");
+      expect(sweep.applied).toHaveLength(1);
+      expect(sweep.applied[0]?.threadId).toBe("019d-sweep-ok");
+      expect(sweep.applied[0]?.written).toBe(true);
+
+      const overview = await manager.overview();
+      expect(overview.runtime.daemonStatus).toBe("running");
+      expect(overview.runtime.lastSweepSummary?.total).toBe(2);
     } finally {
       await manager.close();
     }
