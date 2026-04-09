@@ -52,6 +52,11 @@ codexnamer provider test
 - `POST /api/v1/daemon/start`
 - `POST /api/v1/daemon/stop`
 
+说明：
+
+- `npm run api` 启动后会默认自动拉起 controller-managed daemon
+- `GET /api/v1/daemon` 现在除了进程与日志信息，还会返回下一次定时 sweep 的 `nextSweepAt`
+
 ### `GET /api/v1/sessions`
 
 支持过滤：
@@ -146,6 +151,7 @@ codexnamer provider test
 - `Sessions`
 - `Settings`
 - `状态 / Rename Ops`
+- `Requeue`
 - `Daemon`
 
 ### Sessions
@@ -173,9 +179,21 @@ codexnamer provider test
 
 - runtime KPI
 - overview 图表
-- preview queue
-- replay
 - request logs
+- doctor JSON
+
+说明：
+
+- `preview queue` 与 `requeue` 已从状态页拆出
+- 状态页现在主要展示 runtime summary、sweep 趋势、pipeline 分布与请求日志
+
+### Requeue
+
+当前支持：
+
+- 按规则签名 preview queue / skip
+- 分页查看会话级结果
+- 执行重新入队
 
 ### Daemon
 
@@ -183,6 +201,7 @@ codexnamer provider test
 
 - start / stop
 - PID / interval / log tail
+- 下一次定时 sweep 倒计时
 - runtime explain
 
 ## 4. TUI

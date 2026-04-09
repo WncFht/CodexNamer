@@ -8,6 +8,10 @@ import { ApiEventLog } from "./event-log.js";
 
 const API_VERSION = "0.1.0";
 
+export type ApiServer = FastifyInstance & {
+  daemonController: DaemonProcessController;
+};
+
 function parseBooleanQuery(value: unknown): boolean | undefined {
   if (typeof value === "boolean") {
     return value;
@@ -171,7 +175,7 @@ function toErrorPayload(error: unknown): { statusCode: number; body: Record<stri
 export async function buildApiServer(options?: {
   manager?: CodexNamer;
   operator?: string;
-}): Promise<FastifyInstance> {
+}): Promise<ApiServer> {
   const app = Fastify({
     logger: false
   });
@@ -184,6 +188,7 @@ export async function buildApiServer(options?: {
   const daemonController = new DaemonProcessController({
     defaultIntervalSeconds: () => manager.config.watch.scanIntervalSeconds
   });
+  app.decorate("daemonController", daemonController);
 
   app.addHook("onClose", async () => {
     await daemonController.dispose();
@@ -509,5 +514,7 @@ export async function buildApiServer(options?: {
     });
   });
 
-  return app;
+  return Object.assign(app, {
+    daemonController
+  }) as unknown as ApiServer;
 }

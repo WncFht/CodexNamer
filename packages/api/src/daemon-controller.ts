@@ -16,6 +16,7 @@ export type DaemonControllerStatus = {
   startedAt?: string;
   stoppedAt?: string;
   intervalSeconds?: number;
+  nextSweepAt?: string;
   apiProcessId: number;
   command: {
     cwd: string;
@@ -67,6 +68,7 @@ export class DaemonProcessController {
       startedAt: this.startedAt,
       stoppedAt: this.stoppedAt,
       intervalSeconds: this.intervalSeconds,
+      nextSweepAt: this.computeNextSweepAt(),
       apiProcessId: process.pid,
       command: {
         cwd: this.repoRoot,
@@ -210,5 +212,21 @@ export class DaemonProcessController {
     if (this.recentLogs.length > MAX_LOG_LINES) {
       this.recentLogs.splice(0, this.recentLogs.length - MAX_LOG_LINES);
     }
+  }
+
+  private computeNextSweepAt(): string | undefined {
+    if (!this.child || this.child.killed || !this.startedAt || !this.intervalSeconds) {
+      return undefined;
+    }
+
+    const startedAtMs = Date.parse(this.startedAt);
+    if (!Number.isFinite(startedAtMs)) {
+      return undefined;
+    }
+
+    const intervalMs = Math.max(1, Math.trunc(this.intervalSeconds)) * 1000;
+    const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+    const nextTickIndex = Math.floor(elapsedMs / intervalMs) + 1;
+    return new Date(startedAtMs + nextTickIndex * intervalMs).toISOString();
   }
 }

@@ -82,12 +82,14 @@
 - `current_candidate_name TEXT`
 - `current_candidate_source TEXT`
 - `current_candidate_generated_at TEXT`
+- `current_candidate_rule_signature TEXT`
 - `last_auto_name TEXT`
 - `last_manual_name TEXT`
 - `last_applied_name TEXT`
 - `last_applied_source TEXT`
 - `last_applied_at TEXT`
 - `last_applied_revision TEXT`
+- `last_applied_rule_signature TEXT`
 - `dirty_since_rename INTEGER NOT NULL DEFAULT 0`
 - `force_rewrite INTEGER NOT NULL DEFAULT 0`
 - `frozen INTEGER NOT NULL DEFAULT 0`
@@ -108,6 +110,7 @@
 - `reason TEXT`
 - `applied_at TEXT NOT NULL`
 - `applied_revision TEXT`
+- `rule_signature TEXT`
 - `operator TEXT`
 
 ### `ingest_cursors`
@@ -126,7 +129,7 @@
 当前主要存放：
 
 - daemon runtime 快照
-- rename replay 历史
+- requeue 历史
 - 其他维护态 JSON
 
 ### `ai_request_logs`
@@ -151,6 +154,12 @@
 - `result_json TEXT`
 - `error TEXT`
 - `metadata_json TEXT`
+
+说明：
+
+- `result_json` 当前会保留模型解析结果与 composition 结果
+- 列表与详情接口会从这里提取 `finalName`
+- 状态页请求日志成功时会直接显示这个输出命名
 
 ## 不在 DB 里的配置
 
@@ -196,6 +205,13 @@ provider profile 与 AI 配置当前不落在 SQLite，而是来自：
 - `failed`
 - `preview_only`
 
+### `rule status`（UI 派生）
+
+- `latest`
+- `outdated`
+- `manual`
+- `unknown`
+
 ### `ai_request_logs.status`
 
 - `running`
@@ -218,8 +234,27 @@ provider profile 与 AI 配置当前不落在 SQLite，而是来自：
 - `last_user_message`
 - `last_agent_message`
 - `token_total`
-- `cwd`
-- `model_provider`
+
+## Dirty 与软队列语义
+
+当前 dirty 的实现口径是：
+
+- `dirty_since_rename = 1`
+- 或 `force_rewrite = 1`
+
+这组 dirty sessions 就是 sweep 运行时的“软队列”。
+
+## 规则签名语义
+
+当前全局命名规则会计算出一个规则签名。
+
+它会被记录到：
+
+- `rename_state.current_candidate_rule_signature`
+- `rename_state.last_applied_rule_signature`
+- `rename_history.rule_signature`
+
+requeue preview 会拿历史签名与当前规则签名做比较，决定该 session 是 `queue` 还是 `skip`。
 
 ## Session DTO 约定
 

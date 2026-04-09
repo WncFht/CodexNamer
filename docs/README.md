@@ -13,6 +13,7 @@
 
 - [产品范围](./spec/product-scope.md)
 - [数据模型](./spec/data-model.md)
+- [运行时与 Sweep 架构](./spec/runtime-and-sweep-architecture.md)
 - [触发与生命周期](./spec/trigger-and-lifecycle.md)
 - [Auto Rename 评估与 Context 构建](./spec/rename-evaluation-and-context.md)
 - [状态页说明（Rename Ops / 运行态）](./spec/status-page-guide.md)
@@ -55,6 +56,7 @@
 3. [系统设计](./spec/system-design.md)
 4. [配置与 AI 后端](./spec/config-and-ai.md)
 5. [Auto Rename 评估与 Context 构建](./spec/rename-evaluation-and-context.md)
+6. [运行时与 Sweep 架构](./spec/runtime-and-sweep-architecture.md)
 
 如果你要改 UI：
 
@@ -65,6 +67,7 @@
 如果你要改调度、写回或状态机：
 
 1. [数据模型](./spec/data-model.md)
-2. [触发与生命周期](./spec/trigger-and-lifecycle.md)
-3. [维护与压缩](./spec/maintenance-and-compaction.md)
-4. [ADR 0001](./adr/0001-writeback-via-session-index.md)
+2. [运行时与 Sweep 架构](./spec/runtime-and-sweep-architecture.md)
+3. [触发与生命周期](./spec/trigger-and-lifecycle.md)
+4. [维护与压缩](./spec/maintenance-and-compaction.md)
+5. [ADR 0001](./adr/0001-writeback-via-session-index.md)

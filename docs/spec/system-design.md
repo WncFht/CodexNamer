@@ -72,7 +72,7 @@ SQLite state DB
 ### local API / UI
 
 - CLI：单次查询、rename、batch apply、doctor、provider test
-- Web：Sessions / Settings / 状态 / Daemon 四个主视图
+- Web：Sessions / Settings / 状态 / Requeue / Daemon 五个主视图
 - TUI：浏览、搜索、transcript、suggest/apply、freeze、manual rename、batch dirty apply
 
 ## 关键设计选择
@@ -92,13 +92,19 @@ SQLite state DB
 - 调度层当前没有独立的 `manual override`
 - 自动流程的高优先级保护态只有 `frozen`
 
-### 4. accepted official name 归一化
+### 4. dirty session 集合就是软队列
+
+- 当前没有单独的持久化 task queue
+- `dirty_since_rename || force_rewrite` 的 session 集合就是 sweep 的处理集合
+- requeue 的本质是把会话重新打成 dirty，并清掉旧 candidate
+
+### 5. accepted official name 归一化
 
 - 当前只把 `ai` 和 `manual` 视为 accepted official rename source
 - 非 accepted source 的 official name 会被视为待重写过渡态
 - overview 统计会按这个口径统一
 
-### 5. 请求日志内建到状态面板
+### 6. 请求日志内建到状态面板
 
 - 所有 AI rename 请求都会写入 `ai_request_logs`
 - 状态页通过后端分页读取，不再只拉固定 40 条到前端
@@ -119,3 +125,8 @@ SQLite state DB
 - daemon 运行
 - `rename.auto_apply = "idle-finalize"`
 - `finalize_ready` 会话会真正落盘
+
+补充：
+
+- `npm run api` 现在默认会自动拉起 controller-managed daemon
+- Web 的 Daemon 面板展示的是 controller 状态、下一次定时 sweep 倒计时和最近日志

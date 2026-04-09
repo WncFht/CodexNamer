@@ -13,6 +13,56 @@ function chipTone(running: boolean): "success" | "manual" {
   return running ? "success" : "manual";
 }
 
+function deriveNextSweepAt(status: DaemonControlStatus | null, nowMs: number): string | undefined {
+  if (!status?.running) {
+    return undefined;
+  }
+
+  if (!status.startedAt || typeof status.intervalSeconds !== "number") {
+    return status.nextSweepAt;
+  }
+
+  const startedAtMs = Date.parse(status.startedAt);
+  if (!Number.isFinite(startedAtMs)) {
+    return status.nextSweepAt;
+  }
+
+  const intervalMs = Math.max(1, Math.trunc(status.intervalSeconds)) * 1000;
+  const elapsedMs = Math.max(0, nowMs - startedAtMs);
+  const nextTickIndex = Math.floor(elapsedMs / intervalMs) + 1;
+  return new Date(startedAtMs + nextTickIndex * intervalMs).toISOString();
+}
+
+function formatCountdown(targetAt: string | undefined, nowMs: number, language: "en-US" | "zh-CN"): string {
+  if (!targetAt) {
+    return "--";
+  }
+
+  const targetMs = Date.parse(targetAt);
+  if (!Number.isFinite(targetMs)) {
+    return "--";
+  }
+
+  const remainingSeconds = Math.max(0, Math.ceil((targetMs - nowMs) / 1000));
+  if (remainingSeconds <= 0) {
+    return language === "zh-CN" ? "即将开始" : "due now";
+  }
+
+  const hours = Math.floor(remainingSeconds / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
+  const seconds = remainingSeconds % 60;
+
+  if (hours > 0) {
+    return language === "zh-CN"
+      ? `${hours}小时 ${minutes}分 ${seconds}秒`
+      : `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return language === "zh-CN" ? `${minutes}分 ${seconds}秒` : `${minutes}m ${seconds}s`;
+  }
+  return language === "zh-CN" ? `${seconds}秒` : `${seconds}s`;
+}
+
 function daemonStatusLabel(status: DaemonControlStatus | null, language: "en-US" | "zh-CN"): string {
   if (language === "zh-CN") {
     return status?.running ? "已启动" : "未启动";
@@ -38,17 +88,40 @@ export function DaemonPanel(props: {
   const previewSuggestCount = props.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
   const lastSweep = props.overview?.runtime.lastSweepSummary;
   const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
+  const [countdownNow, setCountdownNow] = React.useState(() => Date.now());
+  const nextSweepAt = React.useMemo(
+    () => deriveNextSweepAt(props.daemon, countdownNow),
+    [countdownNow, props.daemon]
+  );
+  const countdownLabel = React.useMemo(
+    () => formatCountdown(nextSweepAt, countdownNow, props.uiLanguage),
+    [countdownNow, nextSweepAt, props.uiLanguage]
+  );
+
+  React.useEffect(() => {
+    if (!props.daemon?.running) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [props.daemon?.running, nextSweepAt]);
 
   return (
     <section className="settings-layout daemon-layout">
       <div className="settings-hero daemon-hero">
         <div className="settings-hero-copy">
           <p className="panel-kicker">{inline("Daemon 控制", "Daemon control")}</p>
-          <h2>{inline("在 Web 里手动开启 / 停止自动 apply 进程", "Start / stop the auto-apply daemon from the Web UI")}</h2>
+          <h2>{inline("默认随 API 拉起，也可以在这里停掉或重启", "Auto-started with the API, and controllable here")}</h2>
           <p>
             {inline(
-              "这里控制的是 session sweep daemon。本页不会让它开机常驻，也不会随页面自动启动；只有你点击启动后才会运行。",
-              "This controls the session sweep daemon. It is not persistent across boot and does not start automatically with the page."
+              "这里控制的是 session sweep daemon。现在 Local API 启动时会默认拉起它；这个面板主要用来查看进程、下一次定时 sweep 倒计时，以及手动停止或重新启动。",
+              "This controls the session sweep daemon. The Local API now starts it by default; this panel is for watching the process, the next scheduled sweep countdown, and stopping or restarting it."
             )}
           </p>
         </div>
@@ -93,6 +166,9 @@ export function DaemonPanel(props: {
           {inline("运行态心跳", "Runtime heartbeat")}:{" "}
           {runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.uiLanguage)}
         </span>
+        <span className={`chip ${props.daemon?.running ? "success" : "manual"}`}>
+          {inline("下一轮定时 sweep", "Next scheduled sweep")}: {countdownLabel}
+        </span>
       </div>
 
       <div className="settings-stage-grid daemon-grid">
@@ -121,6 +197,14 @@ export function DaemonPanel(props: {
               </dd>
             </div>
             <div>
+              <dt>{inline("下一轮定时 sweep", "Next scheduled sweep")}</dt>
+              <dd>{formatWhen(nextSweepAt, props.uiLanguage)}</dd>
+            </div>
+            <div>
+              <dt>{inline("倒计时", "Countdown")}</dt>
+              <dd>{countdownLabel}</dd>
+            </div>
+            <div>
               <dt>{inline("API 进程", "API pid")}</dt>
               <dd>{props.daemon?.apiProcessId ?? "--"}</dd>
             </div>
@@ -132,6 +216,12 @@ export function DaemonPanel(props: {
               </dd>
             </div>
           </dl>
+          <p className="settings-copy">
+            {inline(
+              "这个倒计时表示下一次定时 sweep；如果 rollout 文件有变化，daemon 也可能更早被文件监听触发。",
+              "This countdown is for the next interval-based sweep. File watcher activity can still trigger an earlier run."
+            )}
+          </p>
         </article>
 
         <article className="settings-surface-card">

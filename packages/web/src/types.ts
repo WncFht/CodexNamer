@@ -132,6 +132,7 @@ export type DaemonControlStatus = {
   startedAt?: string;
   stoppedAt?: string;
   intervalSeconds?: number;
+  nextSweepAt?: string;
   apiProcessId: number;
   command: {
     cwd: string;

@@ -18,7 +18,7 @@
 - batch dirty apply
 - auto-rename preview
 - daemon auto-apply
-- rename replay / requeue
+- 按规则签名重新归队
 
 ### 配置与 AI
 
@@ -30,10 +30,11 @@
 
 ### UI / 运行态
 
-- Web：Sessions / Settings / 状态 / Daemon
+- Web：Sessions / Settings / 状态 / Requeue / Daemon
 - TUI：browser / settings / transcript / batch dirty apply
 - 状态页请求日志：后端分页、每页 10 条、支持直接跳页
 - overview 统计：按会话去重
+- daemon 面板：显示 controller 状态与下一次定时 sweep 倒计时
 
 ## 2. 最近收敛掉的旧语义
 

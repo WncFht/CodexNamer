@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { buildApiServer } from "./app.js";
+import { buildApiServer, type ApiServer } from "./app.js";
 
 function parseArgs(argv: string[]): { host: string; port: number } {
   const hostIndex = argv.indexOf("--host");
@@ -17,12 +17,18 @@ function parseArgs(argv: string[]): { host: string; port: number } {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const app = await buildApiServer();
+  const app = (await buildApiServer()) as ApiServer;
 
   await app.listen({
     host: args.host,
     port: args.port
   });
+
+  try {
+    await app.daemonController.start();
+  } catch (error) {
+    console.error("[api] failed to auto-start daemon", error);
+  }
 }
 
 void main();

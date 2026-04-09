@@ -30,7 +30,7 @@
 - 维护 SQLite 状态与 cursor
 - 生成 rename candidate
 - 处理 suggest / apply / manual rename / freeze
-- 执行 batch dirty apply / auto-rename sweep / replay
+- 执行 batch dirty apply / auto-rename sweep / requeue
 - 生成 overview / doctor / provider diagnostics / prompt preview
 - 维护 AI request logs
 
@@ -46,6 +46,8 @@
 ### `packages/api`
 
 暴露本地 Fastify API。
+
+入口 `packages/api/src/index.ts` 现在会在 API 进程启动后，默认自动拉起一个 controller-managed daemon。
 
 当前主要路由：
 
@@ -104,11 +106,12 @@
 
 ### `packages/web`
 
-当前 Web 有四个主视图：
+当前 Web 有五个主视图：
 
 - `Sessions`
 - `Settings`
 - `状态 / Rename Ops`
+- `Requeue`
 - `Daemon`
 
 当前覆盖：
@@ -121,10 +124,10 @@
 - settings 写回
 - provider diagnostics
 - prompt preview
-- auto-rename preview
 - overview 图表
+- requeue preview / execute
 - AI request logs
-- daemon start / stop / log tail
+- daemon start / stop / next scheduled sweep countdown / log tail
 
 说明：
 
@@ -165,11 +168,24 @@
 
 ### 自动化路径
 
-1. daemon 或 API 触发 `runAutoRenameSweep`
-2. 对 dirty sessions 运行 `evaluateAutoRename`
-3. 输出 `skip / suggest / apply`
-4. 若运行态允许且命中 `apply`，执行真正写回
-5. 写 daemon runtime 与 sweep summary
+1. API 默认托管一个 daemon 子进程，或用户单独启动 standalone daemon
+2. daemon 触发 `runAutoRenameSweep()`
+3. 先重新 `scan()`，再筛出当前 dirty sessions
+4. 对 dirty sessions 运行 `evaluateAutoRename()`
+5. 输出 `skip / suggest / apply`
+6. 若运行态允许且命中 `apply`，执行真正写回
+7. 写 `daemon_runtime` 与 recent sweep summary
+
+### 队列语义
+
+当前没有独立持久化任务队列表。
+
+真正承担“待处理队列”语义的是 dirty session 集合：
+
+- `dirty_since_rename = 1`
+- 或 `force_rewrite = 1`
+
+requeue 的本质也是把一批 session 重新打成 dirty，并清掉旧 candidate。
 
 ## 5. 当前功能矩阵
 
@@ -189,8 +205,9 @@
 | AI request logs | 已实现 | core / API / Web |
 | request logs 后端分页 | 已实现 | core / API / Web |
 | transcript 分页过滤 | 已实现 | core / API / Web / TUI |
-| rename replay / requeue | 已实现 | core / API / Web |
-| daemon 控制面板 | 已实现 | API / Web |
+| 按规则签名重新归队 | 已实现 | core / API / Web |
+| API 默认自动拉起 daemon | 已实现 | API |
+| daemon 控制面板与倒计时 | 已实现 | API / Web |
 
 ## 6. 当前行为约束
 
@@ -199,3 +216,4 @@
 - accepted official rename source 只认 `ai` 和 `manual`
 - overview 的 rename 统计按会话去重
 - 请求日志状态页每页显示 10 条，但 API 缺省页大小仍是 40
+- 请求日志成功时会显式展示输出命名

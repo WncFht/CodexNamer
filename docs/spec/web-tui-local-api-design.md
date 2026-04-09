@@ -57,10 +57,13 @@
 
 - runtime hero
 - overview 图表
-- preview queue
-- replay
 - request logs
 - doctor JSON
+
+说明：
+
+- `preview queue` 与 `requeue` 已拆到独立的 `Requeue` 页面
+- 状态页现在更偏 sweep 运行态与请求日志观测
 
 请求日志当前具备：
 
@@ -72,7 +75,16 @@
 - 直接跳页
 - 详情区自动跟随当前页可见项
 
-### 2.4 Daemon
+### 2.4 Requeue
+
+主要分区：
+
+- 当前规则签名与覆盖情况
+- queue / skip 原因统计
+- 会话级 preview 列表
+- 最近 requeue runs
+
+### 2.5 Daemon
 
 主要分区：
 
@@ -80,6 +92,7 @@
 - runtime explain
 - process 信息
 - queue 摘要
+- 下一次定时 sweep 倒计时
 - 启动命令
 - 最近日志
 

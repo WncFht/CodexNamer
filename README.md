@@ -18,7 +18,7 @@ Codex already stores session history locally, but day-to-day session management 
 - hundreds of rollout files
 - weak or stale default titles
 - multiple workspaces and providers
-- a need to batch rename, freeze, replay, or audit naming history
+- a need to batch rename, freeze, requeue older sessions, or audit naming history
 - a desire to auto-apply stable names only when sessions are truly idle
 
 This project adds an external management layer on top of Codex's local data model:
@@ -37,7 +37,7 @@ This project adds an external management layer on top of Codex's local data mode
   Reads rollout files, stores derived state in its own SQLite database, and keeps rename history separate from Codex internals.
 
 - **Structured AI naming**  
-  Supports structured naming with `tag / kind / scope / summary` composition, prompt preview, context strategies, and per-session style overrides.
+  Supports structured naming with `tag / kind / scope / summary` composition, prompt preview, context strategies, and builder-driven title assembly.
 
 - **Multiple operators, one backend**  
   CLI, Local API, Web UI, TUI, and daemon all share the same core rename engine and state model.
@@ -46,10 +46,10 @@ This project adds an external management layer on top of Codex's local data mode
   Distinguishes between preview status (`skip / suggest / apply`) and real writeback execution (`preview-only` vs `auto-apply`).
 
 - **Daemon control in Web UI**  
-  The Web app can start and stop the sweep daemon manually instead of requiring a boot-persistent service.
+  The Local API auto-starts a managed sweep daemon by default, and the Web app can stop/restart it while showing the next scheduled sweep countdown.
 
 - **Practical queue operations**  
-  Freeze, manual override, replay renames, detect name collisions, compact `session_index.jsonl`, inspect provider diagnostics, and review AI request logs.
+  Freeze sessions, requeue by rule signature, detect name collisions, compact `session_index.jsonl`, inspect provider diagnostics, and review AI request logs.
 
 ## Architecture
 
@@ -64,18 +64,22 @@ flowchart LR
   E --> G
 ```
 
+There is no separate durable task queue. Dirty sessions inside `rename_state` act as a soft queue, and each sweep recomputes `skip / suggest / apply` from current state.
+
 ## Feature overview
 
 | Capability | Status | Entry points |
 | --- | --- | --- |
 | Rollout scanning and incremental ingest | Available | core |
 | Structured rename candidate generation | Available | core / CLI / API / Web / TUI |
-| Manual rename, freeze, manual override | Available | CLI / API / Web / TUI |
+| Manual rename | Available | CLI / API / TUI |
+| Freeze / unfreeze | Available | CLI / API / Web / TUI |
 | Dirty queue preview and batch apply | Available | CLI / API / Web / TUI |
 | Auto-rename sweep with daemon heartbeat | Available | daemon / API / Web |
 | Provider diagnostics and prompt preview | Available | CLI / API / Web / TUI |
 | `session_index.jsonl` compaction | Available | CLI / API / Web |
-| Daemon start/stop from Web UI | Available | API / Web |
+| Rule-signature requeue | Available | API / Web |
+| API-managed daemon with auto-start and Web controls | Available | API / Web |
 
 ## Quick start
 
@@ -107,6 +111,7 @@ The launcher will:
 
 - reuse a healthy local API if one already exists
 - or start a new API on an available `42110+` port
+- auto-start the API-managed daemon
 - clean up stale repo-owned launcher/API/web dev processes
 - open the Vite app against the matching API target
 
@@ -133,6 +138,8 @@ npm run api -- --host 127.0.0.1 --port 42110
 curl http://127.0.0.1:42110/api/v1/health
 ```
 
+`npm run api` now auto-starts a controller-managed daemon with the configured scan interval.
+
 ### Start the daemon
 
 ```bash
@@ -145,6 +152,8 @@ npm run daemon -- --once
 # Custom interval
 npm run daemon -- --interval 60
 ```
+
+This standalone daemon is optional. In the common Web/API flow, the Local API already starts its own managed daemon by default.
 
 ## Auto-apply semantics
 
@@ -160,6 +169,8 @@ Real auto-apply depends on runtime state:
 
 - `rename.auto_apply = "disabled"` → preview only
 - `rename.auto_apply = "idle-finalize"` + daemon running → eligible `finalize_ready` sessions can be written automatically
+
+In the default Web/API flow, that daemon is auto-started by the Local API. The standalone `npm run daemon` entry point remains useful for isolated runtime testing or non-API setups.
 
 The UI exposes:
 
