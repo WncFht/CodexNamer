@@ -5,8 +5,6 @@ import { formatWhen } from "./browser-utils.js";
 import { autoRenameReasonLabel, autoRenameStatusLabel, formatUiNumber, t, type UiLanguage } from "./i18n.js";
 import {
   deriveRuntimeDisplay,
-  runtimeDaemonStatusLabel,
-  runtimeDaemonStatusTone,
   runtimeExecutionLabel,
   runtimeExecutionTone,
   runtimeProgressExplanation
@@ -61,13 +59,6 @@ function readChartTheme(): ChartTheme {
     danger: rootStyle.getPropertyValue("--danger").trim() || "#b53333",
     manual: rootStyle.getPropertyValue("--manual").trim() || "#8e5a4f"
   };
-}
-
-function formatCompactNumber(value: number, language: UiLanguage): string {
-  return new Intl.NumberFormat(language, {
-    notation: "compact",
-    maximumFractionDigits: value >= 1000 ? 1 : 0
-  }).format(value);
 }
 
 function formatDurationMs(value: number | undefined): string {
@@ -304,16 +295,6 @@ function aiRequestStatusLabel(status: string | undefined, language: UiLanguage):
   }
 }
 
-function shortRuleSignature(value: string | undefined): string {
-  if (!value) {
-    return "--";
-  }
-  if (value.length <= 16) {
-    return value;
-  }
-  return `${value.slice(0, 10)}…${value.slice(-6)}`;
-}
-
 function sweepAxisLabel(value: string, language: UiLanguage): string {
   return new Intl.DateTimeFormat(language, {
     month: "numeric",
@@ -373,7 +354,7 @@ export function RenameOpsPanel(props: {
     [overview?.runtime.recentSweeps]
   );
   const latestAiRequest = aiRequestLogs?.items[0];
-  const currentRuleSignature = overview?.runtime.currentRuleSignature || overview?.ruleCoverage.currentSignature || "";
+  const ruleBacklogCount = (overview?.ruleCoverage.outdated ?? 0) + (overview?.ruleCoverage.unknown ?? 0);
   const requestLogRequestIdRef = React.useRef(0);
   const loadRequestLogPage = React.useCallback(async () => {
     const requestId = ++requestLogRequestIdRef.current;
@@ -1211,15 +1192,15 @@ export function RenameOpsPanel(props: {
       <section className="detail-panel ops-runtime-panel ops-span-wide">
         <div className="panel-topline ops-runtime-header">
           <div>
-            <p className="panel-kicker">{inline("执行状态", "Execution")}</p>
-            <h3>{inline("自动重命名运行态", "Auto rename runtime")}</h3>
+            <p className="panel-kicker">{inline("概览", "Overview")}</p>
+            <h3>{inline("自动重命名概览", "Auto rename overview")}</h3>
             <p className="settings-copy">
               {runtimeDisplay.sweepRunning
                 ? runtimeProgressExplanation(props.uiLanguage)
                 : overview?.runtime.explain ||
                   inline(
-                    "还没有 sweep 摘要。启动 daemon 后，这里会明确告诉你扫了多少、剩了多少、有没有自动落盘。",
-                    "No sweep summary has been recorded yet. Once the daemon runs, this section will show exactly how much was scanned, how much is left, and whether anything auto-applied."
+                    "这页先只回答三件事：有没有在跑、有没有积压、要不要去补扫或诊断。",
+                    "This page focuses on three questions first: is the system running, is work piling up, and do you need replay or deeper diagnostics."
                   )}
             </p>
           </div>
@@ -1233,17 +1214,6 @@ export function RenameOpsPanel(props: {
             >
               {tt("refresh")}
             </button>
-            <button
-              className="btn-sm"
-              onClick={() => {
-                void props.onRefreshPreview({ includeCandidateNames: true, urgent: true });
-              }}
-              type="button"
-            >
-              {props.previewRefreshing
-                ? inline("候选名载入中...", "Loading candidate names...")
-                : inline("按需载入候选名", "Load candidate names")}
-            </button>
           </div>
         </div>
 
@@ -1251,33 +1221,18 @@ export function RenameOpsPanel(props: {
           <span className={`chip ${runtimeExecutionTone(runtimeDisplay.execution)}`}>
             {inline("实际执行", "Execution")}: {runtimeExecutionLabel(runtimeDisplay.execution, props.uiLanguage)}
           </span>
-          <span className="chip manual">
-            {inline("配置策略", "Configured policy")}: {overview?.runtime.configuredAutoApply ?? tt("nA")}
-          </span>
-          <span className={`chip ${runtimeDaemonStatusTone(runtimeDisplay.daemonStatus)}`}>
-            {inline("Daemon 状态", "Daemon status")}: {runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.uiLanguage)}
-          </span>
-          <span className={`chip ${overview?.runtime.daemonAutoApply ? "success" : "warning"}`}>
-            {inline("Daemon 自动应用", "Daemon auto apply")}: {overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
-          </span>
-          <span className="chip manual">
-            {inline("当前规则签名", "Current rule signature")}: {shortRuleSignature(currentRuleSignature)}
-          </span>
-          <span className="chip manual">
-            {inline("最近一轮 Sweep", "Last sweep")}: {formatWhen(overview?.runtime.lastSweepAt, props.uiLanguage)}
-          </span>
           <span className={`chip ${(lastSweepSummary?.pending ?? 0) > 0 ? "warning" : "success"}`}>
             {inline("本轮 dirty / 待扫", "Dirty / pending")}: {formatUiNumber(lastSweepSummary?.dirtyTotal, props.uiLanguage)} /{" "}
             {formatUiNumber(lastSweepSummary?.pending, props.uiLanguage)}
           </span>
-          <span className="chip success">
-            {inline("最近应用", "Last apply")}: {formatWhen(overview?.renameHistory.lastAppliedAt, props.uiLanguage)}
+          <span className={`chip ${ruleBacklogCount > 0 ? "warning" : "success"}`}>
+            {inline("待补扫规则", "Replay backlog")}: {formatUiNumber(ruleBacklogCount, props.uiLanguage)}
+          </span>
+          <span className="chip manual">
+            {inline("最近一轮 Sweep", "Last sweep")}: {formatWhen(overview?.runtime.lastSweepAt, props.uiLanguage)}
           </span>
           <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
             {inline("活跃 AI 请求", "Active AI requests")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
-          </span>
-          <span className="chip manual">
-            {inline("最近 AI 完成", "Last AI finish")}: {formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}
           </span>
         </div>
 
@@ -1291,13 +1246,6 @@ export function RenameOpsPanel(props: {
             </p>
           </article>
           <article className="metric-card">
-            <span className="metric-label">{inline("Sweep 扫描触达", "Sweep scan touch")}</span>
-            <strong>{formatUiNumber(lastSweepSummary?.scan.scannedRollouts, props.uiLanguage)}</strong>
-            <p>
-              {formatUiNumber(lastSweepSummary?.scan.updatedSessions, props.uiLanguage)} {inline("个会话内容更新", "sessions updated")}
-            </p>
-          </article>
-          <article className="metric-card">
             <span className="metric-label">{inline("Sweep 落盘结果", "Sweep apply result")}</span>
             <strong>{formatUiNumber(lastSweepSummary?.autoApplied, props.uiLanguage)}</strong>
             <p>
@@ -1307,31 +1255,9 @@ export function RenameOpsPanel(props: {
           </article>
           <article className="metric-card">
             <span className="metric-label">{inline("规则覆盖状态", "Rule coverage")}</span>
-            <strong>{formatUiNumber(overview?.ruleCoverage.outdated, props.uiLanguage)}</strong>
+            <strong>{formatUiNumber(ruleBacklogCount, props.uiLanguage)}</strong>
             <p>
               {formatUiNumber(overview?.ruleCoverage.latest, props.uiLanguage)} {inline("已对齐最新规则", "already latest")}
-            </p>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">{inline("总 Token", "Total tokens")}</span>
-            <strong>{formatCompactNumber(overview?.workload.totalTokens ?? 0, props.uiLanguage)}</strong>
-            <p>
-              {formatCompactNumber(overview?.workload.dirtyTokens ?? 0, props.uiLanguage)} {inline("来自 dirty 会话", "from dirty sessions")}
-            </p>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">{inline("任务完成数", "Task completions")}</span>
-            <strong>{formatUiNumber(overview?.workload.totalTasks, props.uiLanguage)}</strong>
-            <p>
-              {formatCompactNumber(overview?.workload.averageTokensPerSession ?? 0, props.uiLanguage)} {inline("平均 tokens / 会话", "avg tokens / session")}
-            </p>
-          </article>
-          <article className="metric-card">
-            <span className="metric-label">{inline("已应用重命名", "Applied renames")}</span>
-            <strong>{formatUiNumber(overview?.renameHistory.applied, props.uiLanguage)}</strong>
-            <p>
-              {formatUiNumber(overview?.renameHistory.autoApplied, props.uiLanguage)} {inline("自动应用", "auto")} /{" "}
-              {formatUiNumber(overview?.renameHistory.manualApplied, props.uiLanguage)} {inline("手动应用", "manual")}
             </p>
           </article>
           <article className="metric-card">
@@ -1354,29 +1280,6 @@ export function RenameOpsPanel(props: {
         title={inline("后台 Sweep 趋势", "Daemon sweep trend")}
       />
       <ChartCard
-        buildOption={sweepActionOption}
-        copy={inline(
-          "把每轮 sweep 拆成 suggest / apply / skip / auto-applied，便于看出 daemon 是卡在排队、跳过还是已经开始落盘。",
-          "Breaks each sweep into suggest / apply / skip / auto-applied so you can see whether the daemon is mostly queuing, skipping, or actually landing titles."
-        )}
-        title={inline("Sweep 动作拆分", "Sweep action breakdown")}
-      />
-      <ChartCard
-        buildOption={pipelineOption}
-        copy={inline("会话会先落在活跃、候选就绪、可终稿这些阶段里。这里回答的是：现在整体卡在哪一段。", "Sessions first land in stages like active, candidate-ready, and finalize-ready. This chart answers where the system is currently sitting." )}
-        title={inline("会话阶段分布", "Session stage distribution")}
-      />
-      <ChartCard
-        buildOption={flowOption}
-        copy={inline("把当前预览队列里的“原因”映射到“动作”。这里回答的是：为什么是跳过、建议还是应用。", "Maps the current preview reasons to scheduling actions. This answers why items are skipping, suggesting, or applying." )}
-        title={inline("原因到动作的流向", "Reason to action flow")}
-      />
-      <ChartCard
-        buildOption={activityOption}
-        copy={inline("最近 14 天的 rename 活动，用来区分真正落盘、仅预览和跳过。", "Rename activity over the last 14 days, separating landed applies, preview-only passes, and skips.")}
-        title={inline("近期重命名活动", "Recent rename activity")}
-      />
-      <ChartCard
         buildOption={ruleCoverageOption}
         copy={inline(
           "当前正式标题按规则签名分成已对齐、落后、手动和未知四类。这里能直接看出是不是该去新的 requeue 页面补扫。",
@@ -1385,365 +1288,503 @@ export function RenameOpsPanel(props: {
         title={inline("规则覆盖分布", "Rule coverage")}
       />
 
-      <section className="detail-panel ops-span-wide ops-log-panel">
-        <div className="panel-topline ops-log-panel-header">
+      <section className="detail-panel ops-span-wide">
+        <div className="panel-topline">
           <div>
-            <p className="panel-kicker">AI</p>
-            <h3>{inline("模型请求日志", "Model request logs")}</h3>
+            <p className="panel-kicker">{inline("高级", "Advanced")}</p>
+            <h3>{inline("更多分析与诊断", "More analysis and diagnostics")}</h3>
             <p className="settings-copy">
               {inline(
-                "按日志面板的方式看最近请求：先筛选，再扫表格。这里重点回答三件事：现在有没有请求、最近慢在哪、失败落在哪一层。",
-                "Read recent rename requests like an ops log surface: filter first, then scan the table. This answers three questions quickly: is anything active now, where is latency accumulating, and which layer is failing."
+                "更细的图表、模型请求日志和原始诊断都保留，但默认收起，避免概览页一打开就变成操作台。",
+                "Deeper charts, model request logs, and the raw doctor payload are still available, but folded by default so the overview does not open like an ops console."
               )}
             </p>
           </div>
-          <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
-            {inline("活跃中", "Active")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
-          </span>
         </div>
+        <details className="settings-disclosure ops-disclosure">
+          <summary>{inline("展开更多分析与诊断", "Show more analysis and diagnostics")}</summary>
+          <div className="ops-disclosure-stack">
+            <div className="ops-disclosure-grid">
+              <ChartCard
+                buildOption={sweepActionOption}
+                copy={inline(
+                  "把每轮 sweep 拆成 suggest / apply / skip / auto-applied，便于看出 daemon 是卡在排队、跳过还是已经开始落盘。",
+                  "Breaks each sweep into suggest / apply / skip / auto-applied so you can see whether the daemon is mostly queuing, skipping, or actually landing titles."
+                )}
+                title={inline("Sweep 动作拆分", "Sweep action breakdown")}
+              />
+              <ChartCard
+                buildOption={pipelineOption}
+                copy={inline(
+                  "会话会先落在活跃、候选就绪、可终稿这些阶段里。这里回答的是：现在整体卡在哪一段。",
+                  "Sessions first land in stages like active, candidate-ready, and finalize-ready. This chart answers where the system is currently sitting."
+                )}
+                title={inline("会话阶段分布", "Session stage distribution")}
+              />
+              <ChartCard
+                buildOption={flowOption}
+                copy={inline(
+                  "把当前预览队列里的“原因”映射到“动作”。这里回答的是：为什么是跳过、建议还是应用。",
+                  "Maps the current preview reasons to scheduling actions. This answers why items are skipping, suggesting, or applying."
+                )}
+                title={inline("原因到动作的流向", "Reason to action flow")}
+              />
+              <ChartCard
+                buildOption={activityOption}
+                copy={inline(
+                  "最近 14 天的 rename 活动，用来区分真正落盘、仅预览和跳过。",
+                  "Rename activity over the last 14 days, separating landed applies, preview-only passes, and skips."
+                )}
+                title={inline("近期重命名活动", "Recent rename activity")}
+              />
+            </div>
 
-        <div className="ops-log-toolbar">
-          <label className="ops-log-filter ops-log-filter-search">
-            <span>{inline("搜索", "Search")}</span>
-            <input
-              onChange={(event) => setLogQuery(event.target.value)}
-              placeholder={inline("项目 / thread / 模型 / 错误", "project / thread / model / error")}
-              type="search"
-              value={logQuery}
-            />
-          </label>
-          <label className="ops-log-filter">
-            <span>{inline("项目", "Project")}</span>
-            <select onChange={(event) => setLogProjectFilter(event.target.value)} value={logProjectFilter}>
-              <option value="all">{inline("全部", "All")}</option>
-              {projectOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ops-log-filter">
-            <span>{inline("状态", "Status")}</span>
-            <select
-              onChange={(event) =>
-                setLogStatusFilter(event.target.value as "all" | "running" | "succeeded" | "failed")
-              }
-              value={logStatusFilter}
-            >
-              <option value="all">{inline("全部", "All")}</option>
-              <option value="running">{inline("进行中", "Running")}</option>
-              <option value="succeeded">{inline("成功", "Succeeded")}</option>
-              <option value="failed">{inline("失败", "Failed")}</option>
-            </select>
-          </label>
-          <label className="ops-log-filter">
-            <span>{inline("传输", "Transport")}</span>
-            <select
-              onChange={(event) =>
-                setLogTransportFilter(
-                  event.target.value as "all" | "responses" | "openai-compatible"
-                )
-              }
-              value={logTransportFilter}
-            >
-              <option value="all">{inline("全部", "All")}</option>
-              <option value="responses">responses</option>
-              <option value="openai-compatible">openai-compatible</option>
-            </select>
-          </label>
-          <button
-            className="btn-sm"
-            onClick={() => {
-              void Promise.all([Promise.resolve(props.onRefreshRuntime()), loadRequestLogPage()]);
-            }}
-            type="button"
-          >
-            {tt("refresh")}
-          </button>
-        </div>
+            <section className="detail-panel ops-log-panel">
+              <div className="panel-topline ops-log-panel-header">
+                <div>
+                  <p className="panel-kicker">AI</p>
+                  <h3>{inline("模型请求日志", "Model request logs")}</h3>
+                  <p className="settings-copy">
+                    {inline(
+                      "按日志面板的方式看最近请求：先筛选，再扫表格。这里重点回答三件事：现在有没有请求、最近慢在哪、失败落在哪一层。",
+                      "Read recent rename requests like an ops log surface: filter first, then scan the table. This answers three questions quickly: is anything active now, where is latency accumulating, and which layer is failing."
+                    )}
+                  </p>
+                </div>
+                <div className="header-actions">
+                  <button
+                    className="btn-sm"
+                    onClick={() => {
+                      void props.onRefreshPreview({ includeCandidateNames: true, urgent: true });
+                    }}
+                    type="button"
+                  >
+                    {props.previewRefreshing
+                      ? inline("候选名载入中...", "Loading candidate names...")
+                      : inline("按需载入候选名", "Load candidate names")}
+                  </button>
+                  <span className={`chip ${aiRequestLogs?.activeCount ? "warning" : "manual"}`}>
+                    {inline("活跃中", "Active")}: {formatUiNumber(aiRequestLogs?.activeCount, props.uiLanguage)}
+                  </span>
+                </div>
+              </div>
 
-        <div className="ops-log-summary-row">
-          <span className="ops-log-summary-chip">
-            {inline("筛选结果", "Filtered")}: {formatUiNumber(totalFilteredAiRequests, props.uiLanguage)}
-          </span>
-          <span className="ops-log-summary-chip">
-            {inline("页码", "Page")}: {formatUiNumber(logPage, props.uiLanguage)} / {formatUiNumber(totalLogPages, props.uiLanguage)}
-          </span>
-          <span className="ops-log-summary-chip">
-            {inline("进行中", "Running")}: {formatUiNumber(filteredRunningCount, props.uiLanguage)}
-          </span>
-          <span className="ops-log-summary-chip">
-            {inline("成功", "Succeeded")}: {formatUiNumber(filteredSucceededCount, props.uiLanguage)}
-          </span>
-          <span className="ops-log-summary-chip">
-            {inline("失败", "Failed")}: {formatUiNumber(filteredFailedCount, props.uiLanguage)}
-          </span>
-          <span className="ops-log-summary-chip">
-            {inline("最近完成", "Last finished")}: {formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}
-          </span>
-          {requestLogLoading ? (
-            <span className="ops-log-summary-chip">{inline("日志加载中...", "Loading logs...")}</span>
-          ) : null}
-        </div>
-
-        {totalFilteredAiRequests > 0 ? (
-          <div className="ops-log-pagination">
-            <span className="ops-log-pagination-copy">
-              {inline("每页 10 条", "10 rows per page")} · {inline("当前显示", "Showing")}{" "}
-              {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + 1, props.uiLanguage)}-
-              {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + visibleAiRequests.length, props.uiLanguage)} /{" "}
-              {formatUiNumber(totalFilteredAiRequests, props.uiLanguage)}
-            </span>
-            <div className="ops-log-pagination-actions">
-              <button className="btn-sm" disabled={logPage <= 1} onClick={() => setLogPage(1)} type="button">
-                {inline("首页", "First")}
-              </button>
-              <button className="btn-sm" disabled={logPage <= 1} onClick={() => setLogPage((page) => Math.max(1, page - 1))} type="button">
-                {inline("上一页", "Prev")}
-              </button>
-              <button className="btn-sm" disabled={logPage >= totalLogPages} onClick={() => setLogPage((page) => Math.min(totalLogPages, page + 1))} type="button">
-                {inline("下一页", "Next")}
-              </button>
-              <button className="btn-sm" disabled={logPage >= totalLogPages} onClick={() => setLogPage(totalLogPages)} type="button">
-                {inline("末页", "Last")}
-              </button>
-              <div className="ops-log-page-jump">
-                <input
-                  min={1}
-                  onChange={(event) => setLogPageInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      handleLogPageJump();
+              <div className="ops-log-toolbar">
+                <label className="ops-log-filter ops-log-filter-search">
+                  <span>{inline("搜索", "Search")}</span>
+                  <input
+                    onChange={(event) => setLogQuery(event.target.value)}
+                    placeholder={inline("项目 / thread / 模型 / 错误", "project / thread / model / error")}
+                    type="search"
+                    value={logQuery}
+                  />
+                </label>
+                <label className="ops-log-filter">
+                  <span>{inline("项目", "Project")}</span>
+                  <select onChange={(event) => setLogProjectFilter(event.target.value)} value={logProjectFilter}>
+                    <option value="all">{inline("全部", "All")}</option>
+                    {projectOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ops-log-filter">
+                  <span>{inline("状态", "Status")}</span>
+                  <select
+                    onChange={(event) =>
+                      setLogStatusFilter(event.target.value as "all" | "running" | "succeeded" | "failed")
                     }
+                    value={logStatusFilter}
+                  >
+                    <option value="all">{inline("全部", "All")}</option>
+                    <option value="running">{inline("进行中", "Running")}</option>
+                    <option value="succeeded">{inline("成功", "Succeeded")}</option>
+                    <option value="failed">{inline("失败", "Failed")}</option>
+                  </select>
+                </label>
+                <label className="ops-log-filter">
+                  <span>{inline("传输", "Transport")}</span>
+                  <select
+                    onChange={(event) =>
+                      setLogTransportFilter(event.target.value as "all" | "responses" | "openai-compatible")
+                    }
+                    value={logTransportFilter}
+                  >
+                    <option value="all">{inline("全部", "All")}</option>
+                    <option value="responses">responses</option>
+                    <option value="openai-compatible">openai-compatible</option>
+                  </select>
+                </label>
+                <button
+                  className="btn-sm"
+                  onClick={() => {
+                    void Promise.all([Promise.resolve(props.onRefreshRuntime()), loadRequestLogPage()]);
                   }}
-                  step={1}
-                  type="number"
-                  value={logPageInput}
-                />
-                <button className="btn-sm" onClick={handleLogPageJump} type="button">
-                  {inline("跳转", "Go")}
+                  type="button"
+                >
+                  {tt("refresh")}
                 </button>
               </div>
-            </div>
-          </div>
-        ) : null}
 
-        {props.aiRequestLogDetail ? (
-          <div className="detail-panel">
-            <div className="panel-topline">
-              <div>
-                <p className="panel-kicker">AI Trace</p>
-                <h3>{inline("请求详情", "Request detail")}</h3>
+              <div className="ops-log-summary-row">
+                <span className="ops-log-summary-chip">
+                  {inline("筛选结果", "Filtered")}: {formatUiNumber(totalFilteredAiRequests, props.uiLanguage)}
+                </span>
+                <span className="ops-log-summary-chip">
+                  {inline("页码", "Page")}: {formatUiNumber(logPage, props.uiLanguage)} /{" "}
+                  {formatUiNumber(totalLogPages, props.uiLanguage)}
+                </span>
+                <span className="ops-log-summary-chip">
+                  {inline("进行中", "Running")}: {formatUiNumber(filteredRunningCount, props.uiLanguage)}
+                </span>
+                <span className="ops-log-summary-chip">
+                  {inline("成功", "Succeeded")}: {formatUiNumber(filteredSucceededCount, props.uiLanguage)}
+                </span>
+                <span className="ops-log-summary-chip">
+                  {inline("失败", "Failed")}: {formatUiNumber(filteredFailedCount, props.uiLanguage)}
+                </span>
+                <span className="ops-log-summary-chip">
+                  {inline("最近完成", "Last finished")}: {formatWhen(aiRequestLogs?.lastFinishedAt, props.uiLanguage)}
+                </span>
+                {requestLogLoading ? (
+                  <span className="ops-log-summary-chip">{inline("日志加载中...", "Loading logs...")}</span>
+                ) : null}
               </div>
-              <button className="btn-sm" onClick={() => props.onSelectRequestLog(undefined)} type="button">
-                {inline("返回日志列表", "Back to logs")}
-              </button>
-            </div>
-            <dl className="settings-runtime-grid compact ops-log-detail-grid">
-              <div>
-                <dt>ID</dt>
-                <dd className="ops-log-mono">{props.aiRequestLogDetail.id}</dd>
-              </div>
-              <div>
-                <dt>{inline("项目", "Project")}</dt>
-                <dd>{props.aiRequestLogDetail.projectName ?? noDataLabel}</dd>
-              </div>
-              <div>
-                <dt>Thread</dt>
-                <dd className="ops-log-mono">{props.aiRequestLogDetail.threadId}</dd>
-              </div>
-              <div>
-                <dt>{inline("状态", "Status")}</dt>
-                <dd>{aiRequestStatusLabel(props.aiRequestLogDetail.status, props.uiLanguage)}</dd>
-              </div>
-              <div>
-                <dt>{inline("开始时间", "Started at")}</dt>
-                <dd title={props.aiRequestLogDetail.startedAt}>
-                  {formatWhen(props.aiRequestLogDetail.startedAt, props.uiLanguage)}
-                </dd>
-              </div>
-              <div>
-                <dt>{inline("结束时间", "Finished at")}</dt>
-                <dd title={props.aiRequestLogDetail.finishedAt ?? ""}>
-                  {formatWhen(props.aiRequestLogDetail.finishedAt, props.uiLanguage)}
-                </dd>
-              </div>
-              <div>
-                <dt>{inline("耗时", "Duration")}</dt>
-                <dd>{formatDurationMs(props.aiRequestLogDetail.durationMs)}</dd>
-              </div>
-              <div>
-                <dt>{inline("模型", "Model")}</dt>
-                <dd>{props.aiRequestLogDetail.model ?? noDataLabel}</dd>
-              </div>
-              <div>
-                <dt>{inline("后端", "Backend")}</dt>
-                <dd>{props.aiRequestLogDetail.backend}</dd>
-              </div>
-              <div>
-                <dt>{inline("传输", "Transport")}</dt>
-                <dd>{props.aiRequestLogDetail.transport}</dd>
-              </div>
-              <div>
-                <dt>{inline("请求后端", "Requested backend")}</dt>
-                <dd>{props.aiRequestLogDetail.metadata?.requestedBackend ?? props.aiRequestLogDetail.backend}</dd>
-              </div>
-              <div>
-                <dt>{inline("接口", "Endpoint")}</dt>
-                <dd className="ops-log-mono">{props.aiRequestLogDetail.baseUrl ?? noDataLabel}</dd>
-              </div>
-              <div>
-                <dt>{inline("Provider ref", "Provider ref")}</dt>
-                <dd className="ops-log-mono">{props.aiRequestLogDetail.metadata?.providerRef ?? noDataLabel}</dd>
-              </div>
-              <div>
-                <dt>{inline("Profile", "Profile")}</dt>
-                <dd className="ops-log-mono">{props.aiRequestLogDetail.metadata?.profile ?? noDataLabel}</dd>
-              </div>
-              <div>
-                <dt>{inline("字符", "Chars")}</dt>
-                <dd>
-                  {formatUiNumber(props.aiRequestLogDetail.promptChars, props.uiLanguage)} /{" "}
-                  {formatUiNumber(props.aiRequestLogDetail.responseChars, props.uiLanguage)}
-                </dd>
-              </div>
-              <div>
-                <dt>{inline("最终标题", "Final name")}</dt>
-                <dd>{props.aiRequestLogDetail.finalName ?? props.aiRequestLogDetail.result?.composition?.finalName ?? noDataLabel}</dd>
-              </div>
-              <div>
-                <dt>{inline("信息", "Info")}</dt>
-                <dd>
-                  {props.aiRequestLogDetail.status === "succeeded"
-                    ? props.aiRequestLogDetail.finalName ??
-                      props.aiRequestLogDetail.result?.composition?.finalName ??
-                      noDataLabel
-                    : props.aiRequestLogDetail.error ?? noDataLabel}
-                </dd>
-              </div>
-            </dl>
-            <details className="settings-disclosure" open>
-              <summary>{inline("Prompt 输入", "Prompt input")}</summary>
-              <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.promptText ?? noDataLabel}</pre>
-            </details>
-            <details className="settings-disclosure">
-              <summary>{inline("请求载荷", "Request payload")}</summary>
-              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.requestPayload ?? {}, null, 2)}</pre>
-            </details>
-            <details className="settings-disclosure" open>
-              <summary>{inline("模型原始输出", "Raw model output")}</summary>
-              <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.responseText ?? noDataLabel}</pre>
-            </details>
-            <details className="settings-disclosure">
-              <summary>{inline("响应载荷", "Response payload")}</summary>
-              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.responsePayload ?? {}, null, 2)}</pre>
-            </details>
-            <details className="settings-disclosure" open>
-              <summary>{inline("解析后的结构化结果", "Parsed structured result")}</summary>
-              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.result?.parsedModelOutput ?? {}, null, 2)}</pre>
-            </details>
-            <details className="settings-disclosure" open>
-              <summary>{inline("Builder 到最终标题", "Builder to final title")}</summary>
-              <pre className="settings-json">{JSON.stringify(props.aiRequestLogDetail.result?.composition ?? {}, null, 2)}</pre>
-            </details>
-          </div>
-        ) : null}
 
-        <div className="ops-log-table-container">
-          <table className="ops-log-table">
-            <thead>
-              <tr>
-                <th>{inline("时间", "Time")}</th>
-                <th>{inline("项目", "Project")}</th>
-                <th>Thread</th>
-                <th>{inline("模型", "Model")}</th>
-                <th>{inline("状态", "Status")}</th>
-                <th>{inline("耗时", "Duration")}</th>
-                <th>{inline("字符", "Chars")}</th>
-                <th>{inline("传输", "Transport")}</th>
-                <th>{inline("接口", "Endpoint")}</th>
-                <th>{inline("信息", "Info")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleAiRequests.length === 0 ? (
-                <tr>
-                  <td className="ops-log-empty" colSpan={10}>
-                    {aiRequestLogs ? inline("当前筛选条件下没有日志。", "No logs matched the current filters.") : inline("还没有 AI 请求日志。", "No AI request logs yet.")}
-                  </td>
-                </tr>
+              {totalFilteredAiRequests > 0 ? (
+                <div className="ops-log-pagination">
+                  <span className="ops-log-pagination-copy">
+                    {inline("每页 10 条", "10 rows per page")} · {inline("当前显示", "Showing")}{" "}
+                    {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + 1, props.uiLanguage)}-
+                    {formatUiNumber((logPage - 1) * LOGS_PER_PAGE + visibleAiRequests.length, props.uiLanguage)} /{" "}
+                    {formatUiNumber(totalFilteredAiRequests, props.uiLanguage)}
+                  </span>
+                  <div className="ops-log-pagination-actions">
+                    <button className="btn-sm" disabled={logPage <= 1} onClick={() => setLogPage(1)} type="button">
+                      {inline("首页", "First")}
+                    </button>
+                    <button
+                      className="btn-sm"
+                      disabled={logPage <= 1}
+                      onClick={() => setLogPage((page) => Math.max(1, page - 1))}
+                      type="button"
+                    >
+                      {inline("上一页", "Prev")}
+                    </button>
+                    <button
+                      className="btn-sm"
+                      disabled={logPage >= totalLogPages}
+                      onClick={() => setLogPage((page) => Math.min(totalLogPages, page + 1))}
+                      type="button"
+                    >
+                      {inline("下一页", "Next")}
+                    </button>
+                    <button
+                      className="btn-sm"
+                      disabled={logPage >= totalLogPages}
+                      onClick={() => setLogPage(totalLogPages)}
+                      type="button"
+                    >
+                      {inline("末页", "Last")}
+                    </button>
+                    <div className="ops-log-page-jump">
+                      <input
+                        min={1}
+                        onChange={(event) => setLogPageInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            handleLogPageJump();
+                          }
+                        }}
+                        step={1}
+                        type="number"
+                        value={logPageInput}
+                      />
+                      <button className="btn-sm" onClick={handleLogPageJump} type="button">
+                        {inline("跳转", "Go")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ) : null}
-              {visibleAiRequests.map((item) => (
-                <tr
-                  className="ops-log-row"
-                  data-selected={props.selectedRequestLogId === item.id ? "true" : undefined}
-                  data-status={item.status}
-                  key={item.id}
-                  onClick={() => props.onSelectRequestLog(item.id)}
-                >
-                  <td className="ops-log-col-time">
-                    <div className="ops-log-primary ops-log-nowrap" title={item.startedAt}>{formatWhen(item.startedAt, props.uiLanguage)}</div>
-                    <div className="ops-log-secondary ops-log-nowrap" title={item.finishedAt ?? ""}>{formatWhen(item.finishedAt, props.uiLanguage)}</div>
-                  </td>
-                  <td className="ops-log-col-project">
-                    <div className="ops-log-primary ops-log-nowrap" title={item.projectName ?? ""}>{item.projectName ?? noDataLabel}</div>
-                    <div className="ops-log-secondary ops-log-nowrap" title={item.backend}>{item.backend}</div>
-                  </td>
-                  <td className="ops-log-mono ops-log-col-thread" title={item.threadId}>{item.threadId}</td>
-                  <td className="ops-log-col-model">
-                    <div className="ops-log-primary ops-log-nowrap" title={item.model ?? ""}>{item.model ?? noDataLabel}</div>
-                    <div className="ops-log-secondary ops-log-nowrap" title={item.metadata?.providerRef ?? ""}>{item.metadata?.providerRef ?? noDataLabel}</div>
-                  </td>
-                  <td>
-                    <span className={`chip ${aiRequestStatusTone(item.status)}`}>
-                      {aiRequestStatusLabel(item.status, props.uiLanguage)}
-                    </span>
-                  </td>
-                  <td className="ops-log-col-duration">
-                    <div className="ops-log-primary ops-log-nowrap">{formatDurationMs(item.durationMs)}</div>
-                    <div className="ops-log-secondary">{latestAiRequest?.id === item.id ? inline("最新", "latest") : "\u00A0"}</div>
-                  </td>
-                  <td className="ops-log-col-chars">
-                    <div className="ops-log-primary ops-log-nowrap">
-                      {formatUiNumber(item.promptChars, props.uiLanguage)} / {formatUiNumber(item.responseChars, props.uiLanguage)}
-                    </div>
-                    <div className="ops-log-secondary ops-log-nowrap">{inline("prompt / response", "prompt / response")}</div>
-                  </td>
-                  <td className="ops-log-col-transport">
-                    <div className="ops-log-primary ops-log-nowrap" title={item.transport}>{item.transport}</div>
-                    <div className="ops-log-secondary ops-log-nowrap" title={item.metadata?.requestedBackend ?? item.backend}>{item.metadata?.requestedBackend ?? item.backend}</div>
-                  </td>
-                  <td className="ops-log-mono ops-log-col-endpoint" title={item.baseUrl ?? ""}>{item.baseUrl ?? noDataLabel}</td>
-                  <td className="ops-log-col-info">
-                    <div className="ops-log-primary" title={item.status === "succeeded" ? item.finalName ?? "" : item.error ?? ""}>
-                      {item.status === "succeeded" ? item.finalName ?? noDataLabel : item.error ?? noDataLabel}
-                    </div>
-                    <div className="ops-log-secondary ops-log-nowrap" title={item.status === "succeeded" ? inline("输出标题", "final name") : item.error ? inline("错误", "error") : item.metadata?.profile ?? ""}>
-                      {item.status === "succeeded"
-                        ? inline("输出标题", "final name")
-                        : item.error
-                          ? inline("错误", "error")
-                          : item.metadata?.profile ?? noDataLabel}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      <section className="detail-panel">
-        <p className="panel-kicker">{inline("诊断", "Diagnostics")}</p>
-        <h3>{inline("运行时原始信息", "Raw runtime details")}</h3>
-        <p className="settings-copy">
-          {inline("这里保留原始 doctor 输出，但默认收起，不再作为维护页主体。", "The raw doctor payload is still available here, but it is no longer the main maintenance surface.")}
-        </p>
-        <details className="settings-disclosure ops-disclosure">
-          <summary>{inline("查看原始诊断 JSON", "Inspect raw doctor JSON")}</summary>
-          <pre className="settings-json">{JSON.stringify(props.doctor ?? {}, null, 2)}</pre>
+              {props.aiRequestLogDetail ? (
+                <div className="detail-panel">
+                  <div className="panel-topline">
+                    <div>
+                      <p className="panel-kicker">AI Trace</p>
+                      <h3>{inline("请求详情", "Request detail")}</h3>
+                    </div>
+                    <button className="btn-sm" onClick={() => props.onSelectRequestLog(undefined)} type="button">
+                      {inline("返回日志列表", "Back to logs")}
+                    </button>
+                  </div>
+                  <dl className="settings-runtime-grid compact ops-log-detail-grid">
+                    <div>
+                      <dt>ID</dt>
+                      <dd className="ops-log-mono">{props.aiRequestLogDetail.id}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("项目", "Project")}</dt>
+                      <dd>{props.aiRequestLogDetail.projectName ?? noDataLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>Thread</dt>
+                      <dd className="ops-log-mono">{props.aiRequestLogDetail.threadId}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("状态", "Status")}</dt>
+                      <dd>{aiRequestStatusLabel(props.aiRequestLogDetail.status, props.uiLanguage)}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("开始时间", "Started at")}</dt>
+                      <dd title={props.aiRequestLogDetail.startedAt}>
+                        {formatWhen(props.aiRequestLogDetail.startedAt, props.uiLanguage)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{inline("结束时间", "Finished at")}</dt>
+                      <dd title={props.aiRequestLogDetail.finishedAt ?? ""}>
+                        {formatWhen(props.aiRequestLogDetail.finishedAt, props.uiLanguage)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{inline("耗时", "Duration")}</dt>
+                      <dd>{formatDurationMs(props.aiRequestLogDetail.durationMs)}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("模型", "Model")}</dt>
+                      <dd>{props.aiRequestLogDetail.model ?? noDataLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("后端", "Backend")}</dt>
+                      <dd>{props.aiRequestLogDetail.backend}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("传输", "Transport")}</dt>
+                      <dd>{props.aiRequestLogDetail.transport}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("请求后端", "Requested backend")}</dt>
+                      <dd>{props.aiRequestLogDetail.metadata?.requestedBackend ?? props.aiRequestLogDetail.backend}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("接口", "Endpoint")}</dt>
+                      <dd className="ops-log-mono">{props.aiRequestLogDetail.baseUrl ?? noDataLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("Provider ref", "Provider ref")}</dt>
+                      <dd className="ops-log-mono">{props.aiRequestLogDetail.metadata?.providerRef ?? noDataLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("Profile", "Profile")}</dt>
+                      <dd className="ops-log-mono">{props.aiRequestLogDetail.metadata?.profile ?? noDataLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>{inline("字符", "Chars")}</dt>
+                      <dd>
+                        {formatUiNumber(props.aiRequestLogDetail.promptChars, props.uiLanguage)} /{" "}
+                        {formatUiNumber(props.aiRequestLogDetail.responseChars, props.uiLanguage)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{inline("最终标题", "Final name")}</dt>
+                      <dd>
+                        {props.aiRequestLogDetail.finalName ??
+                          props.aiRequestLogDetail.result?.composition?.finalName ??
+                          noDataLabel}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{inline("信息", "Info")}</dt>
+                      <dd>
+                        {props.aiRequestLogDetail.status === "succeeded"
+                          ? props.aiRequestLogDetail.finalName ??
+                            props.aiRequestLogDetail.result?.composition?.finalName ??
+                            noDataLabel
+                          : props.aiRequestLogDetail.error ?? noDataLabel}
+                      </dd>
+                    </div>
+                  </dl>
+                  <details className="settings-disclosure" open>
+                    <summary>{inline("Prompt 输入", "Prompt input")}</summary>
+                    <pre className="settings-json settings-json-large">{props.aiRequestLogDetail.promptText ?? noDataLabel}</pre>
+                  </details>
+                  <details className="settings-disclosure">
+                    <summary>{inline("请求载荷", "Request payload")}</summary>
+                    <pre className="settings-json">
+                      {JSON.stringify(props.aiRequestLogDetail.requestPayload ?? {}, null, 2)}
+                    </pre>
+                  </details>
+                  <details className="settings-disclosure" open>
+                    <summary>{inline("模型原始输出", "Raw model output")}</summary>
+                    <pre className="settings-json settings-json-large">
+                      {props.aiRequestLogDetail.responseText ?? noDataLabel}
+                    </pre>
+                  </details>
+                  <details className="settings-disclosure">
+                    <summary>{inline("响应载荷", "Response payload")}</summary>
+                    <pre className="settings-json">
+                      {JSON.stringify(props.aiRequestLogDetail.responsePayload ?? {}, null, 2)}
+                    </pre>
+                  </details>
+                  <details className="settings-disclosure" open>
+                    <summary>{inline("解析后的结构化结果", "Parsed structured result")}</summary>
+                    <pre className="settings-json">
+                      {JSON.stringify(props.aiRequestLogDetail.result?.parsedModelOutput ?? {}, null, 2)}
+                    </pre>
+                  </details>
+                  <details className="settings-disclosure" open>
+                    <summary>{inline("Builder 到最终标题", "Builder to final title")}</summary>
+                    <pre className="settings-json">
+                      {JSON.stringify(props.aiRequestLogDetail.result?.composition ?? {}, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              ) : null}
+
+              <div className="ops-log-table-container">
+                <table className="ops-log-table">
+                  <thead>
+                    <tr>
+                      <th>{inline("时间", "Time")}</th>
+                      <th>{inline("项目", "Project")}</th>
+                      <th>Thread</th>
+                      <th>{inline("模型", "Model")}</th>
+                      <th>{inline("状态", "Status")}</th>
+                      <th>{inline("耗时", "Duration")}</th>
+                      <th>{inline("字符", "Chars")}</th>
+                      <th>{inline("传输", "Transport")}</th>
+                      <th>{inline("接口", "Endpoint")}</th>
+                      <th>{inline("信息", "Info")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleAiRequests.length === 0 ? (
+                      <tr>
+                        <td className="ops-log-empty" colSpan={10}>
+                          {aiRequestLogs
+                            ? inline("当前筛选条件下没有日志。", "No logs matched the current filters.")
+                            : inline("还没有 AI 请求日志。", "No AI request logs yet.")}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {visibleAiRequests.map((item) => (
+                      <tr
+                        className="ops-log-row"
+                        data-selected={props.selectedRequestLogId === item.id ? "true" : undefined}
+                        data-status={item.status}
+                        key={item.id}
+                        onClick={() => props.onSelectRequestLog(item.id)}
+                      >
+                        <td className="ops-log-col-time">
+                          <div className="ops-log-primary ops-log-nowrap" title={item.startedAt}>
+                            {formatWhen(item.startedAt, props.uiLanguage)}
+                          </div>
+                          <div className="ops-log-secondary ops-log-nowrap" title={item.finishedAt ?? ""}>
+                            {formatWhen(item.finishedAt, props.uiLanguage)}
+                          </div>
+                        </td>
+                        <td className="ops-log-col-project">
+                          <div className="ops-log-primary ops-log-nowrap" title={item.projectName ?? ""}>
+                            {item.projectName ?? noDataLabel}
+                          </div>
+                          <div className="ops-log-secondary ops-log-nowrap" title={item.backend}>
+                            {item.backend}
+                          </div>
+                        </td>
+                        <td className="ops-log-mono ops-log-col-thread" title={item.threadId}>
+                          {item.threadId}
+                        </td>
+                        <td className="ops-log-col-model">
+                          <div className="ops-log-primary ops-log-nowrap" title={item.model ?? ""}>
+                            {item.model ?? noDataLabel}
+                          </div>
+                          <div className="ops-log-secondary ops-log-nowrap" title={item.metadata?.providerRef ?? ""}>
+                            {item.metadata?.providerRef ?? noDataLabel}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`chip ${aiRequestStatusTone(item.status)}`}>
+                            {aiRequestStatusLabel(item.status, props.uiLanguage)}
+                          </span>
+                        </td>
+                        <td className="ops-log-col-duration">
+                          <div className="ops-log-primary ops-log-nowrap">{formatDurationMs(item.durationMs)}</div>
+                          <div className="ops-log-secondary">
+                            {latestAiRequest?.id === item.id ? inline("最新", "latest") : "\u00A0"}
+                          </div>
+                        </td>
+                        <td className="ops-log-col-chars">
+                          <div className="ops-log-primary ops-log-nowrap">
+                            {formatUiNumber(item.promptChars, props.uiLanguage)} /{" "}
+                            {formatUiNumber(item.responseChars, props.uiLanguage)}
+                          </div>
+                          <div className="ops-log-secondary ops-log-nowrap">{inline("prompt / response", "prompt / response")}</div>
+                        </td>
+                        <td className="ops-log-col-transport">
+                          <div className="ops-log-primary ops-log-nowrap" title={item.transport}>
+                            {item.transport}
+                          </div>
+                          <div
+                            className="ops-log-secondary ops-log-nowrap"
+                            title={item.metadata?.requestedBackend ?? item.backend}
+                          >
+                            {item.metadata?.requestedBackend ?? item.backend}
+                          </div>
+                        </td>
+                        <td className="ops-log-mono ops-log-col-endpoint" title={item.baseUrl ?? ""}>
+                          {item.baseUrl ?? noDataLabel}
+                        </td>
+                        <td className="ops-log-col-info">
+                          <div
+                            className="ops-log-primary"
+                            title={item.status === "succeeded" ? item.finalName ?? "" : item.error ?? ""}
+                          >
+                            {item.status === "succeeded" ? item.finalName ?? noDataLabel : item.error ?? noDataLabel}
+                          </div>
+                          <div
+                            className="ops-log-secondary ops-log-nowrap"
+                            title={
+                              item.status === "succeeded"
+                                ? inline("输出标题", "final name")
+                                : item.error
+                                  ? inline("错误", "error")
+                                  : item.metadata?.profile ?? ""
+                            }
+                          >
+                            {item.status === "succeeded"
+                              ? inline("输出标题", "final name")
+                              : item.error
+                                ? inline("错误", "error")
+                                : item.metadata?.profile ?? noDataLabel}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="detail-panel">
+              <p className="panel-kicker">{inline("诊断", "Diagnostics")}</p>
+              <h3>{inline("运行时原始信息", "Raw runtime details")}</h3>
+              <p className="settings-copy">
+                {inline(
+                  "这里保留原始 doctor 输出，但默认收起，不再作为维护页主体。",
+                  "The raw doctor payload is still available here, but it is no longer the main maintenance surface."
+                )}
+              </p>
+              <details className="settings-disclosure ops-disclosure">
+                <summary>{inline("查看原始诊断 JSON", "Inspect raw doctor JSON")}</summary>
+                <pre className="settings-json">{JSON.stringify(props.doctor ?? {}, null, 2)}</pre>
+              </details>
+            </section>
+          </div>
         </details>
       </section>
     </section>

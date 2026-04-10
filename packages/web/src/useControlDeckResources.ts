@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchDaemonStatus,
@@ -81,11 +81,10 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
   const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
-  const deferredSearch = useDeferredValue(search);
   const eventCursorRef = useRef(0);
   const latestUiStateRef = useRef({
     tab,
-    deferredSearch,
+    search,
     dirtyOnly,
     selectedWorkspaceId,
     selectedId,
@@ -112,7 +111,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
   latestUiStateRef.current = {
     tab,
-    deferredSearch,
+    search,
     dirtyOnly,
     selectedWorkspaceId,
     selectedId,
@@ -308,7 +307,6 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
   const reloadSessions = useCallback(async () => {
     const {
-      deferredSearch: nextSearch,
       dirtyOnly: nextDirtyOnly,
       selectedWorkspaceId: nextWorkspaceId,
       selectedId: nextSelectedId
@@ -318,10 +316,9 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     const requestId = ++sessionsRequestIdRef.current;
     try {
       const filtersEnabled = areSessionFiltersEnabled();
-      const effectiveSearch = filtersEnabled ? nextSearch : "";
       const effectiveDirtyOnly = filtersEnabled ? nextDirtyOnly : false;
       const payload = await fetchSessions({
-        search: effectiveSearch,
+        search: "",
         dirtyOnly: effectiveDirtyOnly,
         workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
       });
@@ -423,7 +420,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
   useEffect(() => {
     void reloadSessions();
-  }, [deferredSearch, dirtyOnly, reloadSessions, selectedWorkspaceId]);
+  }, [dirtyOnly, reloadSessions, selectedWorkspaceId]);
 
   useEffect(() => {
     void loadResources(["preview"]).catch(() => undefined);

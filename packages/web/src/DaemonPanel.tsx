@@ -116,12 +116,12 @@ export function DaemonPanel(props: {
     <section className="settings-layout daemon-layout">
       <div className="settings-hero daemon-hero">
         <div className="settings-hero-copy">
-          <p className="panel-kicker">{inline("Daemon 控制", "Daemon control")}</p>
-          <h2>{inline("默认随 API 拉起，也可以在这里停掉或重启", "Auto-started with the API, and controllable here")}</h2>
+          <p className="panel-kicker">{inline("后台自动命名", "Background automation")}</p>
+          <h2>{inline("默认随 API 启动，通常只需要看它是否在正常跑", "Usually you only need to know whether it is running")}</h2>
           <p>
             {inline(
-              "这里控制的是 session sweep daemon。现在 Local API 启动时会默认拉起它；这个面板主要用来查看进程、下一次定时 sweep 倒计时，以及手动停止或重新启动。",
-              "This controls the session sweep daemon. The Local API now starts it by default; this panel is for watching the process, the next scheduled sweep countdown, and stopping or restarting it."
+              "这里控制的是 session sweep daemon。默认会随 Local API 拉起，所以主界面只保留运行状态、下一轮时间和当前队列；更技术的进程细节收进下面的折叠区。",
+              "This controls the session sweep daemon. It starts with the Local API by default, so the main view stays focused on status, next sweep timing, and the current queue while deeper process details stay folded below."
             )}
           </p>
         </div>
@@ -129,32 +129,38 @@ export function DaemonPanel(props: {
           <button className="btn-sm" onClick={props.onRefresh} type="button">
             {inline("刷新状态", "Refresh")}
           </button>
-          <button
-            className="btn-sm primary"
-            disabled={props.daemon?.running || props.actioning === "start"}
-            onClick={() => void props.onStart()}
-            type="button"
-          >
-            {props.actioning === "start" ? inline("启动中...", "Starting...") : inline("启动 daemon", "Start daemon")}
-          </button>
-          <button
-            className="btn-sm"
-            disabled={!props.daemon?.running || props.actioning === "stop"}
-            onClick={() => void props.onStop()}
-            type="button"
-          >
-            {props.actioning === "stop" ? inline("停止中...", "Stopping...") : inline("停止 daemon", "Stop daemon")}
-          </button>
+          {props.daemon?.running ? (
+            <button
+              className="btn-sm"
+              disabled={props.actioning === "stop"}
+              onClick={() => void props.onStop()}
+              type="button"
+            >
+              {props.actioning === "stop" ? inline("停止中...", "Stopping...") : inline("停止后台", "Stop background worker")}
+            </button>
+          ) : (
+            <button
+              className="btn-sm primary"
+              disabled={props.actioning === "start"}
+              onClick={() => void props.onStart()}
+              type="button"
+            >
+              {props.actioning === "start" ? inline("启动中...", "Starting...") : inline("启动后台", "Start background worker")}
+            </button>
+          )}
         </div>
       </div>
 
       <div className="settings-chip-row">
         <span className={`chip ${chipTone(Boolean(props.daemon?.running))}`}>
-          {inline("控制器", "Controller")}: {daemonStatusLabel(props.daemon, props.uiLanguage)}
+          {inline("后台状态", "Background status")}: {daemonStatusLabel(props.daemon, props.uiLanguage)}
         </span>
         <span className={`chip ${props.overview?.runtime.daemonAutoApply ? "success" : "warning"}`}>
           {inline("自动应用", "Auto apply")}:{" "}
           {props.overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
+        </span>
+        <span className={`chip ${props.daemon?.running ? "success" : "manual"}`}>
+          {inline("下一轮定时 sweep", "Next scheduled sweep")}: {countdownLabel}
         </span>
         <span
           className={`chip ${
@@ -163,30 +169,19 @@ export function DaemonPanel(props: {
               : "warning"
           }`}
         >
-          {inline("运行态心跳", "Runtime heartbeat")}:{" "}
-          {runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.uiLanguage)}
-        </span>
-        <span className={`chip ${props.daemon?.running ? "success" : "manual"}`}>
-          {inline("下一轮定时 sweep", "Next scheduled sweep")}: {countdownLabel}
+          {inline("最近 sweep", "Last sweep heartbeat")}:{" "}
+          {formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}
         </span>
       </div>
 
       <div className="settings-stage-grid daemon-grid">
         <article className="settings-surface-card">
-          <p className="panel-kicker">{inline("Process", "Process")}</p>
-          <h4>{inline("当前进程", "Current process")}</h4>
+          <p className="panel-kicker">{inline("后台状态", "Worker status")}</p>
+          <h4>{inline("先看后台有没有在正常跑", "Check whether the background worker is healthy")}</h4>
           <dl className="settings-runtime-grid compact">
             <div>
-              <dt>PID</dt>
-              <dd>{props.daemon?.pid ?? inline("未启动", "stopped")}</dd>
-            </div>
-            <div>
-              <dt>{inline("启动时间", "Started")}</dt>
-              <dd>{formatWhen(props.daemon?.startedAt, props.uiLanguage)}</dd>
-            </div>
-            <div>
-              <dt>{inline("停止时间", "Stopped")}</dt>
-              <dd>{formatWhen(props.daemon?.stoppedAt, props.uiLanguage)}</dd>
+              <dt>{inline("实际执行", "Execution")}</dt>
+              <dd>{runtimeExecutionLabel(runtimeDisplay.execution, props.uiLanguage)}</dd>
             </div>
             <div>
               <dt>{inline("扫描间隔", "Scan interval")}</dt>
@@ -205,40 +200,8 @@ export function DaemonPanel(props: {
               <dd>{countdownLabel}</dd>
             </div>
             <div>
-              <dt>{inline("API 进程", "API pid")}</dt>
-              <dd>{props.daemon?.apiProcessId ?? "--"}</dd>
-            </div>
-            <div>
-              <dt>{inline("退出状态", "Exit")}</dt>
-              <dd>
-                {props.daemon?.lastExitCode ?? "--"}
-                {props.daemon?.lastExitSignal ? ` / ${props.daemon.lastExitSignal}` : ""}
-              </dd>
-            </div>
-          </dl>
-          <p className="settings-copy">
-            {inline(
-              "这个倒计时表示下一次定时 sweep；如果 rollout 文件有变化，daemon 也可能更早被文件监听触发。",
-              "This countdown is for the next interval-based sweep. File watcher activity can still trigger an earlier run."
-            )}
-          </p>
-        </article>
-
-        <article className="settings-surface-card">
-          <p className="panel-kicker">{inline("Runtime", "Runtime")}</p>
-          <h4>{inline("自动 apply 运行态", "Auto-apply runtime")}</h4>
-          <dl className="settings-runtime-grid compact">
-            <div>
-              <dt>{inline("配置", "Configured")}</dt>
-              <dd>{props.overview?.runtime.configuredAutoApply ?? "--"}</dd>
-            </div>
-            <div>
-              <dt>{inline("实际执行", "Execution")}</dt>
-              <dd>{runtimeExecutionLabel(runtimeDisplay.execution, props.uiLanguage)}</dd>
-            </div>
-            <div>
-              <dt>{inline("最近 sweep", "Last sweep")}</dt>
-              <dd>{formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}</dd>
+              <dt>{inline("启动时间", "Started")}</dt>
+              <dd>{formatWhen(props.daemon?.startedAt, props.uiLanguage)}</dd>
             </div>
             <div>
               <dt>{inline("说明", "Explanation")}</dt>
@@ -249,11 +212,17 @@ export function DaemonPanel(props: {
               </dd>
             </div>
           </dl>
+          <p className="settings-copy">
+            {inline(
+              "对多数使用者来说，这一块足够回答两个问题：后台有没有活着，下一轮什么时候会跑。",
+              "For most people this is enough to answer two questions: is the worker alive, and when will it run again."
+            )}
+          </p>
         </article>
 
         <article className="settings-surface-card">
-          <p className="panel-kicker">{inline("Queue", "Queue")}</p>
-          <h4>{inline("当前预览队列", "Current preview queue")}</h4>
+          <p className="panel-kicker">{inline("当前队列", "Current queue")}</p>
+          <h4>{inline("只保留最关心的排队结果", "Keep only the queue numbers that matter")}</h4>
           <dl className="settings-runtime-grid compact">
             <div>
               <dt>{inline("建议", "Suggest")}</dt>
@@ -271,46 +240,100 @@ export function DaemonPanel(props: {
               <dt>{inline("未变化", "Unchanged")}</dt>
               <dd>{lastSweep?.unchanged ?? 0}</dd>
             </div>
+            <div>
+              <dt>{inline("运行态心跳", "Runtime heartbeat")}</dt>
+              <dd>{runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.uiLanguage)}</dd>
+            </div>
+            <div>
+              <dt>{inline("配置策略", "Configured policy")}</dt>
+              <dd>{props.overview?.runtime.configuredAutoApply ?? "--"}</dd>
+            </div>
           </dl>
-        </article>
-
-        <article className="settings-surface-card daemon-command-card">
-          <p className="panel-kicker">{inline("Command", "Command")}</p>
-          <h4>{inline("启动命令", "Launch command")}</h4>
-          <p className="daemon-mono">
-            {props.daemon?.command.executable ?? "node"} {props.daemon?.command.scriptPath ?? "--"}{" "}
-            {props.daemon?.command.args.join(" ") ?? ""}
-          </p>
           <p className="settings-copy">
-            {inline("工作目录：", "Working directory: ")}
-            <span className="daemon-mono">{props.daemon?.command.cwd ?? "--"}</span>
+            {inline(
+              "如果这里长期只有建议而没有自动应用，再去看下面的技术细节就够了。",
+              "If this stays stuck on suggestions without auto-apply, the folded technical details below are usually enough for debugging."
+            )}
           </p>
-          {props.daemon?.lastError ? (
-            <p className="settings-copy daemon-error">
-              {inline("最近错误：", "Last error: ")}
-              {props.daemon.lastError}
-            </p>
-          ) : null}
         </article>
       </div>
 
-      <article className="settings-surface-card daemon-log-card">
-        <p className="panel-kicker">{inline("Logs", "Logs")}</p>
-        <h4>{inline("最近日志", "Recent log tail")}</h4>
-        <div className="daemon-log">
-          {props.daemon?.recentLogs?.length ? (
-            props.daemon.recentLogs.map((entry, index) => (
-              <div className={`daemon-log-line ${entry.stream}`} key={`${entry.at}-${index}`}>
-                <span className="daemon-log-time">{formatWhen(entry.at, props.uiLanguage)}</span>
-                <span className="daemon-log-stream">{entry.stream}</span>
-                <code>{entry.line}</code>
-              </div>
-            ))
-          ) : (
-            <p className="settings-copy">{inline("还没有 daemon 日志。", "No daemon logs yet.")}</p>
-          )}
+      <section className="detail-panel ops-span-wide">
+        <div className="panel-topline">
+          <div>
+            <p className="panel-kicker">{inline("高级", "Advanced")}</p>
+            <h3>{inline("技术细节与日志", "Technical details and logs")}</h3>
+            <p className="settings-copy">
+              {inline(
+                "PID、启动命令和日志都保留，但默认收起，避免后台页看起来像纯运维面板。",
+                "PID, launch command, and log tail are still available, but folded by default so this page does not read like a pure ops console."
+              )}
+            </p>
+          </div>
         </div>
-      </article>
+        <details className="settings-disclosure ops-disclosure">
+          <summary>{inline("展开技术细节", "Show technical details")}</summary>
+          <div className="daemon-advanced-grid">
+            <article className="settings-surface-card daemon-command-card">
+              <p className="panel-kicker">{inline("Process", "Process")}</p>
+              <h4>{inline("进程与启动参数", "Process and launch details")}</h4>
+              <dl className="settings-runtime-grid compact">
+                <div>
+                  <dt>PID</dt>
+                  <dd>{props.daemon?.pid ?? inline("未启动", "stopped")}</dd>
+                </div>
+                <div>
+                  <dt>{inline("API 进程", "API pid")}</dt>
+                  <dd>{props.daemon?.apiProcessId ?? "--"}</dd>
+                </div>
+                <div>
+                  <dt>{inline("停止时间", "Stopped")}</dt>
+                  <dd>{formatWhen(props.daemon?.stoppedAt, props.uiLanguage)}</dd>
+                </div>
+                <div>
+                  <dt>{inline("退出状态", "Exit")}</dt>
+                  <dd>
+                    {props.daemon?.lastExitCode ?? "--"}
+                    {props.daemon?.lastExitSignal ? ` / ${props.daemon.lastExitSignal}` : ""}
+                  </dd>
+                </div>
+              </dl>
+              <p className="daemon-mono">
+                {props.daemon?.command.executable ?? "node"} {props.daemon?.command.scriptPath ?? "--"}{" "}
+                {props.daemon?.command.args.join(" ") ?? ""}
+              </p>
+              <p className="settings-copy">
+                {inline("工作目录：", "Working directory: ")}
+                <span className="daemon-mono">{props.daemon?.command.cwd ?? "--"}</span>
+              </p>
+              {props.daemon?.lastError ? (
+                <p className="settings-copy daemon-error">
+                  {inline("最近错误：", "Last error: ")}
+                  {props.daemon.lastError}
+                </p>
+              ) : null}
+            </article>
+
+            <article className="settings-surface-card daemon-log-card">
+              <p className="panel-kicker">{inline("Logs", "Logs")}</p>
+              <h4>{inline("最近日志", "Recent log tail")}</h4>
+              <div className="daemon-log">
+                {props.daemon?.recentLogs?.length ? (
+                  props.daemon.recentLogs.map((entry, index) => (
+                    <div className={`daemon-log-line ${entry.stream}`} key={`${entry.at}-${index}`}>
+                      <span className="daemon-log-time">{formatWhen(entry.at, props.uiLanguage)}</span>
+                      <span className="daemon-log-stream">{entry.stream}</span>
+                      <code>{entry.line}</code>
+                    </div>
+                  ))
+                ) : (
+                  <p className="settings-copy">{inline("还没有 daemon 日志。", "No daemon logs yet.")}</p>
+                )}
+              </div>
+            </article>
+          </div>
+        </details>
+      </section>
     </section>
   );
 }

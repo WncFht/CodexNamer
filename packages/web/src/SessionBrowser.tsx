@@ -20,6 +20,30 @@ const SESSION_CONTEXT_MENU_WIDTH = 220;
 const SESSION_CONTEXT_MENU_HEIGHT = 56;
 const SESSION_CONTEXT_MENU_MARGIN = 12;
 
+function normalizeSearchText(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function sessionMatchesSearch(session: SessionSummary, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+
+  const haystacks = [
+    session.officialName,
+    session.candidateName,
+    session.firstUserMessage,
+    session.projectName,
+    session.workspaceLabel,
+    session.provider,
+    session.model,
+    session.cwd,
+    session.threadId
+  ];
+
+  return haystacks.some((value) => normalizeSearchText(value).includes(query));
+}
+
 function renameHistoryStatusLabel(status: string, language: UiLanguage): string {
   if (language === "zh-CN") {
     switch (status) {
@@ -79,6 +103,7 @@ function renameHistorySourceLabel(source: string, language: UiLanguage): string 
 export function SessionBrowser(props: {
   sessions: SessionSummary[];
   selectedWorkspaceLabel: string;
+  search: string;
   selectedId?: string;
   detail: SessionDetail | null;
   focusMode: boolean;
@@ -92,6 +117,7 @@ export function SessionBrowser(props: {
   error: string | null;
   uiLanguage: UiLanguage;
   onToggleShowHiddenTranscript: (value: boolean) => void;
+  onSearchChange: (value: string) => void;
   onRefresh: () => void;
   onSelectSession: (threadId: string) => void;
   onCopySessionId: (threadId: string) => void | Promise<void>;
@@ -106,11 +132,23 @@ export function SessionBrowser(props: {
 }) {
   const [detailView, setDetailView] = React.useState<"transcript" | "naming">("transcript");
   const [contextMenu, setContextMenu] = React.useState<{ threadId: string; x: number; y: number } | null>(null);
+  const [searchDraft, setSearchDraft] = React.useState(props.search);
   const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
   const contextMenuActionRef = React.useRef<HTMLButtonElement | null>(null);
+  const searchCommitTimerRef = React.useRef<number | null>(null);
+  const searchComposingRef = React.useRef(false);
+  const deferredSearchDraft = React.useDeferredValue(searchDraft);
+  const normalizedSearchQuery = React.useMemo(
+    () => normalizeSearchText(deferredSearchDraft),
+    [deferredSearchDraft]
+  );
+  const filteredSessions = React.useMemo(
+    () => props.sessions.filter((session) => sessionMatchesSearch(session, normalizedSearchQuery)),
+    [normalizedSearchQuery, props.sessions]
+  );
   const groupedSessions = React.useMemo(
-    () => groupSessionsByTime(props.sessions, props.uiLanguage),
-    [props.sessions, props.uiLanguage]
+    () => groupSessionsByTime(filteredSessions, props.uiLanguage),
+    [filteredSessions, props.uiLanguage]
   );
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
@@ -130,6 +168,18 @@ export function SessionBrowser(props: {
   React.useEffect(() => {
     setDetailView("transcript");
   }, [props.detail?.threadId]);
+
+  React.useEffect(() => {
+    setSearchDraft(props.search);
+  }, [props.search]);
+
+  React.useEffect(() => {
+    return () => {
+      if (searchCommitTimerRef.current !== null) {
+        window.clearTimeout(searchCommitTimerRef.current);
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!contextMenu) {
@@ -243,6 +293,69 @@ export function SessionBrowser(props: {
     }
   };
 
+  const commitSearch = React.useCallback(
+    (nextValue: string) => {
+      props.onSearchChange(nextValue.trim());
+    },
+    [props]
+  );
+
+  const scheduleSearchCommit = React.useCallback(
+    (nextValue: string) => {
+      if (searchCommitTimerRef.current !== null) {
+        window.clearTimeout(searchCommitTimerRef.current);
+      }
+      searchCommitTimerRef.current = window.setTimeout(() => {
+        searchCommitTimerRef.current = null;
+        commitSearch(nextValue);
+      }, 300);
+    },
+    [commitSearch]
+  );
+
+  const handleSearchInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value;
+    setSearchDraft(nextValue);
+    if (!searchComposingRef.current) {
+      scheduleSearchCommit(nextValue);
+    }
+  };
+
+  const handleSearchCompositionStart = () => {
+    searchComposingRef.current = true;
+    if (searchCommitTimerRef.current !== null) {
+      window.clearTimeout(searchCommitTimerRef.current);
+      searchCommitTimerRef.current = null;
+    }
+  };
+
+  const handleSearchCompositionEnd = (event: React.CompositionEvent<HTMLInputElement>) => {
+    searchComposingRef.current = false;
+    scheduleSearchCommit(event.currentTarget.value);
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (searchCommitTimerRef.current !== null) {
+        window.clearTimeout(searchCommitTimerRef.current);
+        searchCommitTimerRef.current = null;
+      }
+      commitSearch(searchDraft);
+      return;
+    }
+
+    if (event.key === "Escape" && searchDraft) {
+      event.preventDefault();
+      if (searchCommitTimerRef.current !== null) {
+        window.clearTimeout(searchCommitTimerRef.current);
+        searchCommitTimerRef.current = null;
+      }
+      setSearchDraft("");
+      commitSearch("");
+    }
+  };
+
   return (
     <section
       className={
@@ -255,7 +368,7 @@ export function SessionBrowser(props: {
     >
       <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"} id="session-list-pane">
         <header className="view-header session-list-header">
-          <div>
+          <div className="session-list-heading">
             <p className="panel-kicker">{tt("conversationArchive")}</p>
             <h2>{props.selectedWorkspaceLabel}</h2>
           </div>
@@ -274,9 +387,41 @@ export function SessionBrowser(props: {
           </div>
         </header>
 
+        <div className="session-list-toolbar">
+          <label className="chat-search" htmlFor="session-list-search">
+            <span className="sr-only">{tt("searchSessionsLabel")}</span>
+            <input
+              id="session-list-search"
+              onChange={handleSearchInputChange}
+              onCompositionEnd={handleSearchCompositionEnd}
+              onCompositionStart={handleSearchCompositionStart}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={tt("filterSessions")}
+              type="search"
+              value={searchDraft}
+            />
+          </label>
+          {searchDraft ? (
+            <button
+              className="btn-sm"
+              onClick={() => {
+                if (searchCommitTimerRef.current !== null) {
+                  window.clearTimeout(searchCommitTimerRef.current);
+                  searchCommitTimerRef.current = null;
+                }
+                setSearchDraft("");
+                commitSearch("");
+              }}
+              type="button"
+            >
+              {props.uiLanguage === "zh-CN" ? "清空" : "Clear"}
+            </button>
+          ) : null}
+        </div>
+
         <div className="session-list">
           {props.loadingSessions ? <div className="loading-state history-empty">{tt("loadingSessions")}</div> : null}
-          {!props.loadingSessions && props.sessions.length === 0 ? (
+          {!props.loadingSessions && filteredSessions.length === 0 ? (
             <div className="history-empty">
               {props.error ? tt("apiNotReady") : tt("noSessions")}
             </div>

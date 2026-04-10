@@ -2248,6 +2248,19 @@ pre {
   width: 100%;
 }
 
+.session-list-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, white 18%);
+}
+
+.session-list-heading {
+  min-width: 0;
+}
+
 .chat-meta-strip {
   display: flex;
   gap: 12px;
@@ -2745,7 +2758,7 @@ pre {
 .ops-replay-form {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(200px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1.2fr) auto;
   align-items: end;
 }
 
@@ -2762,6 +2775,39 @@ pre {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.requeue-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.requeue-preset-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.requeue-advanced-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 320px);
+}
+
+.requeue-placeholder {
+  display: grid;
+  gap: 6px;
+}
+
+.requeue-placeholder strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .requeue-summary-grid {
@@ -2791,6 +2837,19 @@ pre {
 
 .ops-disclosure {
   margin-top: 12px;
+}
+
+.ops-disclosure-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.ops-disclosure-stack {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
 }
 
 .signal-grid {
@@ -3239,6 +3298,13 @@ pre {
   align-items: start;
 }
 
+.daemon-advanced-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .daemon-command-card,
 .daemon-log-card {
   overflow: hidden;
@@ -3288,6 +3354,15 @@ pre {
 }
 
 @media (max-width: 900px) {
+  .ops-disclosure-grid,
+  .daemon-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .requeue-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
   .daemon-hero {
     flex-direction: column;
   }

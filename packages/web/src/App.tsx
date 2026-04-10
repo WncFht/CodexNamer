@@ -403,6 +403,7 @@ export function App() {
             <SessionBrowser
               sessions={state.sessions}
               selectedWorkspaceLabel={selectedWorkspaceLabel}
+              search={state.search}
               selectedId={state.selectedId}
               detail={state.detail}
               focusMode={sessionFocusMode}
@@ -416,6 +417,7 @@ export function App() {
               error={state.error}
               uiLanguage={uiLanguage}
               onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
+              onSearchChange={state.setSearch}
               onRefresh={() => void state.refreshSessions()}
               onSelectSession={(threadId) => state.setSelectedId(threadId)}
               onCopySessionId={(threadId) => void handleCopySessionId(threadId)}
