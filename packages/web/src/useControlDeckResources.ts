@@ -308,7 +308,8 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     const {
       dirtyOnly: nextDirtyOnly,
       selectedWorkspaceId: nextWorkspaceId,
-      selectedId: nextSelectedId
+      selectedId: nextSelectedId,
+      search: nextSearch
     } = latestUiStateRef.current;
 
     setLoadingSessions(true);
@@ -317,7 +318,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       const filtersEnabled = areSessionFiltersEnabled();
       const effectiveDirtyOnly = filtersEnabled ? nextDirtyOnly : false;
       const payload = await fetchSessions({
-        search: "",
+        search: nextSearch.trim() || undefined,
         dirtyOnly: effectiveDirtyOnly,
         workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
       });
@@ -419,7 +420,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
   useEffect(() => {
     void reloadSessions();
-  }, [dirtyOnly, reloadSessions, selectedWorkspaceId]);
+  }, [dirtyOnly, reloadSessions, search, selectedWorkspaceId]);
 
   useEffect(() => {
     void loadResources(["preview"]).catch(() => undefined);

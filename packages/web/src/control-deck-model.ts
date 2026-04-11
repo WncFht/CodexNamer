@@ -17,6 +17,7 @@ export type DataResource =
 
 export const ALL_WORKSPACES_ID = "__all_workspaces__";
 const SESSION_FILTERS_ENABLED = false;
+const SESSION_SEARCH_IN_URL = true;
 
 export type UrlUiState = {
   tab: TabId;
@@ -65,7 +66,7 @@ export function writeUiStateToUrl(state: UrlUiState): void {
     params.set("tab", state.tab);
   }
 
-  if (!SESSION_FILTERS_ENABLED || !state.search) {
+  if (!SESSION_SEARCH_IN_URL || !state.search) {
     params.delete("q");
   } else {
     params.set("q", state.search);

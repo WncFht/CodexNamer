@@ -146,6 +146,20 @@ export function TranscriptPanel(props: {
           </label>
         </div>
         <div className="chat-toolbar-actions">
+          <span className={`chip ${role === "user" ? "manual" : "success"}`}>
+            {role === "user"
+              ? props.uiLanguage === "zh-CN"
+                ? "当前视图：用户聚焦"
+                : "Current view: user focus"
+              : props.uiLanguage === "zh-CN"
+                ? "当前视图：完整轨迹"
+                : "Current view: full trace"}
+          </span>
+          {role !== "all" ? (
+            <button className="btn-chip" onClick={() => setRole("all")} type="button">
+              {props.uiLanguage === "zh-CN" ? "查看完整轨迹" : "Show full trace"}
+            </button>
+          ) : null}
           {(["all", "user", "assistant", "tool", "system"] as const).map((item) => (
             <button
               className={role === item ? "btn-chip active" : "btn-chip"}

@@ -20,30 +20,6 @@ const SESSION_CONTEXT_MENU_WIDTH = 220;
 const SESSION_CONTEXT_MENU_HEIGHT = 56;
 const SESSION_CONTEXT_MENU_MARGIN = 12;
 
-function normalizeSearchText(value: string | undefined): string {
-  return value?.trim().toLowerCase() ?? "";
-}
-
-function sessionMatchesSearch(session: SessionSummary, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-
-  const haystacks = [
-    session.officialName,
-    session.candidateName,
-    session.firstUserMessage,
-    session.projectName,
-    session.workspaceLabel,
-    session.provider,
-    session.model,
-    session.cwd,
-    session.threadId
-  ];
-
-  return haystacks.some((value) => normalizeSearchText(value).includes(query));
-}
-
 function renameHistoryStatusLabel(status: string, language: UiLanguage): string {
   if (language === "zh-CN") {
     switch (status) {
@@ -137,18 +113,9 @@ export function SessionBrowser(props: {
   const contextMenuActionRef = React.useRef<HTMLButtonElement | null>(null);
   const searchCommitTimerRef = React.useRef<number | null>(null);
   const searchComposingRef = React.useRef(false);
-  const deferredSearchDraft = React.useDeferredValue(searchDraft);
-  const normalizedSearchQuery = React.useMemo(
-    () => normalizeSearchText(deferredSearchDraft),
-    [deferredSearchDraft]
-  );
-  const filteredSessions = React.useMemo(
-    () => props.sessions.filter((session) => sessionMatchesSearch(session, normalizedSearchQuery)),
-    [normalizedSearchQuery, props.sessions]
-  );
   const groupedSessions = React.useMemo(
-    () => groupSessionsByTime(filteredSessions, props.uiLanguage),
-    [filteredSessions, props.uiLanguage]
+    () => groupSessionsByTime(props.sessions, props.uiLanguage),
+    [props.sessions, props.uiLanguage]
   );
   const actionLabelLower = props.actionLabel?.toLowerCase();
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
@@ -421,7 +388,7 @@ export function SessionBrowser(props: {
 
         <div className="session-list">
           {props.loadingSessions ? <div className="loading-state history-empty">{tt("loadingSessions")}</div> : null}
-          {!props.loadingSessions && filteredSessions.length === 0 ? (
+          {!props.loadingSessions && props.sessions.length === 0 ? (
             <div className="history-empty">
               {props.error ? tt("apiNotReady") : tt("noSessions")}
             </div>
