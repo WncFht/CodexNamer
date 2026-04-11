@@ -24,5 +24,6 @@ export type {
   SessionsResponse,
   SessionSummary,
   SessionTranscriptPage,
-  UiLanguage
+  UiLanguage,
+  WorkspaceSummary
 } from "@codexnamer/shared";

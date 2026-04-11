@@ -7,7 +7,6 @@ import {
   fetchAutoRenamePreview,
   fetchConfig,
   fetchDoctor,
-  fetchEvents,
   fetchOverview,
   fetchPromptPreview,
   fetchProviders,
@@ -26,7 +25,6 @@ import {
 import type {
   AiRequestLogDetailResponse,
   AiRequestLogResponse,
-  ApiEventsResponse,
   AutoRenamePreviewResponse,
   ConfigDocument,
   ConfigView,
@@ -39,6 +37,7 @@ import type {
   SessionSummary,
   SessionsResponse
 } from "./types.js";
+import { useEventsInvalidation } from "./resources/useEventsInvalidation.js";
 
 type UseControlDeckResourcesOptions = {
   tab: TabId;
@@ -529,26 +528,15 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     [loadResources, reloadDetail]
   );
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void fetchEvents(eventCursorRef.current)
-        .then((payload: ApiEventsResponse) => {
-          eventCursorRef.current = payload.nextCursor;
-          if (payload.items.length === 0) {
-            return;
-          }
-
-          refreshCurrentView();
-        })
-        .catch(() => {
-          void loadResources(["sessions"]).catch(() => undefined);
-        });
-    }, 5_000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [loadResources, refreshCurrentView]);
+  useEventsInvalidation({
+    eventCursorRef,
+    refreshCurrentView: () => {
+      refreshCurrentView();
+    },
+    refreshSessionsFallback: () => {
+      void loadResources(["sessions"]).catch(() => undefined);
+    }
+  });
 
   return {
     sessions,

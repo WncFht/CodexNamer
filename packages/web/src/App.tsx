@@ -2,6 +2,9 @@ import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
 import { copyTextToClipboard } from "./clipboard.js";
+import { SidebarRail } from "./app-shell/SidebarRail.js";
+import { TopNoticeBanner } from "./app-shell/TopNoticeBanner.js";
+import { usePaneLayoutState } from "./app-shell/usePaneLayoutState.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
@@ -9,11 +12,6 @@ import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
 
 const WORKSPACE_PANE_MIN_WIDTH = 220;
 const WORKSPACE_PANE_MAX_WIDTH = 420;
-const SESSION_PANE_MIN_WIDTH = 320;
-const SESSION_PANE_MAX_WIDTH = 560;
-const SESSION_PANE_AUTO_COLLAPSE_WIDTH = 272;
-const SESSION_PANE_RESTORE_WIDTH = 390;
-const PANE_KEYBOARD_STEP = 24;
 const SettingsPanel = React.lazy(() =>
   import("./SettingsPanel.js").then((module) => ({ default: module.SettingsPanel }))
 );
@@ -27,47 +25,41 @@ const DaemonPanel = React.lazy(() =>
   import("./DaemonPanel.js").then((module) => ({ default: module.DaemonPanel }))
 );
 
-function clampWorkspacePaneWidth(value: number): number {
-  return Math.max(WORKSPACE_PANE_MIN_WIDTH, Math.min(WORKSPACE_PANE_MAX_WIDTH, value));
-}
-
-function clampSessionPaneWidth(value: number): number {
-  return Math.max(SESSION_PANE_MIN_WIDTH, Math.min(SESSION_PANE_MAX_WIDTH, value));
-}
-
-function readStoredNumber(key: string, fallback: number): number {
-  const raw = window.localStorage.getItem(key);
-  const parsed = raw ? Number(raw) : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function readStoredBoolean(key: string, fallback = false): boolean {
-  const raw = window.localStorage.getItem(key);
-  return raw === null ? fallback : raw === "true";
+function LazyTabShell(props: {
+  active: boolean;
+  loaded: boolean;
+  children: React.ReactNode;
+  loadingLabel: string;
+}) {
+  return (
+    <div className="app-tab-panel" hidden={!props.active}>
+      {props.loaded ? (
+        <React.Suspense
+          fallback={
+            <AppViewTransition exit="slide-down">
+              <div className="loading-state app-panel-loading">{props.loadingLabel}</div>
+            </AppViewTransition>
+          }
+        >
+          <AppViewTransition default="none" enter="slide-up">
+            {props.children}
+          </AppViewTransition>
+        </React.Suspense>
+      ) : null}
+    </div>
+  );
 }
 
 export function App() {
   const state = useControlDeckState();
-  const workspaceDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
-  const sessionDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
-  const [workspacePaneCollapsed, setWorkspacePaneCollapsed] = React.useState(() =>
-    readStoredBoolean("csm:workspacePaneCollapsed", false)
-  );
-  const [sessionPaneCollapsed, setSessionPaneCollapsed] = React.useState(() =>
-    readStoredBoolean("csm:sessionPaneCollapsed", false)
-  );
-  const [workspacePaneWidth, setWorkspacePaneWidth] = React.useState(() =>
-    readStoredNumber("csm:workspacePaneWidth", 280)
-  );
-  const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() =>
-    readStoredNumber("csm:sessionPaneWidth", 390)
-  );
-  const [sessionFocusMode, setSessionFocusMode] = React.useState(false);
+  const paneLayout = usePaneLayoutState({
+    tab: state.tab,
+    selectedId: state.selectedId
+  });
   const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(() => state.tab === "settings");
   const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(() => state.tab === "maintenance");
   const [requeuePanelLoaded, setRequeuePanelLoaded] = React.useState(() => state.tab === "requeue");
   const [daemonPanelLoaded, setDaemonPanelLoaded] = React.useState(() => state.tab === "daemon");
-  const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
   const uiLanguage = normalizeUiLanguage(state.configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
   const previewApplyCount = state.preview?.items.filter((item) => item.status === "apply").length ?? 0;
@@ -84,28 +76,6 @@ export function App() {
   }, [uiLanguage]);
 
   React.useEffect(() => {
-    window.localStorage.setItem("csm:workspacePaneCollapsed", String(workspacePaneCollapsed));
-  }, [workspacePaneCollapsed]);
-
-  React.useEffect(() => {
-    window.localStorage.setItem("csm:sessionPaneCollapsed", String(sessionPaneCollapsed));
-  }, [sessionPaneCollapsed]);
-
-  React.useEffect(() => {
-    window.localStorage.setItem("csm:workspacePaneWidth", String(workspacePaneWidth));
-  }, [workspacePaneWidth]);
-
-  React.useEffect(() => {
-    window.localStorage.setItem("csm:sessionPaneWidth", String(sessionPaneWidth));
-  }, [sessionPaneWidth]);
-
-  React.useEffect(() => {
-    if (!sessionPaneCollapsed && sessionPaneWidth >= SESSION_PANE_MIN_WIDTH) {
-      sessionPaneRestoreWidthRef.current = sessionPaneWidth;
-    }
-  }, [sessionPaneCollapsed, sessionPaneWidth]);
-
-  React.useEffect(() => {
     if (state.tab === "settings") {
       setSettingsPanelLoaded(true);
     }
@@ -120,263 +90,63 @@ export function App() {
     }
   }, [state.tab]);
 
-  React.useEffect(() => {
-    if (state.tab !== "sessions" || !state.selectedId) {
-      setSessionFocusMode(false);
-    }
-  }, [state.selectedId, state.tab]);
-
-  React.useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      if (workspaceDragRef.current) {
-        const delta = event.clientX - workspaceDragRef.current.startX;
-        setWorkspacePaneWidth(clampWorkspacePaneWidth(workspaceDragRef.current.startWidth + delta));
-      }
-      if (sessionDragRef.current) {
-        const delta = event.clientX - sessionDragRef.current.startX;
-        const nextWidth = Math.max(220, Math.min(SESSION_PANE_MAX_WIDTH, sessionDragRef.current.startWidth + delta));
-        if (nextWidth <= SESSION_PANE_AUTO_COLLAPSE_WIDTH) {
-          setSessionPaneCollapsed(true);
-          setSessionPaneWidth(Math.max(sessionPaneRestoreWidthRef.current, SESSION_PANE_RESTORE_WIDTH));
-        } else {
-          setSessionPaneCollapsed(false);
-          setSessionPaneWidth(Math.max(SESSION_PANE_MIN_WIDTH, nextWidth));
-        }
-      }
-    };
-
-    const handlePointerUp = () => {
-      workspaceDragRef.current = null;
-      sessionDragRef.current = null;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, []);
-
-  const adjustWorkspacePaneWidth = (delta: number) => {
-    setWorkspacePaneCollapsed(false);
-    setWorkspacePaneWidth((value) => clampWorkspacePaneWidth(value + delta));
-  };
-
-  const setWorkspacePaneWidthTo = (value: number) => {
-    setWorkspacePaneCollapsed(false);
-    setWorkspacePaneWidth(clampWorkspacePaneWidth(value));
-  };
-
-  const adjustSessionPaneWidth = (delta: number) => {
-    setSessionPaneCollapsed(false);
-    setSessionPaneWidth((value) => clampSessionPaneWidth(value + delta));
-  };
-
-  const handleWorkspaceSplitterKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    switch (event.key) {
-      case "ArrowLeft":
-      case "ArrowUp":
-        event.preventDefault();
-        adjustWorkspacePaneWidth(-PANE_KEYBOARD_STEP);
-        break;
-      case "ArrowRight":
-      case "ArrowDown":
-        event.preventDefault();
-        adjustWorkspacePaneWidth(PANE_KEYBOARD_STEP);
-        break;
-      case "Home":
-        event.preventDefault();
-        setWorkspacePaneWidthTo(WORKSPACE_PANE_MIN_WIDTH);
-        break;
-      case "End":
-        event.preventDefault();
-        setWorkspacePaneWidthTo(WORKSPACE_PANE_MAX_WIDTH);
-        break;
-      default:
-        break;
-    }
-  };
-
-  const startWorkspaceResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setWorkspacePaneCollapsed(false);
-    workspaceDragRef.current = {
-      startX: event.clientX,
-      startWidth: workspacePaneWidth
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  };
-
-  const startSessionResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setSessionPaneCollapsed(false);
-    sessionDragRef.current = {
-      startX: event.clientX,
-      startWidth: sessionPaneWidth
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  };
-
-  const toggleSessionPane = () => {
-    setSessionPaneCollapsed((previous) => {
-      const nextCollapsed = !previous;
-      if (!nextCollapsed) {
-        setSessionPaneWidth(Math.max(sessionPaneRestoreWidthRef.current, SESSION_PANE_RESTORE_WIDTH));
-      }
-      return nextCollapsed;
-    });
-  };
-
-  const showSettingsPanel = settingsPanelLoaded || state.tab === "settings";
-  const showMaintenancePanel = maintenancePanelLoaded || state.tab === "maintenance";
-  const showRequeuePanel = requeuePanelLoaded || state.tab === "requeue";
-  const showDaemonPanel = daemonPanelLoaded || state.tab === "daemon";
-  const { setNotice } = state;
   const handleCopySessionId = React.useCallback(
     async (threadId: string) => {
       try {
         await copyTextToClipboard(threadId);
-        setNotice({
+        state.setNotice({
           tone: "success",
           text: t(uiLanguage, "copiedSessionId")
         });
       } catch {
-        setNotice({
+        state.setNotice({
           tone: "error",
           text: t(uiLanguage, "copySessionIdFailed")
         });
       }
     },
-    [setNotice, uiLanguage]
+    [state, uiLanguage]
   );
 
   return (
     <div
       id="app"
-      className={sessionFocusMode ? "session-focus-mode" : undefined}
+      className={paneLayout.sessionFocusMode ? "session-focus-mode" : undefined}
       style={
         {
-          "--sidebar-width": `${workspacePaneCollapsed ? 88 : workspacePaneWidth}px`,
-          "--session-list-width": `${sessionPaneCollapsed ? 0 : sessionPaneWidth}px`
+          "--sidebar-width": `${paneLayout.workspacePaneCollapsed ? 88 : paneLayout.workspacePaneWidth}px`,
+          "--session-list-width": `${paneLayout.sessionPaneCollapsed ? 0 : paneLayout.sessionPaneWidth}px`
         } as React.CSSProperties
       }
     >
-      <aside
-        className={workspacePaneCollapsed ? "collapsed" : undefined}
-        id="sidebar"
-        style={{ viewTransitionName: "persistent-nav" } as React.CSSProperties}
-      >
-        <div className="sidebar-header">
-          <div>
-            <p className="sidebar-kicker">Claude Design MD</p>
-            <h1 className="home-link">CodexNamer</h1>
-            <p className="sidebar-copy">{tt("warmEditorial")}</p>
-          </div>
-          <div className="pane-controls">
-            <button
-              aria-controls="sidebar"
-              aria-expanded={!workspacePaneCollapsed}
-              className="pane-btn"
-              onClick={() => setWorkspacePaneCollapsed((value) => !value)}
-              title={workspacePaneCollapsed ? tt("expandWorkspacePane") : tt("collapseWorkspacePane")}
-              type="button"
-            >
-              {workspacePaneCollapsed ? tt("open") : tt("fold")}
-            </button>
-          </div>
-        </div>
-
-        <div className="sidebar-actions">
-          {[
-            ["sessions", tt("sessions")],
-            ["settings", tt("settings")],
-            ["maintenance", tt("renameOps")],
-            ["requeue", tt("requeue")],
-            ["daemon", tt("daemon")]
-          ].map(([id, label]) => (
-            <button
-              aria-current={state.tab === id ? "page" : undefined}
-              className={state.tab === id ? "sidebar-btn active" : "sidebar-btn"}
-              key={id}
-              onClick={() =>
-                React.startTransition(() => {
-                  addAppTransitionType("nav-lateral");
-                  state.setTab(id as typeof state.tab);
-                })
-              }
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <nav id="projectList">
-          <div className="project-group-wrapper">
-            <div className="project-group-header codex">
-              <span className="project-group-dot" />
-              <span>{tt("workspaces")}</span>
-            </div>
-            <div className="project-group-items">
-              <button
-                className={state.selectedWorkspaceId === ALL_WORKSPACES_ID ? "project-item active" : "project-item"}
-                onClick={() => state.setSelectedWorkspaceId(ALL_WORKSPACES_ID)}
-                type="button"
-              >
-                <span className="name">{tt("allWorkspaces")}</span>
-                <span className="count">{totalWorkspaceSessionCount}</span>
-              </button>
-              {state.workspaces.map((workspace) => (
-                <button
-                  className={state.selectedWorkspaceId === workspace.workspaceId ? "project-item active" : "project-item"}
-                  key={workspace.workspaceId}
-                  onClick={() => state.setSelectedWorkspaceId(workspace.workspaceId)}
-                  type="button"
-                >
-                  <span className="name">{workspace.workspaceLabel}</span>
-                  <span className="count">{workspace.sessionCount}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="sidebar-stat-row">
-            <span>{tt("visible")}</span>
-            <strong>{state.sessions.length}</strong>
-          </div>
-          <div className="sidebar-stat-row">
-            <span>{tt("applyQueue")}</span>
-            <strong>{state.previewRefreshing && !state.preview ? "..." : previewApplyCount}</strong>
-          </div>
-          <div className="sidebar-stat-row">
-            <span>{tt("suggestQueue")}</span>
-            <strong>{state.previewRefreshing && !state.preview ? "..." : previewSuggestCount}</strong>
-          </div>
-          <div className="sidebar-stat-row">
-            <span>{tt("selected")}</span>
-            <strong>{selectedWorkspaceLabel}</strong>
-          </div>
-          <div className="sidebar-stat-row">
-            <span>{tt("lastSync")}</span>
-            <strong>{formatWhen(state.lastSyncAt, uiLanguage)}</strong>
-          </div>
-        </div>
-      </aside>
+      <SidebarRail
+        allWorkspacesId={ALL_WORKSPACES_ID}
+        formatWhen={(value) => formatWhen(value, uiLanguage)}
+        lastSyncAt={state.lastSyncAt}
+        onSelectTab={(tab) =>
+          React.startTransition(() => {
+            addAppTransitionType("nav-lateral");
+            state.setTab(tab);
+          })
+        }
+        onSelectWorkspace={state.setSelectedWorkspaceId}
+        onToggleCollapsed={() => paneLayout.setWorkspacePaneCollapsed((value) => !value)}
+        previewApplyCount={previewApplyCount}
+        previewSuggestCount={previewSuggestCount}
+        selectedWorkspaceId={state.selectedWorkspaceId}
+        selectedWorkspaceLabel={selectedWorkspaceLabel}
+        tab={state.tab}
+        totalWorkspaceSessionCount={totalWorkspaceSessionCount}
+        visibleSessionCount={state.sessions.length}
+        tt={tt as (key: string) => string}
+        workspacePaneCollapsed={paneLayout.workspacePaneCollapsed}
+        workspaces={state.workspaces}
+      />
 
       <div
         className="splitter"
-        onKeyDown={handleWorkspaceSplitterKeyDown}
-        onPointerDown={startWorkspaceResize}
+        onKeyDown={paneLayout.handleWorkspaceSplitterKeyDown}
+        onPointerDown={paneLayout.startWorkspaceResize}
         role="separator"
         tabIndex={0}
         aria-controls="sidebar"
@@ -384,19 +154,11 @@ export function App() {
         aria-orientation="vertical"
         aria-valuemax={WORKSPACE_PANE_MAX_WIDTH}
         aria-valuemin={WORKSPACE_PANE_MIN_WIDTH}
-        aria-valuenow={workspacePaneWidth}
+        aria-valuenow={paneLayout.workspacePaneWidth}
       />
 
       <main id="content">
-        {state.notice ? (
-          <div
-            aria-live={state.notice.tone === "error" ? "assertive" : "polite"}
-            className={`notice-banner app-notice ${state.notice.tone}`}
-            role={state.notice.tone === "error" ? "alert" : "status"}
-          >
-            {state.notice.text}
-          </div>
-        ) : null}
+        <TopNoticeBanner notice={state.notice} />
 
         <div className="app-tab-panel" hidden={state.tab !== "sessions"}>
           {state.tab === "sessions" ? (
@@ -406,9 +168,9 @@ export function App() {
               search={state.search}
               selectedId={state.selectedId}
               detail={state.detail}
-              focusMode={sessionFocusMode}
-              sessionPaneCollapsed={sessionPaneCollapsed}
-              sessionPaneWidth={sessionPaneWidth}
+              focusMode={paneLayout.sessionFocusMode}
+              sessionPaneCollapsed={paneLayout.sessionPaneCollapsed}
+              sessionPaneWidth={paneLayout.sessionPaneWidth}
               loadingSessions={state.loadingSessions}
               loadingDetail={state.loadingDetail}
               actioning={state.actioning}
@@ -421,11 +183,11 @@ export function App() {
               onRefresh={() => void state.refreshSessions()}
               onSelectSession={(threadId) => state.setSelectedId(threadId)}
               onCopySessionId={(threadId) => void handleCopySessionId(threadId)}
-              onEnterFocusMode={() => setSessionFocusMode(true)}
-              onExitFocusMode={() => setSessionFocusMode(false)}
-              onToggleSessionPane={toggleSessionPane}
-              onSessionPaneWidthChange={adjustSessionPaneWidth}
-              onStartSessionResize={startSessionResize}
+              onEnterFocusMode={() => paneLayout.setSessionFocusMode(true)}
+              onExitFocusMode={() => paneLayout.setSessionFocusMode(false)}
+              onToggleSessionPane={paneLayout.toggleSessionPane}
+              onSessionPaneWidthChange={paneLayout.handleSessionPaneWidthChange}
+              onStartSessionResize={paneLayout.startSessionResize}
               onSuggest={() => state.actions.suggest()}
               onApply={() => state.actions.apply()}
               onToggleFreeze={() => state.actions.toggleFreeze()}
@@ -433,118 +195,68 @@ export function App() {
           ) : null}
         </div>
 
-        <div className="app-tab-panel" hidden={state.tab !== "settings"}>
-          {showSettingsPanel ? (
-            <React.Suspense
-              fallback={
-                <AppViewTransition exit="slide-down">
-                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
-                </AppViewTransition>
-              }
-            >
-              <AppViewTransition default="none" enter="slide-up">
-                <SettingsPanel
-                  configView={state.configView}
-                  daemon={state.daemon}
-                  overview={state.overview}
-                  onReload={() => void state.refreshSettings()}
-                  onOpenRequeue={() =>
-                    React.startTransition(() => {
-                      addAppTransitionType("nav-lateral");
-                      state.setTab("requeue");
-                    })
-                  }
-                  onSave={(patch) => state.saveConfig(patch)}
-                  previewApplyCount={previewApplyCount}
-                  previewSuggestCount={previewSuggestCount}
-                  providers={state.providers}
-                  saving={state.savingConfig}
-                  promptPreview={state.promptPreview}
-                  promptPreviewRefreshing={state.promptPreviewRefreshing}
-                  selectedThreadId={state.selectedId}
-                  onRefreshPromptPreview={(userConfig, options) =>
-                    void state.refreshPromptPreview(userConfig, options)
-                  }
-                />
-              </AppViewTransition>
-            </React.Suspense>
-          ) : null}
-        </div>
+        <LazyTabShell active={state.tab === "settings"} loaded={settingsPanelLoaded} loadingLabel={tt("loading")}>
+          <SettingsPanel
+            configView={state.configView}
+            daemon={state.daemon}
+            overview={state.overview}
+            onReload={() => void state.refreshSettings()}
+            onOpenRequeue={() =>
+              React.startTransition(() => {
+                addAppTransitionType("nav-lateral");
+                state.setTab("requeue");
+              })
+            }
+            onSave={(patch) => state.saveConfig(patch)}
+            previewApplyCount={previewApplyCount}
+            previewSuggestCount={previewSuggestCount}
+            providers={state.providers}
+            saving={state.savingConfig}
+            promptPreview={state.promptPreview}
+            promptPreviewRefreshing={state.promptPreviewRefreshing}
+            selectedThreadId={state.selectedId}
+            onRefreshPromptPreview={(userConfig, options) => void state.refreshPromptPreview(userConfig, options)}
+          />
+        </LazyTabShell>
 
-        <div className="app-tab-panel" hidden={state.tab !== "maintenance"}>
-          {showMaintenancePanel ? (
-            <React.Suspense
-              fallback={
-                <AppViewTransition exit="slide-down">
-                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
-                </AppViewTransition>
-              }
-            >
-              <AppViewTransition default="none" enter="slide-up">
-                <RenameOpsPanel
-                  aiRequestLogs={state.aiRequestLogs}
-                  aiRequestLogDetail={state.aiRequestLogDetail}
-                  daemon={state.daemon}
-                  doctor={state.doctor}
-                  onRefreshRuntime={() => state.refreshMaintenance()}
-                  onRefreshPreview={(options) => state.refreshPreview(options)}
-                  onSelectRequestLog={state.setSelectedRequestLogId}
-                  overview={state.overview}
-                  preview={state.preview}
-                  previewRefreshing={state.previewRefreshing}
-                  selectedRequestLogId={state.selectedRequestLogId}
-                  uiLanguage={uiLanguage}
-                />
-              </AppViewTransition>
-            </React.Suspense>
-          ) : null}
-        </div>
+        <LazyTabShell active={state.tab === "maintenance"} loaded={maintenancePanelLoaded} loadingLabel={tt("loading")}>
+          <RenameOpsPanel
+            aiRequestLogs={state.aiRequestLogs}
+            aiRequestLogDetail={state.aiRequestLogDetail}
+            daemon={state.daemon}
+            doctor={state.doctor}
+            onRefreshRuntime={() => state.refreshMaintenance()}
+            onRefreshPreview={(options) => state.refreshPreview(options)}
+            onSelectRequestLog={state.setSelectedRequestLogId}
+            overview={state.overview}
+            preview={state.preview}
+            previewRefreshing={state.previewRefreshing}
+            selectedRequestLogId={state.selectedRequestLogId}
+            uiLanguage={uiLanguage}
+          />
+        </LazyTabShell>
 
-        <div className="app-tab-panel" hidden={state.tab !== "requeue"}>
-          {showRequeuePanel ? (
-            <React.Suspense
-              fallback={
-                <AppViewTransition exit="slide-down">
-                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
-                </AppViewTransition>
-              }
-            >
-              <AppViewTransition default="none" enter="slide-up">
-                <RequeuePanel
-                  onRefresh={() => state.refreshRequeue()}
-                  onRequeue={(params) => state.replayRenamesSince(params)}
-                  overview={state.overview}
-                  uiLanguage={uiLanguage}
-                />
-              </AppViewTransition>
-            </React.Suspense>
-          ) : null}
-        </div>
+        <LazyTabShell active={state.tab === "requeue"} loaded={requeuePanelLoaded} loadingLabel={tt("loading")}>
+          <RequeuePanel
+            onRefresh={() => state.refreshRequeue()}
+            onRequeue={(params) => state.replayRenamesSince(params)}
+            overview={state.overview}
+            uiLanguage={uiLanguage}
+          />
+        </LazyTabShell>
 
-        <div className="app-tab-panel" hidden={state.tab !== "daemon"}>
-          {showDaemonPanel ? (
-            <React.Suspense
-              fallback={
-                <AppViewTransition exit="slide-down">
-                  <div className="loading-state app-panel-loading">{tt("loading")}</div>
-                </AppViewTransition>
-              }
-            >
-              <AppViewTransition default="none" enter="slide-up">
-                <DaemonPanel
-                  actioning={state.daemonActioning}
-                  daemon={state.daemon}
-                  onRefresh={() => void state.refreshDaemon()}
-                  onStart={() => void state.startDaemon()}
-                  onStop={() => void state.stopDaemon()}
-                  overview={state.overview}
-                  preview={state.preview}
-                  uiLanguage={uiLanguage}
-                />
-              </AppViewTransition>
-            </React.Suspense>
-          ) : null}
-        </div>
+        <LazyTabShell active={state.tab === "daemon"} loaded={daemonPanelLoaded} loadingLabel={tt("loading")}>
+          <DaemonPanel
+            actioning={state.daemonActioning}
+            daemon={state.daemon}
+            onRefresh={() => void state.refreshDaemon()}
+            onStart={() => void state.startDaemon()}
+            onStop={() => void state.stopDaemon()}
+            overview={state.overview}
+            preview={state.preview}
+            uiLanguage={uiLanguage}
+          />
+        </LazyTabShell>
       </main>
     </div>
   );

@@ -1,284 +1,80 @@
-import { startTransition, useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 
-import {
-  applySession,
-  freezeSession,
-  requeueRenamesSince,
-  startDaemon,
-  stopDaemon,
-  suggestSession,
-  updateConfig
-} from "./api.js";
+import { useControlDeckActions } from "./actions/useControlDeckActions.js";
 import {
   ALL_WORKSPACES_ID,
   liveRefreshResourcesForTab,
-  panelResourcesForTab,
-  readUiStateFromUrl,
-  writeUiStateToUrl,
-  type TabId,
-  type UiNotice
+  panelResourcesForTab
 } from "./control-deck-model.js";
 import { useControlDeckResources } from "./useControlDeckResources.js";
-import type {
-  ConfigDocument,
-  DaemonControlStatus,
-  RenameApplyResponse,
-  RenameFreezeResponse,
-  RenameSuggestResponse,
-  SessionDetail,
-  SessionSummary
-} from "./types.js";
+import { useControlDeckUiState } from "./state/useControlDeckUiState.js";
 
 export function useControlDeckState() {
-  const initialUiStateRef = useRef<ReturnType<typeof readUiStateFromUrl> | null>(null);
-  if (!initialUiStateRef.current) {
-    initialUiStateRef.current = readUiStateFromUrl();
-  }
-  const initialUiState = initialUiStateRef.current;
-
-  const [tab, setTab] = useState<TabId>(initialUiState.tab);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(initialUiState.selectedWorkspaceId);
-  const [selectedId, setSelectedId] = useState<string | undefined>(initialUiState.selectedId);
-  const [selectedRequestLogId, setSelectedRequestLogId] = useState<number | undefined>(initialUiState.selectedRequestLogId);
-  const [search, setSearch] = useState(initialUiState.search);
-  const [dirtyOnly, setDirtyOnly] = useState(initialUiState.dirtyOnly);
-  const [showHiddenTranscript, setShowHiddenTranscript] = useState(initialUiState.showHiddenTranscript);
-  const [actioning, setActioning] = useState(false);
-  const [actionLabel, setActionLabel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<UiNotice | null>(null);
-  const [savingConfig, setSavingConfig] = useState(false);
-  const [daemonActioning, setDaemonActioning] = useState<"start" | "stop" | null>(null);
+  const ui = useControlDeckUiState();
 
   const setFailure = (nextError: unknown) => {
     const message = nextError instanceof Error ? nextError.message : "Unknown error";
-    setError(message);
-    setNotice({
+    ui.setError(message);
+    ui.setNotice({
       tone: "error",
       text: message
     });
   };
 
   const resources = useControlDeckResources({
-    tab,
-    search,
-    dirtyOnly,
-    selectedWorkspaceId,
-    selectedId,
-    selectedRequestLogId,
-    onSelectSession: setSelectedId,
-    onSelectWorkspace: setSelectedWorkspaceId,
+    tab: ui.tab,
+    search: ui.search,
+    dirtyOnly: ui.dirtyOnly,
+    selectedWorkspaceId: ui.selectedWorkspaceId,
+    selectedId: ui.selectedId,
+    selectedRequestLogId: ui.selectedRequestLogId,
+    onSelectSession: ui.setSelectedId,
+    onSelectWorkspace: ui.setSelectedWorkspaceId,
     onFailure: setFailure
   });
-  const refreshCurrentView = resources.refreshCurrentView;
 
   useEffect(() => {
-    writeUiStateToUrl({
-      tab,
-      search,
-      dirtyOnly,
-      showHiddenTranscript,
-      selectedWorkspaceId,
-      selectedId,
-      selectedRequestLogId
-    });
-  }, [dirtyOnly, search, selectedId, selectedRequestLogId, selectedWorkspaceId, showHiddenTranscript, tab]);
-
-  useEffect(() => {
-    setError(null);
-  }, [tab]);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const nextState = readUiStateFromUrl();
-      setTab(nextState.tab);
-      setSelectedWorkspaceId(nextState.selectedWorkspaceId);
-      setSelectedId(nextState.selectedId);
-      setSelectedRequestLogId(nextState.selectedRequestLogId);
-      setDirtyOnly(nextState.dirtyOnly);
-      setShowHiddenTranscript(nextState.showHiddenTranscript);
-      startTransition(() => {
-        setSearch(nextState.search);
-      });
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!notice || notice.tone === "error") {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setNotice((current) => (current === notice ? null : current));
-    }, 4_000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [notice]);
-
-  useEffect(() => {
-    if (!error) {
+    if (!ui.error) {
       return;
     }
 
     const timer = window.setInterval(() => {
-      refreshCurrentView();
+      resources.refreshCurrentView();
     }, 3_000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [error, refreshCurrentView]);
+  }, [resources.refreshCurrentView, ui.error]);
 
-  const refreshAfterAction = (threadId: string) => {
-    refreshCurrentView({
-      threadId,
-      includePromptPreview: true
-    });
-  };
-
-  const runAction = async <T>(options: {
-    threadId: string;
-    actionName: string;
-    action: () => Promise<T>;
-    onSuccess: (result: T) => {
-      message: string;
-      patch?: Partial<SessionSummary & SessionDetail>;
-    };
-  }) => {
-    setActioning(true);
-    setActionLabel(options.actionName);
-    setError(null);
-    setNotice({
-      tone: "info",
-      text: `${options.actionName}...`
-    });
-    try {
-      const result = await options.action();
-      const success = options.onSuccess(result);
-      if (success.patch) {
-        resources.patchSelectedSession(options.threadId, success.patch);
-      }
-      setNotice({
-        tone: "success",
-        text: success.message
-      });
-      refreshAfterAction(options.threadId);
-    } catch (nextError) {
-      setFailure(nextError);
-    } finally {
-      setActioning(false);
-      setActionLabel(null);
+  const actionState = useControlDeckActions({
+    resources: {
+      detail: resources.detail,
+      patchSelectedSession: resources.patchSelectedSession,
+      setConfigView: resources.setConfigView,
+      loadResources: resources.loadResources,
+      mergeCurrentTabResources: resources.mergeCurrentTabResources,
+      refreshCurrentView: resources.refreshCurrentView
+    },
+    ui: {
+      tab: ui.tab,
+      selectedId: ui.selectedId,
+      setError: ui.setError,
+      setNotice: ui.setNotice
     }
-  };
-
-  const saveConfig = async (userConfig: ConfigDocument) => {
-    setSavingConfig(true);
-    setError(null);
-    setNotice({
-      tone: "info",
-      text: "Saving settings..."
-    });
-    try {
-      const result = await updateConfig(userConfig);
-      resources.setConfigView(result.config);
-      await resources.loadResources(resources.mergeCurrentTabResources(["config", "sessions", "preview"]), {
-        threadId: selectedId,
-        urgentPreview: true,
-        urgentPromptPreview: tab === "settings"
-      });
-      setNotice({
-        tone: "success",
-        text: result.restartRequired
-          ? `Saved to ${result.writtenTo}. Restart required for some changes.`
-          : `Saved to ${result.writtenTo}.`
-      });
-    } catch (nextError) {
-      setFailure(nextError);
-    } finally {
-      setSavingConfig(false);
-    }
-  };
-
-  const replayRenamesSince = async (params: {
-    since: string;
-    basis: "session-updated-at" | "last-applied-at";
-  }) => {
-    setError(null);
-    setNotice({
-      tone: "info",
-      text: "Re-queueing rename backlog..."
-    });
-    try {
-      const result = await requeueRenamesSince(params);
-      await resources.loadResources(resources.mergeCurrentTabResources(["sessions", "overview", "preview"]), {
-        threadId: selectedId,
-        urgentPreview: true,
-        urgentPromptPreview: tab === "settings"
-      });
-      setNotice({
-        tone: "success",
-        text:
-          result.skipped > 0
-            ? `Queued ${result.queued} sessions and skipped ${result.skipped} already-up-to-date or protected sessions.`
-            : `Queued ${result.queued} sessions for rename replay.`
-      });
-      return result;
-    } catch (nextError) {
-      setFailure(nextError);
-      throw nextError;
-    }
-  };
-
-  const updateDaemonState = async (
-    action: "start" | "stop",
-    request: () => Promise<DaemonControlStatus>
-  ): Promise<DaemonControlStatus> => {
-    setDaemonActioning(action);
-    setError(null);
-    setNotice({
-      tone: "info",
-      text: action === "start" ? "Starting daemon..." : "Stopping daemon..."
-    });
-    try {
-      const result = await request();
-      await resources.loadResources(resources.mergeCurrentTabResources(["daemon", "overview", "preview"]), {
-        threadId: selectedId,
-        urgentPreview: true
-      });
-      setNotice({
-        tone: "success",
-        text:
-          action === "start"
-            ? `Daemon started${result.pid ? ` (pid ${result.pid})` : ""}.`
-            : "Daemon stopped."
-      });
-      return result;
-    } catch (nextError) {
-      setFailure(nextError);
-      throw nextError;
-    } finally {
-      setDaemonActioning(null);
-    }
-  };
+  });
 
   return {
-    tab,
-    setTab,
+    tab: ui.tab,
+    setTab: ui.setTab,
     sessions: resources.sessions,
     workspaces: resources.workspaces,
-    selectedWorkspaceId,
-    setSelectedWorkspaceId,
-    selectedId,
-    setSelectedId,
-    selectedRequestLogId,
-    setSelectedRequestLogId,
+    selectedWorkspaceId: ui.selectedWorkspaceId,
+    setSelectedWorkspaceId: ui.setSelectedWorkspaceId,
+    selectedId: ui.selectedId,
+    setSelectedId: ui.setSelectedId,
+    selectedRequestLogId: ui.selectedRequestLogId,
+    setSelectedRequestLogId: ui.setSelectedRequestLogId,
     detail: resources.detail,
     providers: resources.providers,
     configView: resources.configView,
@@ -288,29 +84,25 @@ export function useControlDeckState() {
     aiRequestLogs: resources.aiRequestLogs,
     aiRequestLogDetail: resources.aiRequestLogDetail,
     preview: resources.preview,
-    search,
-    setSearch: (value: string) => {
-      startTransition(() => {
-        setSearch(value);
-      });
-    },
-    dirtyOnly,
-    setDirtyOnly,
-    showHiddenTranscript,
-    setShowHiddenTranscript,
+    search: ui.search,
+    setSearch: ui.setSearch,
+    dirtyOnly: ui.dirtyOnly,
+    setDirtyOnly: ui.setDirtyOnly,
+    showHiddenTranscript: ui.showHiddenTranscript,
+    setShowHiddenTranscript: ui.setShowHiddenTranscript,
     loadingSessions: resources.loadingSessions,
     loadingDetail: resources.loadingDetail,
-    actioning,
-    actionLabel,
-    error,
-    notice,
-    setNotice,
+    actioning: actionState.actioning,
+    actionLabel: actionState.actionLabel,
+    error: ui.error,
+    notice: ui.notice,
+    setNotice: ui.setNotice,
     lastSyncAt: resources.lastSyncAt,
     previewRefreshing: resources.previewRefreshing,
     promptPreview: resources.promptPreview,
     promptPreviewRefreshing: resources.promptPreviewRefreshing,
-    savingConfig,
-    daemonActioning,
+    savingConfig: actionState.savingConfig,
+    daemonActioning: actionState.daemonActioning,
     selectedSummary: resources.selectedSummary,
     refreshSessions: resources.refreshSessions,
     refreshPreview: resources.refreshPreview,
@@ -319,56 +111,11 @@ export function useControlDeckState() {
     refreshMaintenance: resources.refreshMaintenance,
     refreshRequeue: resources.refreshRequeue,
     refreshDaemon: resources.refreshDaemon,
-    saveConfig,
-    replayRenamesSince,
-    startDaemon: () => updateDaemonState("start", () => startDaemon()),
-    stopDaemon: () => updateDaemonState("stop", () => stopDaemon()),
-    actions: {
-      suggest: () =>
-        resources.detail
-          ? runAction<RenameSuggestResponse>({
-              threadId: resources.detail.threadId,
-              actionName: "Suggesting rename",
-              action: () => suggestSession(resources.detail!.threadId),
-              onSuccess: (result) => ({
-                message: `Candidate ready: ${result.name}`,
-                patch: {
-                  candidateName: result.name
-                }
-              })
-            })
-          : Promise.resolve(),
-      apply: () =>
-        resources.detail
-          ? runAction<RenameApplyResponse>({
-              threadId: resources.detail.threadId,
-              actionName: "Applying rename",
-              action: () => applySession(resources.detail!.threadId),
-              onSuccess: (result) => ({
-                message: result.written ? `Applied: ${result.name}` : `Already up to date: ${result.name}`,
-                patch: {
-                  officialName: result.name,
-                  candidateName: result.name,
-                  dirty: false
-                }
-              })
-            })
-          : Promise.resolve(),
-      toggleFreeze: () =>
-        resources.detail
-          ? runAction<RenameFreezeResponse>({
-              threadId: resources.detail.threadId,
-              actionName: resources.detail.frozen ? "Unfreezing session" : "Freezing session",
-              action: () => freezeSession(resources.detail!.threadId, !resources.detail!.frozen),
-              onSuccess: (result) => ({
-                message: result.frozen ? "Session frozen" : "Session unfrozen",
-                patch: {
-                  frozen: result.frozen
-                }
-              })
-            })
-          : Promise.resolve()
-    }
+    saveConfig: actionState.saveConfig,
+    replayRenamesSince: actionState.replayRenamesSince,
+    startDaemon: actionState.startDaemon,
+    stopDaemon: actionState.stopDaemon,
+    actions: actionState.actions
   };
 }
 
