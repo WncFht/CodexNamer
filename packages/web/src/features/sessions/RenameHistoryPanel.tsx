@@ -1,5 +1,5 @@
 import { formatWhen } from "../../browser-utils.js";
-import { t } from "../../i18n.js";
+import type { t } from "../../i18n.js";
 import type { SessionDetail, UiLanguage } from "../../types.js";
 
 function renameHistoryStatusLabel(status: string, language: UiLanguage): string {

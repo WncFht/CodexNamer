@@ -1,5 +1,5 @@
 import { formatWhen, sessionDisplayTitle } from "../../browser-utils.js";
-import { t } from "../../i18n.js";
+import type { t } from "../../i18n.js";
 import type { SessionDetail } from "../../types.js";
 
 export function SessionDetailHeader(props: {
