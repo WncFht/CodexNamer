@@ -195,9 +195,8 @@ export function DaemonPanel(props: {
           runtimeDisplay={runtimeDisplay}
           uiLanguage={props.uiLanguage}
         />
+        <DaemonTechnicalDetails daemon={props.daemon} inline={inline} uiLanguage={props.uiLanguage} />
       </div>
-
-      <DaemonTechnicalDetails daemon={props.daemon} inline={inline} uiLanguage={props.uiLanguage} />
     </section>
   );
 }

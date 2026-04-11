@@ -82,6 +82,20 @@ export function AiProviderSection(props: {
         "当来源为 `codex-config` 时，rename 和测试都会直接读取当前 Codex 配置与鉴权。",
         "When the source is `codex-config`, rename and provider tests read the current Codex config and auth directly."
       );
+  const connectivityTone = props.providerTestResult
+    ? props.providerTestResult.ok
+      ? "success"
+      : "danger"
+    : "idle";
+  const connectivityStatus = props.providerTestResult
+    ? props.providerTestResult.ok
+      ? props.text.inline("通过", "Passed")
+      : props.text.inline("失败", "Failed")
+    : props.text.inline("未测试", "Not tested");
+  const connectivityLatency = props.providerTestResult?.latencyMs ? `${props.providerTestResult.latencyMs} ms` : props.text.tt("nA");
+  const connectivitySummary =
+    firstNonEmptyString(props.providerTestResult?.responseText, props.providerTestResult?.error) ??
+    props.text.inline("还没有测试结果，先重新解析或手动调整配置后再测。", "No connectivity result yet. Reload or adjust the config, then run a test.");
 
   return (
     <SettingsSectionFrame
@@ -241,37 +255,38 @@ export function AiProviderSection(props: {
           </details>
         </article>
 
-        <article className="settings-surface-card">
+        <article className={`settings-surface-card settings-span-two settings-connectivity-card ${connectivityTone}`}>
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Connectivity", "Connectivity")}</p>
               <h4>{props.text.inline("测试结果与延迟", "Test result and latency")}</h4>
             </div>
           </div>
-          <dl className="settings-runtime-grid compact">
-            <div>
-              <dt>{props.text.inline("状态", "Status")}</dt>
-              <dd>
-                {props.providerTestResult
-                  ? props.providerTestResult.ok
-                    ? props.text.inline("通过", "Passed")
-                    : props.text.inline("失败", "Failed")
-                  : props.text.tt("nA")}
-              </dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("Ping", "Ping")}</dt>
-              <dd>{props.providerTestResult?.latencyMs ? `${props.providerTestResult.latencyMs} ms` : props.text.tt("nA")}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("测试时间", "Tested at")}</dt>
-              <dd>{props.providerTestResult?.testedAt ?? props.text.tt("nA")}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("结果摘要", "Summary")}</dt>
-              <dd>{firstNonEmptyString(props.providerTestResult?.responseText, props.providerTestResult?.error) ?? props.text.tt("nA")}</dd>
-            </div>
-          </dl>
+          <div className="settings-connectivity-layout">
+            <section className="settings-connectivity-hero">
+              <span className={`settings-status-pill ${connectivityTone}`}>{connectivityStatus}</span>
+              <strong>{connectivityLatency}</strong>
+              <p>{connectivitySummary}</p>
+            </section>
+            <dl className="settings-runtime-grid compact settings-connectivity-grid">
+              <div>
+                <dt>{props.text.inline("状态", "Status")}</dt>
+                <dd>{connectivityStatus}</dd>
+              </div>
+              <div>
+                <dt>{props.text.inline("Ping", "Ping")}</dt>
+                <dd>{connectivityLatency}</dd>
+              </div>
+              <div>
+                <dt>{props.text.inline("测试时间", "Tested at")}</dt>
+                <dd>{props.providerTestResult?.testedAt ?? props.text.tt("nA")}</dd>
+              </div>
+              <div>
+                <dt>{props.text.inline("结果摘要", "Summary")}</dt>
+                <dd>{connectivitySummary}</dd>
+              </div>
+            </dl>
+          </div>
         </article>
 
         <article className="settings-surface-card settings-span-two">

@@ -219,48 +219,50 @@ export function SettingsPanel(props: {
         </div>
       </header>
 
-      <div className="settings-summary-strip">
-        <SettingsSummaryMetric
-          detail={inline(
-            `${formatUiNumber(props.previewSuggestCount, uiLanguage)} 个 suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} 个 apply`,
-            `${formatUiNumber(props.previewSuggestCount, uiLanguage)} suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} apply`
-          )}
-          label={tt("dirtyQueue")}
-          value={formatUiNumber(props.overview?.sessions.dirty, uiLanguage)}
-        />
-        <SettingsSummaryMetric
-          detail={inline(
-            `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} 个自动应用`,
-            `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} auto applied`
-          )}
-          label={tt("aiApplied")}
-          value={formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}
-        />
-        <SettingsSummaryMetric
-          detail={inline(
-            `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} 个正式标题参与统计`,
-            `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} official titles in sample`
-          )}
-          label={inline("平均标题字数", "Average title length")}
-          value={formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}
-        />
-        <SettingsSummaryMetric
-          detail={
-            (runtimeDisplay.sweepRunning ? runtimeProgressExplanation(uiLanguage) : "") ||
-            props.overview?.runtime.explain ||
-            tt("nA")
-          }
-          label={inline("当前执行态", "Execution")}
-          value={runtimeExecutionLabel(runtimeDisplay.execution, uiLanguage)}
-        />
-      </div>
-
       <div className="settings-shell">
         <SettingsNav activeSection={activeSection} onChange={setActiveSection} text={text} />
-        <div className="settings-stage">
-          <AppViewTransition default="none" enter="fade-in" exit="fade-out" key={activeSection}>
-            {renderActiveSection()}
-          </AppViewTransition>
+        <div className="settings-main">
+          <div className="settings-summary-strip">
+            <SettingsSummaryMetric
+              detail={inline(
+                `${formatUiNumber(props.previewSuggestCount, uiLanguage)} 个 suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} 个 apply`,
+                `${formatUiNumber(props.previewSuggestCount, uiLanguage)} suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} apply`
+              )}
+              label={tt("dirtyQueue")}
+              value={formatUiNumber(props.overview?.sessions.dirty, uiLanguage)}
+            />
+            <SettingsSummaryMetric
+              detail={inline(
+                `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} 个自动应用`,
+                `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} auto applied`
+              )}
+              label={tt("aiApplied")}
+              value={formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}
+            />
+            <SettingsSummaryMetric
+              detail={inline(
+                `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} 个正式标题参与统计`,
+                `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} official titles in sample`
+              )}
+              label={inline("平均标题字数", "Average title length")}
+              value={formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}
+            />
+            <SettingsSummaryMetric
+              detail={
+                (runtimeDisplay.sweepRunning ? runtimeProgressExplanation(uiLanguage) : "") ||
+                props.overview?.runtime.explain ||
+                tt("nA")
+              }
+              label={inline("当前执行态", "Execution")}
+              value={runtimeExecutionLabel(runtimeDisplay.execution, uiLanguage)}
+            />
+          </div>
+
+          <div className="settings-stage">
+            <AppViewTransition default="none" enter="fade-in" exit="fade-out" key={activeSection}>
+              {renderActiveSection()}
+            </AppViewTransition>
+          </div>
         </div>
       </div>
     </section>

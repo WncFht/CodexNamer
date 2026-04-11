@@ -7,7 +7,7 @@ export function DaemonTechnicalDetails(props: {
   uiLanguage: "en-US" | "zh-CN";
 }) {
   return (
-    <section className="detail-panel ops-span-wide">
+    <article className="settings-surface-card settings-span-two daemon-technical-card">
       <div className="panel-topline">
         <div>
           <p className="panel-kicker">{props.inline("高级", "Advanced")}</p>
@@ -82,6 +82,6 @@ export function DaemonTechnicalDetails(props: {
           </article>
         </div>
       </details>
-    </section>
+    </article>
   );
 }

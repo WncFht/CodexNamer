@@ -1123,9 +1123,6 @@ pre {
 }
 
 .settings-summary-strip {
-  width: min(100%, var(--console-shell-width));
-  margin: 0 auto;
-  padding: 0 24px 14px;
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1175,6 +1172,13 @@ pre {
   flex: 1;
   min-height: auto;
   align-items: start;
+}
+
+.settings-main {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  align-content: start;
 }
 
 .settings-nav {
@@ -1370,6 +1374,21 @@ pre {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.settings-action-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  padding-top: 4px;
+}
+
+.settings-action-row .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  justify-content: center;
 }
 
 .settings-inline-note,
@@ -1746,6 +1765,100 @@ pre {
   margin-top: 16px;
 }
 
+.settings-connectivity-card {
+  gap: 16px;
+}
+
+.settings-connectivity-card.success {
+  border-color: rgba(107, 122, 69, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(107, 122, 69, 0.12), transparent 26%),
+    linear-gradient(180deg, #fbfbf7 0%, #f6f7f1 100%);
+}
+
+.settings-connectivity-card.danger {
+  border-color: rgba(181, 51, 51, 0.24);
+  background:
+    radial-gradient(circle at top right, rgba(181, 51, 51, 0.11), transparent 26%),
+    linear-gradient(180deg, #fdf8f7 0%, #fbf2f1 100%);
+}
+
+.settings-connectivity-card.idle {
+  background:
+    radial-gradient(circle at top right, rgba(166, 72, 42, 0.08), transparent 26%),
+    linear-gradient(180deg, #fcfaf5 0%, #f7f3ea 100%);
+}
+
+.settings-connectivity-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.settings-connectivity-hero {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(20, 20, 19, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-connectivity-hero strong {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 2vw, 34px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+.settings-connectivity-hero p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.58;
+}
+
+.settings-connectivity-grid {
+  align-self: stretch;
+}
+
+.settings-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-secondary) 84%, white 16%);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-status-pill.success {
+  border-color: rgba(107, 122, 69, 0.26);
+  background: rgba(107, 122, 69, 0.12);
+  color: var(--success);
+}
+
+.settings-status-pill.danger {
+  border-color: rgba(181, 51, 51, 0.26);
+  background: rgba(181, 51, 51, 0.1);
+  color: var(--danger);
+}
+
+.settings-status-pill.idle {
+  border-color: rgba(166, 72, 42, 0.22);
+  background: rgba(166, 72, 42, 0.08);
+  color: var(--accent);
+}
+
 .settings-provider-step {
   display: inline-flex;
   align-items: center;
@@ -1812,11 +1925,14 @@ pre {
   .settings-provider-groups {
     grid-template-columns: 1fr;
   }
+
+  .settings-connectivity-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
   .settings-header,
-  .settings-summary-strip,
   .settings-shell {
     padding-left: 16px;
     padding-right: 16px;
@@ -3519,6 +3635,10 @@ pre {
   width: min(100%, var(--console-shell-width));
   margin: 0 auto;
   padding: 0 24px;
+}
+
+.daemon-technical-card h3 {
+  margin: 0 0 8px;
 }
 
 .daemon-advanced-grid {
