@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { parseCodexProvider, testProvider } from "./api.js";
 import { formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
@@ -10,8 +10,8 @@ import {
 import {
   encodeDraft,
   encodedConfigKey,
-  useSettingsDraft,
-  updateSelectedProfile
+  updateSelectedProfile,
+  useSettingsDraft
 } from "./settings-model.js";
 import type {
   ConfigDocument,
@@ -23,14 +23,15 @@ import type {
   ProviderTestResponse
 } from "./types.js";
 import { AppViewTransition } from "./view-transitions.js";
+import { usePromptPreviewController } from "./features/settings/hooks/usePromptPreviewController.js";
 import { AiProviderSection } from "./features/settings/sections/AiProviderSection.js";
 import { NamingSection } from "./features/settings/sections/NamingSection.js";
 import { OverviewSection } from "./features/settings/sections/OverviewSection.js";
 import { RuntimeSection } from "./features/settings/sections/RuntimeSection.js";
 import { SchedulerSection } from "./features/settings/sections/SchedulerSection.js";
 import {
-  SettingsHeroMetric,
   SettingsNav,
+  SettingsSummaryMetric,
   type InlineText,
   type SettingsSectionId,
   type TextTools,
@@ -66,7 +67,6 @@ export function SettingsPanel(props: {
   const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
   const previewDraft = useMemo(() => (draft ? encodeDraft(draft) : null), [draft]);
   const previewDraftKey = useMemo(() => (previewDraft ? encodedConfigKey(previewDraft) : ""), [previewDraft]);
-  const refreshPromptPreviewRef = useRef(props.onRefreshPromptPreview);
   const text = {
     tt,
     inline,
@@ -74,26 +74,17 @@ export function SettingsPanel(props: {
   } satisfies TextTools;
 
   useEffect(() => {
-    refreshPromptPreviewRef.current = props.onRefreshPromptPreview;
-  }, [props.onRefreshPromptPreview]);
-
-  useEffect(() => {
     setProviderTestResult(props.providers?.lastProviderTest ?? null);
   }, [props.providers?.lastProviderTest]);
 
-  useEffect(() => {
-    if (!previewDraft) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      void refreshPromptPreviewRef.current(previewDraft, {
-        urgent: false
-      });
-    }, 300);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [previewDraft, previewDraftKey, props.selectedThreadId]);
+  const promptPreviewController = usePromptPreviewController({
+    draftConfig: previewDraft ?? ({} as ConfigDocument),
+    draftKey: previewDraftKey,
+    selectedThreadId: props.selectedThreadId,
+    dirty,
+    hasPromptPreview: Boolean(props.promptPreview),
+    onRefreshPromptPreview: props.onRefreshPromptPreview
+  });
 
   if (!props.configView || !draft) {
     return (
@@ -105,6 +96,7 @@ export function SettingsPanel(props: {
 
   const configView = props.configView;
   const loadedDraft = draft;
+  const draftConfig = previewDraft ?? encodeDraft(loadedDraft);
 
   const handleSave = async () => {
     const currentDraft = draftRef.current;
@@ -120,10 +112,15 @@ export function SettingsPanel(props: {
         return (
           <NamingSection
             draft={loadedDraft}
-            draftConfig={previewDraft ?? encodeDraft(loadedDraft)}
+            draftConfig={draftConfig}
             onOpenRequeue={props.onOpenRequeue}
-            onRefreshPromptPreview={props.onRefreshPromptPreview}
+            onRefreshPromptPreview={async (_userConfig, options) => {
+              await promptPreviewController.refreshPreview({
+                urgent: options?.urgent
+              });
+            }}
             promptPreview={props.promptPreview}
+            promptPreviewDirty={promptPreviewController.previewDirty}
             promptPreviewRefreshing={props.promptPreviewRefreshing}
             text={text}
             updateDraftField={updateDraftField}
@@ -159,7 +156,7 @@ export function SettingsPanel(props: {
             onTestProvider={async () => {
               setProviderTesting(true);
               try {
-                const result = await testProvider(previewDraft ?? encodeDraft(loadedDraft));
+                const result = await testProvider(draftConfig);
                 setProviderTestResult(result);
               } finally {
                 setProviderTesting(false);
@@ -188,19 +185,24 @@ export function SettingsPanel(props: {
 
   return (
     <section className="settings-layout">
-      <header className="settings-hero">
-        <div className="settings-hero-copy">
+      <header className="settings-header">
+        <div className="settings-header-copy">
           <p className="panel-kicker">{inline("设置", "Settings")}</p>
-          <h2>{inline("调整命名策略、Provider 与后台执行方式", "Tune naming policy, providers, and background execution")}</h2>
+          <h2>{inline("命名策略与后台设置", "Naming policy and runtime settings")}</h2>
           <p>
             {inline(
-              "这里集中处理命名规则、AI provider、调度阈值和运行时落点。保存后，新的设置会立刻进入预览、面板统计和后续 sweep。",
-              "Use this page to manage naming rules, AI providers, scheduler thresholds, and runtime targets. Once saved, the new settings flow into preview, dashboard metrics, and future sweeps immediately."
+              dirty
+                ? "当前有未保存修改。先完成编辑，再保存，并在需要时手动刷新 Prompt 预览。"
+                : "在这里调整命名规则、Provider 和后台阈值。保存后，新配置会进入后续 sweep 与状态统计。",
+              dirty
+                ? "You have unsaved edits. Finish the draft first, then save and refresh prompt preview only when needed."
+                : "Adjust naming rules, provider settings, and runtime thresholds here. Saved changes feed into later sweeps and runtime stats."
             )}
           </p>
         </div>
 
-        <div className="settings-hero-actions">
+        <div className="settings-header-actions">
+          {dirty ? <span className="chip warning">{inline("有未保存修改", "Unsaved changes")}</span> : null}
           <button
             className="btn-refresh"
             onClick={() => {
@@ -215,43 +217,43 @@ export function SettingsPanel(props: {
             {props.saving ? tt("savingSettings") : tt("saveSettings")}
           </button>
         </div>
-
-        <div className="settings-hero-grid">
-          <SettingsHeroMetric
-            detail={inline(
-              `${formatUiNumber(props.previewSuggestCount, uiLanguage)} 个 suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} 个 apply`,
-              `${formatUiNumber(props.previewSuggestCount, uiLanguage)} suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} apply`
-            )}
-            label={tt("dirtyQueue")}
-            value={formatUiNumber(props.overview?.sessions.dirty, uiLanguage)}
-          />
-          <SettingsHeroMetric
-            detail={inline(
-              `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} 个自动应用`,
-              `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} auto applied`
-            )}
-            label={tt("aiApplied")}
-            value={formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}
-          />
-          <SettingsHeroMetric
-            detail={inline(
-              `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} 个正式标题参与统计`,
-              `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} official titles in sample`
-            )}
-            label={inline("平均标题字数", "Average title length")}
-            value={formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}
-          />
-          <SettingsHeroMetric
-            detail={
-              (runtimeDisplay.sweepRunning ? runtimeProgressExplanation(uiLanguage) : "") ||
-              props.overview?.runtime.explain ||
-              tt("nA")
-            }
-            label={inline("当前执行态", "Execution")}
-            value={runtimeExecutionLabel(runtimeDisplay.execution, uiLanguage)}
-          />
-        </div>
       </header>
+
+      <div className="settings-summary-strip">
+        <SettingsSummaryMetric
+          detail={inline(
+            `${formatUiNumber(props.previewSuggestCount, uiLanguage)} 个 suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} 个 apply`,
+            `${formatUiNumber(props.previewSuggestCount, uiLanguage)} suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} apply`
+          )}
+          label={tt("dirtyQueue")}
+          value={formatUiNumber(props.overview?.sessions.dirty, uiLanguage)}
+        />
+        <SettingsSummaryMetric
+          detail={inline(
+            `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} 个自动应用`,
+            `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} auto applied`
+          )}
+          label={tt("aiApplied")}
+          value={formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}
+        />
+        <SettingsSummaryMetric
+          detail={inline(
+            `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} 个正式标题参与统计`,
+            `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} official titles in sample`
+          )}
+          label={inline("平均标题字数", "Average title length")}
+          value={formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}
+        />
+        <SettingsSummaryMetric
+          detail={
+            (runtimeDisplay.sweepRunning ? runtimeProgressExplanation(uiLanguage) : "") ||
+            props.overview?.runtime.explain ||
+            tt("nA")
+          }
+          label={inline("当前执行态", "Execution")}
+          value={runtimeExecutionLabel(runtimeDisplay.execution, uiLanguage)}
+        />
+      </div>
 
       <div className="settings-shell">
         <SettingsNav activeSection={activeSection} onChange={setActiveSection} text={text} />

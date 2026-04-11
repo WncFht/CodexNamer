@@ -131,6 +131,28 @@ export function SessionBrowser(props: {
       return true;
     });
   }, [props.detail?.renameHistory]);
+  const visibleSessionCount = props.sessions.length;
+  const renderSessionCardContent = (session: SessionSummary) => {
+    const subtitle = sessionListSubtitle(session);
+    return (
+      <>
+        <div className="session-item-topline">
+          <span className={`session-status-dot ${toneForSession(session)}`} />
+          <span className="session-updated">{formatWhen(session.updatedAt, props.uiLanguage)}</span>
+          {session.frozen ? <span className="session-health-label frozen">{tt("frozen")}</span> : null}
+          {!session.frozen && session.dirty ? <span className="session-health-label dirty">{tt("dirty")}</span> : null}
+          <span className="session-state-label">{sessionStatusLabel(session.statusEstimate, props.uiLanguage)}</span>
+        </div>
+        <div className="session-item-title">{sessionListTitle(session)}</div>
+        {subtitle ? <div className="session-item-subtitle">{subtitle}</div> : null}
+        <div className="session-item-meta">
+          <span>{session.workspaceLabel}</span>
+          <span>{session.provider ?? tt("unknownProvider")}</span>
+          <span>{session.taskCompleteCount} {props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}</span>
+        </div>
+      </>
+    );
+  };
 
   React.useEffect(() => {
     setDetailView("transcript");
@@ -338,6 +360,9 @@ export function SessionBrowser(props: {
           <div className="session-list-heading">
             <p className="panel-kicker">{tt("conversationArchive")}</p>
             <h2>{props.selectedWorkspaceLabel}</h2>
+            <p className="session-list-summary">
+              {visibleSessionCount} {tt("sessionCountSuffix")}
+            </p>
           </div>
           <div className="header-actions">
             <button
@@ -412,21 +437,7 @@ export function SessionBrowser(props: {
                   onKeyDown={(event) => handleSessionItemKeyDown(event, session.threadId)}
                   type="button"
                 >
-                  <div className="session-item-topline">
-                    <span className={`session-status-dot ${toneForSession(session)}`} />
-                    <span className="session-updated">{formatWhen(session.updatedAt, props.uiLanguage)}</span>
-                    <span className={session.dirty ? "session-health-label dirty" : "session-health-label clean"}>
-                      {session.dirty ? tt("dirty") : tt("clean")}
-                    </span>
-                    <span className="session-state-label">{sessionStatusLabel(session.statusEstimate, props.uiLanguage)}</span>
-                  </div>
-                  <div className="session-item-title">{sessionListTitle(session)}</div>
-                  <div className="session-item-subtitle">{sessionListSubtitle(session)}</div>
-                  <div className="session-item-meta">
-                    <span>{session.workspaceLabel}</span>
-                    <span>{session.provider ?? tt("unknownProvider")}</span>
-                    <span>{session.taskCompleteCount} {props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}</span>
-                  </div>
+                  {renderSessionCardContent(session)}
                 </button>
               ))}
             </section>

@@ -19,7 +19,6 @@ export function useControlDeckUiState() {
   const [selectedId, setSelectedId] = useState<string | undefined>(initialUiState.selectedId);
   const [selectedRequestLogId, setSelectedRequestLogId] = useState<number | undefined>(initialUiState.selectedRequestLogId);
   const [search, setSearchState] = useState(initialUiState.search);
-  const [dirtyOnly, setDirtyOnly] = useState(initialUiState.dirtyOnly);
   const [showHiddenTranscript, setShowHiddenTranscript] = useState(initialUiState.showHiddenTranscript);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<UiNotice | null>(null);
@@ -28,13 +27,12 @@ export function useControlDeckUiState() {
     writeUiStateToUrl({
       tab,
       search,
-      dirtyOnly,
       showHiddenTranscript,
       selectedWorkspaceId,
       selectedId,
       selectedRequestLogId
     });
-  }, [dirtyOnly, search, selectedId, selectedRequestLogId, selectedWorkspaceId, showHiddenTranscript, tab]);
+  }, [search, selectedId, selectedRequestLogId, selectedWorkspaceId, showHiddenTranscript, tab]);
 
   useEffect(() => {
     setError(null);
@@ -47,7 +45,6 @@ export function useControlDeckUiState() {
       setSelectedWorkspaceId(nextState.selectedWorkspaceId);
       setSelectedId(nextState.selectedId);
       setSelectedRequestLogId(nextState.selectedRequestLogId);
-      setDirtyOnly(nextState.dirtyOnly);
       setShowHiddenTranscript(nextState.showHiddenTranscript);
       startTransition(() => {
         setSearchState(nextState.search);
@@ -89,8 +86,6 @@ export function useControlDeckUiState() {
         setSearchState(value);
       });
     },
-    dirtyOnly,
-    setDirtyOnly,
     showHiddenTranscript,
     setShowHiddenTranscript,
     error,

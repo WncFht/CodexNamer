@@ -24,7 +24,6 @@ export function useControlDeckState() {
   const resources = useControlDeckResources({
     tab: ui.tab,
     search: ui.search,
-    dirtyOnly: ui.dirtyOnly,
     selectedWorkspaceId: ui.selectedWorkspaceId,
     selectedId: ui.selectedId,
     selectedRequestLogId: ui.selectedRequestLogId,
@@ -87,8 +86,6 @@ export function useControlDeckState() {
     preview: resources.preview,
     search: ui.search,
     setSearch: ui.setSearch,
-    dirtyOnly: ui.dirtyOnly,
-    setDirtyOnly: ui.setDirtyOnly,
     showHiddenTranscript: ui.showHiddenTranscript,
     setShowHiddenTranscript: ui.setShowHiddenTranscript,
     loadingSessions: resources.loadingSessions,

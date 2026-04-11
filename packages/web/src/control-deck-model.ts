@@ -16,13 +16,11 @@ export type DataResource =
   | "prompt-preview";
 
 export const ALL_WORKSPACES_ID = "__all_workspaces__";
-const SESSION_FILTERS_ENABLED = false;
 const SESSION_SEARCH_IN_URL = true;
 
 export type UrlUiState = {
   tab: TabId;
   search: string;
-  dirtyOnly: boolean;
   showHiddenTranscript: boolean;
   selectedWorkspaceId: string;
   selectedId?: string;
@@ -49,7 +47,6 @@ export function readUiStateFromUrl(): UrlUiState {
   return {
     tab: parseUrlTab(params.get("tab")),
     search: params.get("q") ?? "",
-    dirtyOnly: parseUrlBoolean(params.get("dirty"), true),
     showHiddenTranscript: parseUrlBoolean(params.get("hidden"), false),
     selectedWorkspaceId: workspace && workspace !== ALL_WORKSPACES_ID ? workspace : ALL_WORKSPACES_ID,
     selectedId: params.get("session") ?? undefined,
@@ -70,12 +67,6 @@ export function writeUiStateToUrl(state: UrlUiState): void {
     params.delete("q");
   } else {
     params.set("q", state.search);
-  }
-
-  if (!SESSION_FILTERS_ENABLED || state.dirtyOnly) {
-    params.delete("dirty");
-  } else {
-    params.set("dirty", "0");
   }
 
   if (!state.showHiddenTranscript) {
@@ -162,8 +153,4 @@ export function mergeResources(...resourceGroups: readonly DataResource[][]): Da
     }
   }
   return [...merged];
-}
-
-export function areSessionFiltersEnabled(): boolean {
-  return SESSION_FILTERS_ENABLED;
 }

@@ -28,6 +28,7 @@ export function SidebarRail(props: {
     { id: "requeue", label: props.tt("requeue") },
     { id: "daemon", label: props.tt("daemon") }
   ];
+  const renameQueueCount = props.previewApplyCount + props.previewSuggestCount;
 
   return (
     <aside
@@ -105,16 +106,8 @@ export function SidebarRail(props: {
           <strong>{props.visibleSessionCount}</strong>
         </div>
         <div className="sidebar-stat-row">
-          <span>{props.tt("applyQueue")}</span>
-          <strong>{props.previewApplyCount}</strong>
-        </div>
-        <div className="sidebar-stat-row">
-          <span>{props.tt("suggestQueue")}</span>
-          <strong>{props.previewSuggestCount}</strong>
-        </div>
-        <div className="sidebar-stat-row">
-          <span>{props.tt("selected")}</span>
-          <strong>{props.selectedWorkspaceLabel}</strong>
+          <span>{props.tt("queueSummary")}</span>
+          <strong>{renameQueueCount}</strong>
         </div>
         <div className="sidebar-stat-row">
           <span>{props.tt("lastSync")}</span>

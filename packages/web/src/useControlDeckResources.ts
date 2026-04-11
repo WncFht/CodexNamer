@@ -15,7 +15,6 @@ import { useSessionResourceStore } from "./resources/useSessionResourceStore.js"
 type UseControlDeckResourcesOptions = {
   tab: TabId;
   search: string;
-  dirtyOnly: boolean;
   selectedWorkspaceId: string;
   selectedId?: string;
   selectedRequestLogId?: number;
@@ -28,7 +27,6 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const {
     tab,
     search,
-    dirtyOnly,
     selectedWorkspaceId,
     selectedId,
     selectedRequestLogId,
@@ -59,7 +57,6 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   const sessions = useSessionResourceStore({
     tab,
     search,
-    dirtyOnly,
     selectedWorkspaceId,
     selectedId,
     onSelectSession,

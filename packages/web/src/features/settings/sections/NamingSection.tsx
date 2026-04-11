@@ -166,6 +166,7 @@ export function NamingSection(props: {
   draft: SettingsDraft;
   text: TextTools;
   promptPreview: PromptPreviewResponse | null;
+  promptPreviewDirty: boolean;
   promptPreviewRefreshing: boolean;
   draftConfig: ConfigDocument;
   onOpenRequeue: () => void;
@@ -698,16 +699,23 @@ export function NamingSection(props: {
                 )}
               </p>
             </div>
-            <button
-              className="btn-sm"
-              disabled={manualPromptPreviewRefreshing}
-              onClick={() => {
-                void handleManualPromptPreviewRefresh();
-              }}
-              type="button"
-            >
-              {manualPromptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
-            </button>
+            <div className="settings-inline-actions">
+              {props.promptPreviewDirty ? (
+                <span className="chip warning">
+                  {props.text.inline("预览未同步", "Preview out of date")}
+                </span>
+              ) : null}
+              <button
+                className="btn-sm"
+                disabled={manualPromptPreviewRefreshing}
+                onClick={() => {
+                  void handleManualPromptPreviewRefresh();
+                }}
+                type="button"
+              >
+                {manualPromptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
+              </button>
+            </div>
           </div>
           <dl className="settings-runtime-grid compact">
             <div>

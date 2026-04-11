@@ -75,7 +75,7 @@ describe("browser-utils", () => {
     ).toBe("Official");
   });
 
-  test("prefers generated titles in the session list and keeps thread id in subtitle", () => {
+  test("prefers generated titles in the session list and keeps the first user message as secondary context", () => {
     const session = {
       threadId: "abc",
       firstUserMessage: "修复 settings 保存后被重置的问题",
@@ -89,7 +89,22 @@ describe("browser-utils", () => {
     };
 
     expect(sessionListTitle(session)).toBe("fix(settings): persist ui language");
-    expect(sessionListSubtitle(session)).toBe("abc");
+    expect(sessionListSubtitle(session)).toBe("修复 settings 保存后被重置的问题");
+  });
+
+  test("hides the secondary line when the generated title already matches the first message", () => {
+    const session = {
+      threadId: "abc",
+      firstUserMessage: "fix(settings): persist ui language",
+      officialName: "fix(settings): persist ui language",
+      workspaceId: "w",
+      workspaceLabel: "w",
+      dirty: false,
+      frozen: false,
+      taskCompleteCount: 0
+    };
+
+    expect(sessionListSubtitle(session)).toBe("");
   });
 
   test("falls back to the first user message when no generated title exists", () => {

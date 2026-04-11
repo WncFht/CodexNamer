@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchSessionDetail, fetchSessions } from "../api.js";
-import { ALL_WORKSPACES_ID, areSessionFiltersEnabled, type TabId } from "../control-deck-model.js";
+import { ALL_WORKSPACES_ID, type TabId } from "../control-deck-model.js";
 import type { SessionDetail, SessionSummary, SessionsResponse } from "../types.js";
 
 type UseSessionResourceStoreOptions = {
   tab: TabId;
   search: string;
-  dirtyOnly: boolean;
   selectedWorkspaceId: string;
   selectedId?: string;
   onSelectSession: (threadId?: string) => void;
@@ -19,7 +18,6 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
   const {
     tab,
     search,
-    dirtyOnly,
     selectedWorkspaceId,
     selectedId,
     onSelectSession,
@@ -34,7 +32,6 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const latestUiStateRef = useRef({
     search,
-    dirtyOnly,
     selectedWorkspaceId,
     selectedId
   });
@@ -48,7 +45,6 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
 
   latestUiStateRef.current = {
     search,
-    dirtyOnly,
     selectedWorkspaceId,
     selectedId
   };
@@ -74,7 +70,6 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
 
   const refreshSessions = useCallback(async () => {
     const {
-      dirtyOnly: nextDirtyOnly,
       selectedWorkspaceId: nextWorkspaceId,
       selectedId: nextSelectedId,
       search: nextSearch
@@ -83,11 +78,8 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
     setLoadingSessions(true);
     const requestId = ++sessionsRequestIdRef.current;
     try {
-      const filtersEnabled = areSessionFiltersEnabled();
-      const effectiveDirtyOnly = filtersEnabled ? nextDirtyOnly : false;
       const payload = await fetchSessions({
         search: nextSearch.trim() || undefined,
-        dirtyOnly: effectiveDirtyOnly,
         workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
       });
       if (requestId !== sessionsRequestIdRef.current) {
@@ -152,7 +144,7 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
 
   useEffect(() => {
     void refreshSessions();
-  }, [dirtyOnly, refreshSessions, search, selectedWorkspaceId]);
+  }, [refreshSessions, search, selectedWorkspaceId]);
 
   useEffect(() => {
     if (tab !== "sessions") {

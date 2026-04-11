@@ -49,14 +49,14 @@ export function SelectField<T extends string>(props: {
   );
 }
 
-export function SettingsHeroMetric(props: {
+export function SettingsSummaryMetric(props: {
   label: string;
   value: string;
   detail: string;
 }) {
   return (
-    <article className="settings-hero-metric">
-      <span className="settings-hero-metric-label">{props.label}</span>
+    <article className="settings-summary-metric">
+      <span className="settings-summary-metric-label">{props.label}</span>
       <strong>{props.value}</strong>
       <p>{props.detail}</p>
     </article>
@@ -71,23 +71,23 @@ export function SettingsNav(props: {
   const labels: Record<SettingsSectionId, { title: string; copy: string }> = {
     naming: {
       title: props.text.inline("命名策略", "Naming policy"),
-      copy: props.text.inline("风格、context、组件与 tag 预设。", "Style, context, components, and tag presets.")
+      copy: props.text.inline("规则、上下文和标题结构。", "Rules, context, and title structure.")
     },
     ai: {
       title: props.text.inline("AI 提供方", "AI provider"),
-      copy: props.text.inline("backend、provider source 与 profile。", "Backend, provider source, and profiles.")
+      copy: props.text.inline("后端、配置来源与 profile。", "Backend, source, and profiles.")
     },
     scheduler: {
       title: props.text.inline("调度阈值", "Scheduler"),
-      copy: props.text.inline("auto-apply 与 scan / idle 节奏。", "Auto-apply and scan / idle cadence.")
+      copy: props.text.inline("自动应用与空闲阈值。", "Auto-apply and idle thresholds.")
     },
     runtime: {
       title: props.text.inline("运行时", "Runtime"),
-      copy: props.text.inline("解析后的环境、provider 结果与配置路径。", "Resolved environment, provider state, and config paths.")
+      copy: props.text.inline("解析结果、路径与 provider 状态。", "Resolved paths, provider state, and runtime info.")
     },
     overview: {
       title: props.text.inline("总览", "Overview"),
-      copy: props.text.inline("当前命名系统和队列的总体健康度。", "High-level health of the rename system and queue.")
+      copy: props.text.inline("当前命名队列与系统状态。", "Current rename queue and system state.")
     }
   };
 

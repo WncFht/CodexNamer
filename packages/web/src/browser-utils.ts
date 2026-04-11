@@ -96,5 +96,13 @@ export function sessionListTitle(session: SessionSummary | SessionDetail): strin
 }
 
 export function sessionListSubtitle(session: SessionSummary | SessionDetail): string {
-  return session.threadId;
+  const generatedTitle = session.officialName ?? session.candidateName;
+  const firstUserMessage = session.firstUserMessage?.trim();
+  if (!generatedTitle) {
+    return session.threadId;
+  }
+  if (!firstUserMessage) {
+    return "";
+  }
+  return firstUserMessage.localeCompare(generatedTitle, undefined, { sensitivity: "base" }) === 0 ? "" : firstUserMessage;
 }
