@@ -1,43 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import {
-  fetchDaemonStatus,
-  fetchAiRequestLogDetail,
-  fetchAiRequestLogs,
-  fetchAutoRenamePreview,
-  fetchConfig,
-  fetchDoctor,
-  fetchOverview,
-  fetchPromptPreview,
-  fetchProviders,
-  fetchSessionDetail,
-  fetchSessions
-} from "./api.js";
-import {
-  ALL_WORKSPACES_ID,
-  areSessionFiltersEnabled,
   liveRefreshResourcesForTab,
   mergeResources,
   panelResourcesForTab,
   type DataResource,
   type TabId
 } from "./control-deck-model.js";
-import type {
-  AiRequestLogDetailResponse,
-  AiRequestLogResponse,
-  AutoRenamePreviewResponse,
-  ConfigDocument,
-  ConfigView,
-  DaemonControlStatus,
-  DoctorResponse,
-  OverviewResponse,
-  PromptPreviewResponse,
-  ProviderResponse,
-  SessionDetail,
-  SessionSummary,
-  SessionsResponse
-} from "./types.js";
-import { useEventsInvalidation } from "./resources/useEventsInvalidation.js";
+import type { ConfigDocument } from "./types.js";
+import { usePanelResourceStore } from "./resources/usePanelResourceStore.js";
+import { useRefreshCoordinator } from "./resources/useRefreshCoordinator.js";
+import { useSessionResourceStore } from "./resources/useSessionResourceStore.js";
 
 type UseControlDeckResourcesOptions = {
   tab: TabId;
@@ -63,368 +36,151 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     onSelectWorkspace,
     onFailure
   } = options;
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [workspaces, setWorkspaces] = useState<SessionsResponse["workspaces"]>([]);
-  const [detail, setDetail] = useState<SessionDetail | null>(null);
-  const [providers, setProviders] = useState<ProviderResponse | null>(null);
-  const [configView, setConfigView] = useState<ConfigView | null>(null);
-  const [doctor, setDoctor] = useState<DoctorResponse | null>(null);
-  const [overview, setOverview] = useState<OverviewResponse | null>(null);
-  const [daemon, setDaemon] = useState<DaemonControlStatus | null>(null);
-  const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
-  const [aiRequestLogDetail, setAiRequestLogDetail] = useState<AiRequestLogDetailResponse | null>(null);
-  const [preview, setPreview] = useState<AutoRenamePreviewResponse | null>(null);
-  const [loadingSessions, setLoadingSessions] = useState(false);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [previewRefreshing, setPreviewRefreshing] = useState(false);
-  const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
-  const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
   const eventCursorRef = useRef(0);
   const latestUiStateRef = useRef({
     tab,
-    search,
-    dirtyOnly,
-    selectedWorkspaceId,
-    selectedId,
-    selectedRequestLogId
+    selectedId
   });
   const latestCallbacksRef = useRef({
-    onSelectSession,
-    onSelectWorkspace,
     onFailure
   });
-  const sessionsRequestIdRef = useRef(0);
-  const detailRequestIdRef = useRef(0);
-  const configRequestIdRef = useRef(0);
-  const providersRequestIdRef = useRef(0);
-  const overviewRequestIdRef = useRef(0);
-  const doctorRequestIdRef = useRef(0);
-  const daemonRequestIdRef = useRef(0);
-  const aiRequestLogsRequestIdRef = useRef(0);
-  const aiRequestLogDetailRequestIdRef = useRef(0);
-  const previewRequestIdRef = useRef(0);
-  const promptPreviewRequestIdRef = useRef(0);
-  const previewUrgentPendingRef = useRef(0);
-  const promptPreviewUrgentPendingRef = useRef(0);
 
   latestUiStateRef.current = {
     tab,
-    search,
-    dirtyOnly,
-    selectedWorkspaceId,
-    selectedId,
-    selectedRequestLogId
+    selectedId
   };
   latestCallbacksRef.current = {
-    onSelectSession,
-    onSelectWorkspace,
     onFailure
   };
-
-  const selectedSummary = useMemo(
-    () => sessions.find((item) => item.threadId === selectedId),
-    [selectedId, sessions]
-  );
-
   const reportFailure = useCallback((error: unknown) => {
     latestCallbacksRef.current.onFailure(error);
   }, []);
 
-  const patchSelectedSession = (threadId: string, patch: Partial<SessionSummary & SessionDetail>) => {
-    setSessions((previous) =>
-      previous.map((item) => (item.threadId === threadId ? ({ ...item, ...patch } as SessionSummary) : item))
-    );
-    setDetail((previous) =>
-      previous?.threadId === threadId ? ({ ...previous, ...patch } as SessionDetail) : previous
-    );
-  };
+  const sessions = useSessionResourceStore({
+    tab,
+    search,
+    dirtyOnly,
+    selectedWorkspaceId,
+    selectedId,
+    onSelectSession,
+    onSelectWorkspace,
+    onFailure
+  });
+  const panels = usePanelResourceStore({
+    tab,
+    selectedId,
+    selectedRequestLogId,
+    onFailure
+  });
+  const {
+    sessions: sessionItems,
+    setSessions,
+    workspaces,
+    detail,
+    setDetail,
+    loadingSessions,
+    loadingDetail,
+    lastSyncAt,
+    selectedSummary,
+    patchSelectedSession,
+    refreshSessions,
+    refreshDetail,
+    setLastSyncAt
+  } = sessions;
+  const {
+    providers,
+    configView,
+    setConfigView,
+    doctor,
+    overview,
+    daemon,
+    aiRequestLogs,
+    aiRequestLogDetail,
+    preview,
+    previewRefreshing,
+    promptPreview,
+    promptPreviewRefreshing,
+    refreshConfigView,
+    refreshProviders,
+    refreshOverview,
+    refreshDoctor,
+    refreshDaemon,
+    refreshAiRequestLogs,
+    refreshPreview,
+    refreshPromptPreview
+  } = panels;
 
-  const reloadConfigView = useCallback(async () => {
-    const requestId = ++configRequestIdRef.current;
-    const configPayload = await fetchConfig();
-    if (requestId !== configRequestIdRef.current) {
-      return;
-    }
-    setConfigView(configPayload);
-  }, []);
-
-  const reloadProviders = useCallback(async () => {
-    const requestId = ++providersRequestIdRef.current;
-    const providerPayload = await fetchProviders();
-    if (requestId !== providersRequestIdRef.current) {
-      return;
-    }
-    setProviders(providerPayload);
-  }, []);
-
-  const reloadOverview = useCallback(async () => {
-    const requestId = ++overviewRequestIdRef.current;
-    const overviewPayload = await fetchOverview();
-    if (requestId !== overviewRequestIdRef.current) {
-      return;
-    }
-    setOverview(overviewPayload);
-  }, []);
-
-  const reloadDoctor = useCallback(async () => {
-    const requestId = ++doctorRequestIdRef.current;
-    const doctorPayload = await fetchDoctor();
-    if (requestId !== doctorRequestIdRef.current) {
-      return;
-    }
-    setDoctor(doctorPayload);
-  }, []);
-
-  const reloadDaemon = useCallback(async () => {
-    const requestId = ++daemonRequestIdRef.current;
-    const daemonPayload = await fetchDaemonStatus();
-    if (requestId !== daemonRequestIdRef.current) {
-      return;
-    }
-    setDaemon(daemonPayload);
-  }, []);
-
-  const reloadAiRequestLogs = useCallback(async () => {
-    const requestId = ++aiRequestLogsRequestIdRef.current;
-    const aiRequestLogPayload = await fetchAiRequestLogs();
-    if (requestId !== aiRequestLogsRequestIdRef.current) {
-      return;
-    }
-    setAiRequestLogs(aiRequestLogPayload);
-  }, []);
-
-  const reloadAiRequestLogDetail = useCallback(async (requestLogId: number | undefined) => {
-    const requestId = ++aiRequestLogDetailRequestIdRef.current;
-    if (!requestLogId || Number.isNaN(requestLogId)) {
-      setAiRequestLogDetail(null);
-      return;
-    }
-
-    const detailPayload = await fetchAiRequestLogDetail(requestLogId);
-    if (requestId !== aiRequestLogDetailRequestIdRef.current) {
-      return;
-    }
-    setAiRequestLogDetail(detailPayload);
-  }, []);
-
-  const reloadPreview = useCallback(async (options?: {
-    includeCandidateNames?: boolean;
-    urgent?: boolean;
-    limit?: number;
-  }) => {
-    if (options?.urgent) {
-      previewUrgentPendingRef.current += 1;
-      setPreviewRefreshing(true);
-    }
-    const requestId = ++previewRequestIdRef.current;
-    try {
-      const previewPayload = await fetchAutoRenamePreview({
-        includeCandidateNames: options?.includeCandidateNames ?? false,
-        limit:
-          typeof options?.limit === "number"
-            ? options.limit
-            : options?.includeCandidateNames
-              ? 100
-              : latestUiStateRef.current.tab === "maintenance"
-                ? 1000
-                : 50
-      });
-      if (requestId !== previewRequestIdRef.current) {
-        return;
+  const loadResources = useCallback(
+    async (
+      resources: readonly DataResource[],
+      resourceOptions?: {
+        threadId?: string;
+        urgentPreview?: boolean;
+        urgentPromptPreview?: boolean;
       }
-      setPreview(previewPayload);
-    } catch {
-      // Keep the last successful preview. Browsing sessions should not block on preview generation.
-    } finally {
-      if (options?.urgent) {
-        previewUrgentPendingRef.current = Math.max(0, previewUrgentPendingRef.current - 1);
-        if (previewUrgentPendingRef.current === 0) {
-          setPreviewRefreshing(false);
-        }
-      }
-    }
-  }, []);
+    ) => {
+      const tasks: Array<Promise<void>> = [];
 
-  const reloadPromptPreview = useCallback(async (request?: {
-    threadId?: string;
-    urgent?: boolean;
-    userConfig?: ConfigDocument;
-  }) => {
-    if (request?.urgent) {
-      promptPreviewUrgentPendingRef.current += 1;
-      setPromptPreviewRefreshing(true);
-    }
-    const requestId = ++promptPreviewRequestIdRef.current;
-    try {
-      const payload = await fetchPromptPreview(
-        request?.threadId ?? latestUiStateRef.current.selectedId,
-        request?.userConfig
-      );
-      if (requestId !== promptPreviewRequestIdRef.current) {
-        return;
+      if (resources.includes("sessions")) {
+        tasks.push(refreshSessions());
       }
-      setPromptPreview(payload);
-    } finally {
-      if (request?.urgent) {
-        promptPreviewUrgentPendingRef.current = Math.max(0, promptPreviewUrgentPendingRef.current - 1);
-        if (promptPreviewUrgentPendingRef.current === 0) {
-          setPromptPreviewRefreshing(false);
-        }
+      if (resources.includes("config")) {
+        tasks.push(refreshConfigView());
       }
-    }
-  }, []);
+      if (resources.includes("providers")) {
+        tasks.push(refreshProviders());
+      }
+      if (resources.includes("overview")) {
+        tasks.push(refreshOverview());
+      }
+      if (resources.includes("doctor")) {
+        tasks.push(refreshDoctor());
+      }
+      if (resources.includes("daemon")) {
+        tasks.push(refreshDaemon());
+      }
+      if (resources.includes("ai-request-logs")) {
+        tasks.push(refreshAiRequestLogs());
+      }
+      if (resources.includes("preview")) {
+        tasks.push(
+          refreshPreview({
+            includeCandidateNames: false,
+            urgent: resourceOptions?.urgentPreview
+          })
+        );
+      }
+      if (resources.includes("prompt-preview")) {
+        tasks.push(
+          refreshPromptPreview({
+            threadId: resourceOptions?.threadId,
+            urgent: resourceOptions?.urgentPromptPreview
+          })
+        );
+      }
 
-  const reloadDetail = useCallback(async (threadId: string | undefined) => {
-    const requestId = ++detailRequestIdRef.current;
-
-    if (!threadId) {
-      if (requestId === detailRequestIdRef.current) {
-        setLoadingDetail(false);
-      }
-      setDetail(null);
-      return;
-    }
-
-    setLoadingDetail(true);
-    try {
-      const payload = await fetchSessionDetail(threadId);
-      if (requestId !== detailRequestIdRef.current) {
-        return;
-      }
-      setDetail(payload);
-    } catch (error) {
-      if (requestId === detailRequestIdRef.current) {
-        reportFailure(error);
-      }
-    } finally {
-      if (requestId === detailRequestIdRef.current) {
-        setLoadingDetail(false);
-      }
-    }
-  }, [reportFailure]);
-
-  const reloadSessions = useCallback(async () => {
-    const {
-      dirtyOnly: nextDirtyOnly,
-      selectedWorkspaceId: nextWorkspaceId,
-      selectedId: nextSelectedId,
-      search: nextSearch
-    } = latestUiStateRef.current;
-
-    setLoadingSessions(true);
-    const requestId = ++sessionsRequestIdRef.current;
-    try {
-      const filtersEnabled = areSessionFiltersEnabled();
-      const effectiveDirtyOnly = filtersEnabled ? nextDirtyOnly : false;
-      const payload = await fetchSessions({
-        search: nextSearch.trim() || undefined,
-        dirtyOnly: effectiveDirtyOnly,
-        workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
-      });
-      if (requestId !== sessionsRequestIdRef.current) {
+      if (tasks.length === 0) {
         return;
       }
 
-      setSessions(payload.items);
-      setWorkspaces(payload.workspaces);
-      setLastSyncAt(new Date().toISOString());
-
-      if (
-        nextWorkspaceId !== ALL_WORKSPACES_ID &&
-        !payload.workspaces.some((item) => item.workspaceId === nextWorkspaceId)
-      ) {
-        latestCallbacksRef.current.onSelectWorkspace(ALL_WORKSPACES_ID);
-      }
-
-      if (!nextSelectedId && payload.items[0]) {
-        latestCallbacksRef.current.onSelectSession(payload.items[0].threadId);
-      } else if (nextSelectedId && !payload.items.some((item) => item.threadId === nextSelectedId)) {
-        latestCallbacksRef.current.onSelectSession(payload.items[0]?.threadId);
-      }
-    } catch (error) {
-      if (requestId === sessionsRequestIdRef.current) {
-        reportFailure(error);
-      }
-    } finally {
-      if (requestId === sessionsRequestIdRef.current) {
-        setLoadingSessions(false);
-      }
-    }
-  }, [reportFailure]);
-
-  const loadResources = useCallback(async (
-    resources: readonly DataResource[],
-    resourceOptions?: {
-      threadId?: string;
-      urgentPreview?: boolean;
-      urgentPromptPreview?: boolean;
-    }
-  ) => {
-    const tasks: Array<Promise<void>> = [];
-
-    if (resources.includes("sessions")) {
-      tasks.push(reloadSessions());
-    }
-    if (resources.includes("config")) {
-      tasks.push(reloadConfigView());
-    }
-    if (resources.includes("providers")) {
-      tasks.push(reloadProviders());
-    }
-    if (resources.includes("overview")) {
-      tasks.push(reloadOverview());
-    }
-    if (resources.includes("doctor")) {
-      tasks.push(reloadDoctor());
-    }
-    if (resources.includes("daemon")) {
-      tasks.push(reloadDaemon());
-    }
-    if (resources.includes("ai-request-logs")) {
-      tasks.push(reloadAiRequestLogs());
-    }
-    if (resources.includes("preview")) {
-      tasks.push(
-        reloadPreview({
-          includeCandidateNames: false,
-          urgent: resourceOptions?.urgentPreview
-        })
-      );
-    }
-    if (resources.includes("prompt-preview")) {
-      tasks.push(
-        reloadPromptPreview({
-          threadId: resourceOptions?.threadId,
-          urgent: resourceOptions?.urgentPromptPreview
-        })
-      );
-    }
-
-    if (tasks.length === 0) {
-      return;
-    }
-
-    await Promise.all(tasks);
-  }, [
-    reloadAiRequestLogs,
-    reloadConfigView,
-    reloadDaemon,
-    reloadDoctor,
-    reloadOverview,
-    reloadPreview,
-    reloadPromptPreview,
-    reloadProviders,
-    reloadSessions
-  ]);
+      await Promise.all(tasks);
+    },
+    [
+      refreshAiRequestLogs,
+      refreshConfigView,
+      refreshDaemon,
+      refreshDoctor,
+      refreshOverview,
+      refreshPreview,
+      refreshPromptPreview,
+      refreshProviders,
+      refreshSessions
+    ]
+  );
 
   useEffect(() => {
-    void reloadSessions();
-  }, [dirtyOnly, reloadSessions, search, selectedWorkspaceId]);
-
-  useEffect(() => {
-    void loadResources(["preview"]).catch(() => undefined);
-  }, [loadResources]);
+    void refreshPreview();
+  }, [refreshPreview]);
 
   useEffect(() => {
     const resources = panelResourcesForTab(tab);
@@ -438,57 +194,11 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     }).catch((error) => {
       reportFailure(error);
     });
-
-    if (tab !== "maintenance" && tab !== "requeue" && tab !== "daemon") {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      void loadResources(resources, {
-        threadId: latestUiStateRef.current.selectedId
-      }).catch(() => undefined);
-    }, 5_000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
   }, [loadResources, reportFailure, tab]);
 
   useEffect(() => {
-    if (tab !== "settings") {
-      return;
-    }
-    void reloadPromptPreview({
-      threadId: selectedId,
-      urgent: false
-    });
-  }, [configView?.effectiveConfig, reloadPromptPreview, selectedId, tab]);
-
-  useEffect(() => {
-    if (tab !== "sessions") {
-      setLoadingDetail(false);
-      return;
-    }
-    if (!selectedId) {
-      setDetail(null);
-      return;
-    }
-    void reloadDetail(selectedId);
-  }, [reloadDetail, selectedId, tab]);
-
-  useEffect(() => {
-    if (tab !== "maintenance") {
-      setAiRequestLogDetail(null);
-      return;
-    }
-    void reloadAiRequestLogDetail(selectedRequestLogId).catch((error) => {
-      reportFailure(error);
-    });
-  }, [reloadAiRequestLogDetail, reportFailure, selectedRequestLogId, tab]);
-
-  useEffect(() => {
     let active = true;
-    void loadResources(["config"])
+    void refreshConfigView()
       .then(() => {
         if (active) {
           setLastSyncAt((previous) => previous ?? new Date().toISOString());
@@ -502,7 +212,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     return () => {
       active = false;
     };
-  }, [loadResources, reportFailure]);
+  }, [refreshConfigView, reportFailure, setLastSyncAt]);
 
   const refreshCurrentView = useCallback(
     (
@@ -522,25 +232,26 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         })
       ];
       if (nextTab === "sessions" && nextThreadId) {
-        tasks.push(reloadDetail(nextThreadId));
+        tasks.push(refreshDetail(nextThreadId));
       }
       void Promise.all(tasks).catch(() => undefined);
     },
-    [loadResources, reloadDetail]
+    [loadResources, refreshDetail]
   );
 
-  useEventsInvalidation({
+  useRefreshCoordinator({
+    tab,
     eventCursorRef,
     refreshCurrentView: () => {
       refreshCurrentView();
     },
-    refreshSessionsFallback: () => {
-      void loadResources(["sessions"]).catch(() => undefined);
+    refreshFallback: () => {
+      refreshCurrentView();
     }
   });
 
   return {
-    sessions,
+    sessions: sessionItems,
     setSessions,
     workspaces,
     detail,
@@ -563,10 +274,10 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     selectedSummary,
     patchSelectedSession,
     refreshCurrentView,
-    refreshSessions: reloadSessions,
-    refreshPreview: reloadPreview,
+    refreshSessions,
+    refreshPreview,
     refreshPromptPreview: (userConfig?: ConfigDocument, refreshOptions?: { urgent?: boolean }) =>
-      reloadPromptPreview({
+      refreshPromptPreview({
         threadId: latestUiStateRef.current.selectedId,
         urgent: refreshOptions?.urgent ?? true,
         userConfig
