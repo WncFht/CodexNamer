@@ -58,24 +58,31 @@ export function OpsOverviewSection(props: {
         </div>
       </div>
 
-      <div className="ops-runtime-badges">
-        <span className={`chip ${runtimeExecutionTone(props.runtimeDisplay.execution)}`}>
-          {props.inline("实际执行", "Execution")}: {runtimeExecutionLabel(props.runtimeDisplay.execution, props.uiLanguage)}
-        </span>
-        <span className={`chip ${(props.lastSweepSummary?.pending ?? 0) > 0 ? "warning" : "success"}`}>
-          {props.inline("本轮 dirty / 待扫", "Dirty / pending")}: {formatUiNumber(props.lastSweepSummary?.dirtyTotal, props.uiLanguage)} /{" "}
-          {formatUiNumber(props.lastSweepSummary?.pending, props.uiLanguage)}
-        </span>
-        <span className={`chip ${props.ruleBacklogCount > 0 ? "warning" : "success"}`}>
-          {props.inline("待补扫规则", "Replay backlog")}: {formatUiNumber(props.ruleBacklogCount, props.uiLanguage)}
-        </span>
-        <span className="chip manual">
-          {props.inline("最近一轮 Sweep", "Last sweep")}: {formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}
-        </span>
-        <span className={`chip ${props.activeAiRequestCount ? "warning" : "manual"}`}>
-          {props.inline("活跃 AI 请求", "Active AI requests")}: {formatUiNumber(props.activeAiRequestCount, props.uiLanguage)}
-        </span>
-      </div>
+      <dl className="ops-runtime-inline-list">
+        <div className={`ops-runtime-inline-item ${runtimeExecutionTone(props.runtimeDisplay.execution)}`}>
+          <dt>{props.inline("实际执行", "Execution")}</dt>
+          <dd>{runtimeExecutionLabel(props.runtimeDisplay.execution, props.uiLanguage)}</dd>
+        </div>
+        <div className={`ops-runtime-inline-item ${(props.lastSweepSummary?.pending ?? 0) > 0 ? "warning" : "success"}`}>
+          <dt>{props.inline("本轮 dirty / 待扫", "Dirty / pending")}</dt>
+          <dd>
+            {formatUiNumber(props.lastSweepSummary?.dirtyTotal, props.uiLanguage)} /{" "}
+            {formatUiNumber(props.lastSweepSummary?.pending, props.uiLanguage)}
+          </dd>
+        </div>
+        <div className={`ops-runtime-inline-item ${props.ruleBacklogCount > 0 ? "warning" : "success"}`}>
+          <dt>{props.inline("待补扫规则", "Replay backlog")}</dt>
+          <dd>{formatUiNumber(props.ruleBacklogCount, props.uiLanguage)}</dd>
+        </div>
+        <div className={`ops-runtime-inline-item ${props.activeAiRequestCount ? "warning" : "manual"}`}>
+          <dt>{props.inline("活跃 AI 请求", "Active AI requests")}</dt>
+          <dd>{formatUiNumber(props.activeAiRequestCount, props.uiLanguage)}</dd>
+        </div>
+        <div className="ops-runtime-inline-item manual">
+          <dt>{props.inline("最近一轮 Sweep", "Last sweep")}</dt>
+          <dd>{formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}</dd>
+        </div>
+      </dl>
 
       <div className="settings-metrics-grid ops-kpis">
         <article className="metric-card">

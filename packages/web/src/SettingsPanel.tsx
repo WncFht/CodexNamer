@@ -202,7 +202,7 @@ export function SettingsPanel(props: {
         </div>
 
         <div className="settings-header-actions">
-          {dirty ? <span className="chip warning">{inline("有未保存修改", "Unsaved changes")}</span> : null}
+          {dirty ? <span className="panel-note settings-dirty-note">{inline("有未保存修改", "Unsaved changes")}</span> : null}
           <button
             className="btn-refresh"
             onClick={() => {
