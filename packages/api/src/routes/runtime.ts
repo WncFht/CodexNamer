@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 
-import { CodexNamer } from "@codexnamer/core";
+import type { CodexNamer } from "@codexnamer/core";
 
-import { ApiEventLog } from "../event-log.js";
+import type { ApiEventLog } from "../event-log.js";
 
 export function registerRuntimeRoutes(app: FastifyInstance, manager: CodexNamer, eventLog: ApiEventLog) {
   app.get("/api/v1/overview", async () => manager.overview());

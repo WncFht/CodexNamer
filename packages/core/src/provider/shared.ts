@@ -3,6 +3,7 @@ import type {
   AiRequestStatus,
   AiRequestTransport,
   EffectiveConfig,
+  MaterializedSession,
   ProviderWireApi,
   RenameSuggestion
 } from "@codexnamer/shared";
@@ -56,7 +57,7 @@ export interface RenameInferenceRequestLogger {
 }
 
 export interface RenameInferenceService {
-  suggest(session: import("@codexnamer/shared").MaterializedSession): Promise<RenameSuggestion>;
+  suggest(session: MaterializedSession): Promise<RenameSuggestion>;
 }
 
 export class RenameInferenceError extends Error {

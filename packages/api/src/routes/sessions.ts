@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 
-import { CodexNamer } from "@codexnamer/core";
+import type { CodexNamer } from "@codexnamer/core";
 
-import { ApiEventLog } from "../event-log.js";
+import type { ApiEventLog } from "../event-log.js";
 import { filterAndSortSessions, parseBooleanQuery, parseNumberQuery } from "../lib/query.js";
 
 export function registerSessionRoutes(app: FastifyInstance, manager: CodexNamer, eventLog: ApiEventLog) {

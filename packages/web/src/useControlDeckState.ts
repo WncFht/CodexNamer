@@ -32,6 +32,7 @@ export function useControlDeckState() {
     onSelectWorkspace: ui.setSelectedWorkspaceId,
     onFailure: setFailure
   });
+  const refreshCurrentView = resources.refreshCurrentView;
 
   useEffect(() => {
     if (!ui.error) {
@@ -39,13 +40,13 @@ export function useControlDeckState() {
     }
 
     const timer = window.setInterval(() => {
-      resources.refreshCurrentView();
+      refreshCurrentView();
     }, 3_000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [resources.refreshCurrentView, ui.error]);
+  }, [refreshCurrentView, ui.error]);
 
   const actionState = useControlDeckActions({
     resources: {

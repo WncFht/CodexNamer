@@ -1,7 +1,6 @@
 import type {
   EffectiveConfig,
   RenameHistoryRecord,
-  RenameStateRecord,
   RenameSuggestion,
   SessionDetail,
   SessionSummary

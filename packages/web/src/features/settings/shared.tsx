@@ -1,6 +1,6 @@
 import { startTransition, type ReactNode } from "react";
 
-import { t } from "../../i18n.js";
+import type { t } from "../../i18n.js";
 import { addAppTransitionType } from "../../view-transitions.js";
 
 export type SettingsSectionId = "overview" | "naming" | "ai" | "scheduler" | "runtime";

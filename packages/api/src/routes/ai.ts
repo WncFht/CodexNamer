@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 
-import { CodexNamer } from "@codexnamer/core";
+import type { CodexNamer } from "@codexnamer/core";
 import type { ConfigDocument } from "@codexnamer/shared";
 
 import { parseNumberQuery } from "../lib/query.js";

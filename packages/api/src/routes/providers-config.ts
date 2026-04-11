@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 
-import { CodexNamer } from "@codexnamer/core";
+import type { CodexNamer } from "@codexnamer/core";
 import type { ConfigDocument } from "@codexnamer/shared";
 
-import { ApiEventLog } from "../event-log.js";
+import type { ApiEventLog } from "../event-log.js";
 
 export function registerProviderAndConfigRoutes(app: FastifyInstance, manager: CodexNamer, eventLog: ApiEventLog) {
   app.get("/api/v1/providers", async () => {

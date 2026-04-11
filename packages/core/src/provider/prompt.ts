@@ -26,7 +26,7 @@ function normalizePromptField(value: string | undefined, maxLength: number): str
 }
 
 function formatPromptSection(title: string, lines: string[], fence = "text"): string {
-  return [title, `\`\`\`${fence}`, ...(lines.length > 0 ? lines : ["(none)"]), "\`\`\`"].join("\n");
+  return [title, "```" + fence, ...(lines.length > 0 ? lines : ["(none)"]), "```"].join("\n");
 }
 
 function formatPairedRenameContextLines(renameContext: RenameContext): string[] {

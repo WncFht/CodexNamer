@@ -6,7 +6,7 @@ import {
   composeAiSuggestion,
   extractFirstJsonObject
 } from "./provider/prompt.js";
-import { inspectRenameProvider, resolveProfile, resolveRenameProvider, shouldPreferStreamingProviderRequest } from "./provider/profile.js";
+import { inspectRenameProvider, resolveProfile, shouldPreferStreamingProviderRequest } from "./provider/profile.js";
 import {
   executeProviderRequest,
   executeStreamingProviderRequest,

@@ -10,7 +10,6 @@ import {
 import {
   encodeDraft,
   encodedConfigKey,
-  type SettingsDraft,
   useSettingsDraft,
   updateSelectedProfile
 } from "./settings-model.js";
@@ -191,12 +190,12 @@ export function SettingsPanel(props: {
     <section className="settings-layout">
       <header className="settings-hero">
         <div className="settings-hero-copy">
-          <p className="panel-kicker">{inline("Control Surface", "Control surface")}</p>
-          <h2>{inline("把命名策略做成可调的控制面板", "Make naming policy a controllable panel")}</h2>
+          <p className="panel-kicker">{inline("设置", "Settings")}</p>
+          <h2>{inline("调整命名策略、Provider 与后台执行方式", "Tune naming policy, providers, and background execution")}</h2>
           <p>
             {inline(
-              "在这里调整 context、标题组件、tag 规则和 provider，并直接查看预览和实际 prompt。",
-              "Adjust context, title components, tag rules, and providers here, then inspect the preview and the real prompt."
+              "这里集中处理命名规则、AI provider、调度阈值和运行时落点。保存后，新的设置会立刻进入预览、面板统计和后续 sweep。",
+              "Use this page to manage naming rules, AI providers, scheduler thresholds, and runtime targets. Once saved, the new settings flow into preview, dashboard metrics, and future sweeps immediately."
             )}
           </p>
         </div>

@@ -39,7 +39,7 @@ export function SidebarRail(props: {
         <div>
           <p className="sidebar-kicker">Session Control</p>
           <h1 className="home-link">CodexNamer</h1>
-          <p className="sidebar-copy">{props.tt("warmEditorial")}</p>
+          <p className="sidebar-copy">{props.tt("sidebarSummary")}</p>
         </div>
         <div className="pane-controls">
           <button

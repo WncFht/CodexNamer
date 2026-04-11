@@ -11,11 +11,11 @@ export function DaemonTechnicalDetails(props: {
       <div className="panel-topline">
         <div>
           <p className="panel-kicker">{props.inline("高级", "Advanced")}</p>
-          <h3>{props.inline("技术细节与日志", "Technical details and logs")}</h3>
+          <h3>{props.inline("进程细节与日志", "Process details and logs")}</h3>
           <p className="settings-copy">
             {props.inline(
-              "PID、启动命令和日志都保留，但默认收起，避免后台页看起来像纯运维面板。",
-              "PID, launch command, and log tail are still available, but folded by default so this page does not read like a pure ops console."
+              "PID、启动命令和日志都保留，但默认收起，避免后台页一上来就变成纯运维面板。",
+              "PID, launch command, and log tail are still available, but folded by default so the page does not open like a pure ops console."
             )}
           </p>
         </div>

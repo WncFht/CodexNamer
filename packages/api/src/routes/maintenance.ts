@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 
-import { CodexNamer } from "@codexnamer/core";
+import type { CodexNamer } from "@codexnamer/core";
 
-import { ApiEventLog } from "../event-log.js";
+import type { ApiEventLog } from "../event-log.js";
 
 export function registerMaintenanceRoutes(app: FastifyInstance, manager: CodexNamer, eventLog: ApiEventLog) {
   app.post("/api/v1/maintenance/compact-index", async (request) => {

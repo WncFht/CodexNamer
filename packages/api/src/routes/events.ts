@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 
-import { ApiEventLog } from "../event-log.js";
+import type { ApiEventLog } from "../event-log.js";
 import { parseNumberQuery } from "../lib/query.js";
 
 export function registerEventRoutes(app: FastifyInstance, eventLog: ApiEventLog) {

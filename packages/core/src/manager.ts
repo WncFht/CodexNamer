@@ -14,7 +14,6 @@ import {
   type MaterializedSession,
   type OverviewReport,
   type PromptPreview,
-  type RenameHistoryRecord,
   type RenameReplayPreviewResult,
   type RenameReplayResult,
   type RenameSuggestion,

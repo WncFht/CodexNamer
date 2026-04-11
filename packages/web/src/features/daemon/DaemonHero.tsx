@@ -9,12 +9,12 @@ export function DaemonHero(props: {
   return (
     <div className="settings-hero daemon-hero">
       <div className="settings-hero-copy">
-        <p className="panel-kicker">{props.inline("后台自动命名", "Background automation")}</p>
-        <h2>{props.inline("默认随 API 启动，通常只需要看它是否在正常跑", "Usually you only need to know whether it is running")}</h2>
+        <p className="panel-kicker">{props.inline("后台", "Background")}</p>
+        <h2>{props.inline("先确认 daemon 存活，再看下一轮时间和队列", "Check daemon health, then the next sweep and queue")}</h2>
         <p>
           {props.inline(
-            "这里控制的是 session sweep daemon。默认会随 Local API 拉起，所以主界面只保留运行状态、下一轮时间和当前队列；更技术的进程细节收进下面的折叠区。",
-            "This controls the session sweep daemon. It starts with the Local API by default, so the main view stays focused on status, next sweep timing, and the current queue while deeper process details stay folded below."
+            "大多数时候只需要确认三件事：进程在不在、下一轮何时触发、上一轮有没有留下积压。更技术的日志和启动参数放在下面折叠区。",
+            "Most of the time you only need three facts: is the process alive, when will the next sweep fire, and did the last run leave backlog behind. Deeper logs and launch details stay in the folded technical section."
           )}
         </p>
       </div>
