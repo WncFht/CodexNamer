@@ -46,6 +46,7 @@
 - [Claude 风格参考原始说明](./design/claude/README.md)
 - [前端设计审查（2026-04-05）](./reviews/frontend-design-audit-2026-04-05.md)
 - [前后端重构与交互优化计划（2026-04-11）](./reviews/frontend-backend-refactor-plan-2026-04-11.md)
+- [前后端剩余重构与前端第二轮优化计划（2026-04-11）](./reviews/frontend-backend-remaining-plan-2026-04-11.md)
 - [参考项目对照](./research/reference-review.md)
 
 ## 7. 阅读建议
