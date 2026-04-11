@@ -2,9 +2,58 @@
 
 日期：`2026-04-11`
 
-状态：`planning only`
+状态：`implemented on 2026-04-11`
 
-这份文档只处理一件事：
+## 实施结果摘要
+
+这份剩余计划已经按原分期落地，当前代码状态对应如下：
+
+- **Phase A：Web 资源刷新收口**  
+  `packages/web/src/useControlDeckResources.ts` 已降成 façade，资源刷新拆到 `packages/web/src/resources/*`，不再保留 tab 级和 events 级双 `5s` 主路径。
+
+- **Phase B：Sessions / Sidebar / Transcript 收口**  
+  `packages/web/src/SessionBrowser.tsx` 已降到 `219` 行，拆出：
+  - `packages/web/src/features/sessions/SessionListPane.tsx`
+  - `packages/web/src/features/sessions/SessionDetailHeader.tsx`
+  - `packages/web/src/features/sessions/RenameHistoryPanel.tsx`
+
+  同时 sidebar 宽度、密度、footer stats 已继续收轻；transcript 保留默认 `user focus`，但模式提示更明确。
+
+- **Phase C：Settings 改成 edit-save-verify**  
+  `packages/web/src/SettingsPanel.tsx` 已移除 hero 化首屏和输入时自动 prompt preview 刷新，改成紧凑 header + summary strip + 手动 preview 刷新控制器。
+
+- **Phase D：Maintenance / Daemon 改成 action-first**  
+  maintenance 首屏已改成 attention summary + actions first；图表下沉到折叠区。daemon 首屏已移除 hero，改成 runtime-first header + summary strip。
+
+- **Phase E：Core manager / database 边界收口**  
+  - `packages/core/src/manager.ts`：`1281 -> 570` 行  
+    新增：
+    - `packages/core/src/manager/session-scan-service.ts`
+    - `packages/core/src/manager/rename-command-service.ts`
+    - `packages/core/src/manager/maintenance-service.ts`
+    - `packages/core/src/manager/runtime-overview-service.ts`
+    - `packages/core/src/manager/config-runtime-service.ts`
+    - `packages/core/src/manager/prompt-preview-service.ts`
+    - `packages/core/src/manager/shared.ts`
+  - `packages/core/src/database.ts`：`953 -> 396` 行  
+    新增：
+    - `packages/core/src/database/session-repository.ts`
+    - `packages/core/src/database/rename-repository.ts`
+    - `packages/core/src/database/maintenance-state-repository.ts`
+    - `packages/core/src/database/overview-query-service.ts`
+    - `packages/core/src/database/shared.ts`
+
+- **Phase F：最终视觉统一**  
+  settings / maintenance / daemon 三个后台页的 header 宽度、内容容器、summary 节奏进一步统一；首屏 badge / chip 用量继续下降。
+
+上面这部分是当前已落地的状态摘要。
+
+下面保留的是 **2026-04-11 当天实施前写下的原始剩余计划正文**，作为归档和对照材料：
+
+- 如果正文里出现“还没做完 / 还没收口 / 建议后续改”的表述，它们描述的是**实施前状态**
+- 当前真实状态以上面的“实施结果摘要”和仓库里的现行代码为准
+
+这份文档原本只处理一件事：
 
 - **上一份计划里还没有完全落地的部分，接下来应该怎么收尾**
 
@@ -18,7 +67,7 @@
 
 ---
 
-## 1. 当前结论
+## 1. 实施前的原始结论（归档）
 
 上一轮重构已经完成了第一大步，但还没有把整份计划完全做完。
 
@@ -664,4 +713,3 @@
 
 - 上一份计划剩余未落地的部分，已经基本收尾
 - 前端已经从“第一轮可用产品态”，进入“更成熟、更稳定的长期维护态”
-
