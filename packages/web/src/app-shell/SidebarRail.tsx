@@ -14,7 +14,6 @@ export function SidebarRail(props: {
   previewApplyCount: number;
   previewSuggestCount: number;
   lastSyncAt: string | null;
-  selectedWorkspaceLabel: string;
   tt: (key: string) => string;
   formatWhen: (value?: string | null) => string;
   onToggleCollapsed: () => void;
@@ -100,7 +99,7 @@ export function SidebarRail(props: {
         </div>
       </nav>
 
-      <div className="sidebar-footer">
+      <div className="sidebar-footer compact">
         <div className="sidebar-stat-row">
           <span>{props.tt("visible")}</span>
           <strong>{props.visibleSessionCount}</strong>
@@ -109,7 +108,7 @@ export function SidebarRail(props: {
           <span>{props.tt("queueSummary")}</span>
           <strong>{renameQueueCount}</strong>
         </div>
-        <div className="sidebar-stat-row">
+        <div className="sidebar-stat-row muted">
           <span>{props.tt("lastSync")}</span>
           <strong>{props.formatWhen(props.lastSyncAt)}</strong>
         </div>

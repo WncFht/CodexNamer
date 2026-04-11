@@ -38,7 +38,7 @@
   --ring-accent: 0 0 0 1px rgba(201, 100, 66, 0.42);
   --shadow-sm: 0 0 0 1px rgba(208, 203, 191, 0.72);
   --shadow-md: 0 14px 40px rgba(20, 20, 19, 0.08);
-  --sidebar-width: 264px;
+  --sidebar-width: 240px;
   --duration-exit: 150ms;
   --duration-enter: 210ms;
   --duration-move: 400ms;
@@ -105,9 +105,9 @@ pre {
 
 #sidebar {
   width: var(--sidebar-width);
-  min-width: 220px;
+  min-width: 208px;
   max-width: 420px;
-  background: var(--bg-dark);
+  background: color-mix(in srgb, var(--bg-dark) 94%, #1d1d1b 6%);
   color: var(--text-on-dark);
   display: flex;
   flex-direction: column;
@@ -164,12 +164,12 @@ pre {
 }
 
 .sidebar-header {
-  padding: 18px 16px 12px;
+  padding: 16px 14px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: var(--bg-dark);
+  background: rgba(20, 20, 19, 0.96);
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
 }
 
@@ -177,7 +177,7 @@ pre {
   margin: 0;
   font-family: var(--font-display);
   max-width: 12ch;
-  font-size: clamp(20px, 2vw, 26px);
+  font-size: clamp(19px, 1.7vw, 24px);
   font-weight: 500;
   line-height: 1.04;
   letter-spacing: -0.02em;
@@ -195,11 +195,11 @@ pre {
 }
 
 .sidebar-copy {
-  margin: 8px 0 0;
-  max-width: 13rem;
-  color: #b9b4a7;
-  font-size: 11px;
-  line-height: 1.5;
+  margin: 6px 0 0;
+  max-width: 12rem;
+  color: #b1ac9f;
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .pane-controls {
@@ -209,13 +209,13 @@ pre {
 }
 
 .pane-btn {
-  min-width: 54px;
-  padding: 7px 10px;
+  min-width: 48px;
+  padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: var(--bg-dark-secondary);
   color: #d6d0c3;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .pane-btn:hover {
@@ -226,19 +226,19 @@ pre {
 .sidebar-actions {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 10px 12px;
+  gap: 4px;
+  padding: 9px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-btn {
   width: 100%;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 9px;
   color: #d6d0c3;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .sidebar-btn:hover,
@@ -264,8 +264,8 @@ pre {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 12px 6px;
-  font-size: 11px;
+  padding: 8px 12px 6px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -287,7 +287,7 @@ pre {
 
 .project-item {
   width: 100%;
-  padding: 8px 12px;
+  padding: 7px 12px;
   border: 0;
   border-left: 3px solid transparent;
   background: transparent;
@@ -321,17 +321,21 @@ pre {
   margin-left: 8px;
   padding: 1px 7px;
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 11px;
   color: #d9d2c4;
   background: rgba(255, 255, 255, 0.08);
 }
 
 .sidebar-footer {
-  padding: 10px 12px 14px;
+  padding: 9px 10px 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(48, 48, 46, 0.75) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(42, 42, 39, 0.68) 100%);
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+
+.sidebar-footer.compact {
+  gap: 4px;
 }
 
 .sidebar-stat-row {
@@ -339,11 +343,16 @@ pre {
   justify-content: space-between;
   gap: 12px;
   color: #bdb6a8;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .sidebar-stat-row strong {
   color: var(--text-on-dark);
+}
+
+.sidebar-stat-row.muted strong {
+  color: #d5cfbf;
+  font-weight: 500;
 }
 
 #sidebar.collapsed #projectList,
@@ -1867,14 +1876,14 @@ pre {
   width: 100%;
   text-align: left;
   margin-bottom: 8px;
-  padding: 12px;
-  border-radius: 16px;
+  padding: 11px 12px;
+  border-radius: 15px;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: inherit;
   box-shadow: var(--shadow-sm), 0 8px 24px rgba(20, 20, 19, 0.04);
   content-visibility: auto;
-  contain-intrinsic-size: 116px;
+  contain-intrinsic-size: 104px;
 }
 
 .session-item:hover {
@@ -1918,7 +1927,6 @@ pre {
 }
 
 .session-item-topline,
-.session-item-meta,
 .chat-meta-bar,
 .turn-header,
 .turn-header-left,
@@ -2040,11 +2048,11 @@ pre {
 }
 
 .session-item-title {
-  margin: 8px 0 4px;
+  margin: 7px 0 4px;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
-  line-height: 1.24;
+  line-height: 1.22;
   letter-spacing: -0.02em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2059,6 +2067,14 @@ pre {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.session-item-meta {
+  margin-top: 6px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-header {
@@ -2090,7 +2106,17 @@ pre {
 }
 
 .chat-meta-bar {
-  margin-top: 8px;
+  margin-top: 6px;
+}
+
+.session-header-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--warning);
+  background: rgba(165, 117, 51, 0.12);
 }
 
 .chat-back-btn {
@@ -2250,6 +2276,11 @@ pre {
   white-space: nowrap;
 }
 
+.panel-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .chat-toolbar {
   display: flex;
   justify-content: space-between;
@@ -2266,6 +2297,25 @@ pre {
   gap: 8px;
   min-width: 0;
   flex: 1;
+}
+
+.transcript-toolbar-actions {
+  align-items: flex-start;
+}
+
+.transcript-mode-note {
+  display: grid;
+  gap: 2px;
+  max-width: 28rem;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.transcript-mode-note strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .chat-search {
@@ -2355,7 +2405,6 @@ pre {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.11em;
-  box-shadow: var(--ring-sm);
 }
 
 .message-role.user {
@@ -2380,11 +2429,13 @@ pre {
 
 .kind-pill {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-tertiary) 80%, white 20%);
+  background: color-mix(in srgb, var(--bg-tertiary) 68%, white 32%);
+  letter-spacing: 0.06em;
+  text-transform: none;
 }
 
 .kind-pill.subtle {
-  opacity: 0.75;
+  opacity: 0.72;
 }
 
 .turn-header {

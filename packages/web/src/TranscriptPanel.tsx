@@ -124,9 +124,23 @@ export function TranscriptPanel(props: {
 
   const totalShown = items.length;
   const hiddenOlderCount = Math.max(0, (pageState?.totalItems ?? 0) - totalShown);
-
   const renderedItems = useMemo(() => items, [items]);
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
+  const userFocusMode = role === "user";
+  const modeTitle = userFocusMode
+    ? props.uiLanguage === "zh-CN"
+      ? "当前模式：user focus"
+      : "Current mode: user focus"
+    : props.uiLanguage === "zh-CN"
+      ? "当前模式：full trace"
+      : "Current mode: full trace";
+  const modeHint = userFocusMode
+    ? props.uiLanguage === "zh-CN"
+      ? "默认只看 user，方便快速辨别不同会话；需要完整上下文时再切到 full trace。"
+      : "Defaulting to user-only makes sessions easier to scan; switch to full trace when you need the full context."
+    : props.uiLanguage === "zh-CN"
+      ? "现在会把 assistant / tool / system 一起显示出来；想快速浏览时可以切回 user focus。"
+      : "Assistant, tool, and system turns are included now; switch back to user focus when you want a quicker scan.";
 
   return (
     <section className="chat-view-shell">
@@ -138,26 +152,21 @@ export function TranscriptPanel(props: {
             <input
               id={searchInputId}
               name="conversation-search"
-              type="search"
-              value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={tt("searchConversation")}
+              type="search"
+              value={query}
             />
           </label>
         </div>
-        <div className="chat-toolbar-actions">
-          <span className={`chip ${role === "user" ? "manual" : "success"}`}>
-            {role === "user"
-              ? props.uiLanguage === "zh-CN"
-                ? "当前视图：用户聚焦"
-                : "Current view: user focus"
-              : props.uiLanguage === "zh-CN"
-                ? "当前视图：完整轨迹"
-                : "Current view: full trace"}
-          </span>
-          {role !== "all" ? (
+        <div className="chat-toolbar-actions transcript-toolbar-actions">
+          <div className="transcript-mode-note">
+            <strong>{modeTitle}</strong>
+            <span>{modeHint}</span>
+          </div>
+          {userFocusMode ? (
             <button className="btn-chip" onClick={() => setRole("all")} type="button">
-              {props.uiLanguage === "zh-CN" ? "查看完整轨迹" : "Show full trace"}
+              {props.uiLanguage === "zh-CN" ? "切到完整轨迹" : "Switch to full trace"}
             </button>
           ) : null}
           {(["all", "user", "assistant", "tool", "system"] as const).map((item) => (
@@ -198,9 +207,7 @@ export function TranscriptPanel(props: {
         ) : null}
 
         {error ? <div className="error-banner transcript-error">{error}</div> : null}
-        {!loading && renderedItems.length === 0 ? (
-          <div className="empty-note">{tt("noTranscript")}</div>
-        ) : null}
+        {!loading && renderedItems.length === 0 ? <div className="empty-note">{tt("noTranscript")}</div> : null}
 
         <div className="messages-container">
           {renderedItems.map((item) => (

@@ -134,7 +134,6 @@ export function App() {
         previewApplyCount={previewApplyCount}
         previewSuggestCount={previewSuggestCount}
         selectedWorkspaceId={state.selectedWorkspaceId}
-        selectedWorkspaceLabel={selectedWorkspaceLabel}
         tab={state.tab}
         totalWorkspaceSessionCount={totalWorkspaceSessionCount}
         visibleSessionCount={state.sessions.length}
