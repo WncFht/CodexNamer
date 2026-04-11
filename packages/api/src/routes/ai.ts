@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
 
 import type { CodexNamer } from "@codexnamer/core";
-import type { ConfigDocument } from "@codexnamer/shared";
+import {
+  aiRequestLogQuerySchema,
+  promptPreviewRequestSchema
+} from "@codexnamer/shared";
 
 import { parseNumberQuery } from "../lib/query.js";
 
@@ -19,35 +22,29 @@ export function registerAiRoutes(app: FastifyInstance, manager: CodexNamer) {
   });
 
   app.get("/api/v1/ai/prompt-preview", async (request) => {
-    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const query = promptPreviewRequestSchema.parse((request.query as Record<string, unknown> | undefined) ?? {});
     return manager.buildPromptPreview({
-      threadId: typeof query.threadId === "string" ? query.threadId : undefined
+      threadId: query.threadId
     });
   });
 
   app.post("/api/v1/ai/prompt-preview", async (request) => {
-    const body = (request.body as { threadId?: string; userConfig?: ConfigDocument } | undefined) ?? {};
+    const body = promptPreviewRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
     return manager.buildPromptPreview({
-      threadId: typeof body.threadId === "string" ? body.threadId : undefined,
+      threadId: body.threadId,
       userConfig: body.userConfig
     });
   });
 
   app.get("/api/v1/ai/request-logs", async (request) => {
-    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const query = aiRequestLogQuerySchema.parse((request.query as Record<string, unknown> | undefined) ?? {});
     return manager.getAiRequestLogReport({
-      limit: parseNumberQuery(query.pageSize ?? query.limit),
-      page: parseNumberQuery(query.page),
-      search: typeof query.search === "string" ? query.search : undefined,
-      project: typeof query.project === "string" ? query.project : undefined,
-      status:
-        query.status === "running" || query.status === "succeeded" || query.status === "failed"
-          ? query.status
-          : undefined,
-      transport:
-        query.transport === "responses" || query.transport === "openai-compatible"
-          ? query.transport
-          : undefined
+      limit: query.pageSize ?? query.limit,
+      page: query.page,
+      search: query.search,
+      project: query.project,
+      status: query.status,
+      transport: query.transport
     });
   });
 

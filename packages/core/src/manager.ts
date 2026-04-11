@@ -19,6 +19,8 @@ import {
   SESSION_INDEX_FILENAME,
   type SessionDetail,
   type SessionIndexSnapshot,
+  type SessionListQuery,
+  type SessionsResponse,
   type SessionSummary,
   type WorkspaceSummary
 } from "@codexnamer/shared";
@@ -69,7 +71,8 @@ import {
   getSessionTranscriptPage as getSessionTranscriptPageService,
   listSessions as listSessionsService,
   listWorkspaces as listWorkspacesService,
-  performScan
+  performScan,
+  querySessions as querySessionsService
 } from "./manager/session-scan-service.js";
 import type { ManagerServiceContext, ResolveSuggestionOptions } from "./manager/shared.js";
 
@@ -386,6 +389,10 @@ export class CodexNamer {
 
   async listWorkspaces(options?: { dirty?: boolean }): Promise<WorkspaceSummary[]> {
     return listWorkspacesService(this.serviceContext, options);
+  }
+
+  async querySessions(query: SessionListQuery): Promise<SessionsResponse> {
+    return querySessionsService(this.serviceContext, query);
   }
 
   async getSessionDetail(

@@ -192,6 +192,19 @@ export interface ConfigDocument {
   maintenance?: Partial<MaintenanceConfig>;
 }
 
+export interface ProviderTestRequest {
+  userConfig?: ConfigDocument;
+}
+
+export interface PromptPreviewRequest {
+  threadId?: string;
+  userConfig?: ConfigDocument;
+}
+
+export interface ConfigUpdateRequest {
+  userConfig: ConfigDocument;
+}
+
 export interface ConfigView {
   paths: {
     cwd: string;
@@ -232,6 +245,20 @@ export interface ApiEventRecord {
 export interface ApiEventBatch {
   items: ApiEventRecord[];
   nextCursor: number;
+}
+
+export interface AiRequestLogQuery {
+  limit?: number;
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  project?: string;
+  status?: AiRequestStatus;
+  transport?: AiRequestTransport;
+}
+
+export interface DaemonStartRequest {
+  intervalSeconds?: number;
 }
 
 export interface RenameReplayRequest {
@@ -332,6 +359,45 @@ export interface WorkspaceSummary {
   frozenCount: number;
   latestUpdatedAt?: string;
   projects: string[];
+}
+
+export type SessionListSortField = "updatedAt" | "project" | "officialName";
+export type SortOrder = "asc" | "desc";
+
+export interface SessionListQuery {
+  dirty?: boolean;
+  frozen?: boolean;
+  status?: SessionStatusEstimate;
+  project?: string;
+  provider?: string;
+  workspace?: string;
+  search?: string;
+  sort?: SessionListSortField;
+  order?: SortOrder;
+  limit?: number;
+}
+
+export interface SessionDetailQuery {
+  includeTranscript?: boolean;
+}
+
+export interface SessionTranscriptQuery {
+  page?: number;
+  pageSize?: number;
+  includeHidden?: boolean;
+  role?: "all" | SessionTranscriptRole;
+  query?: string;
+}
+
+export interface RenameRequest {
+  name: string;
+}
+
+export interface BatchApplyRequest {
+  filter?: {
+    dirty?: boolean;
+  };
+  previewOnly?: boolean;
 }
 
 export interface SessionTranscriptEntry {

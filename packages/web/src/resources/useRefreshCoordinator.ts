@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import type { ApiEventRecord } from "@codexnamer/shared";
+
 import { fetchEvents } from "../api.js";
 import type { TabId } from "../control-deck-model.js";
 import type { ApiEventsResponse } from "../types.js";
@@ -10,7 +12,7 @@ const DEFAULT_STALE_REFRESH_MS = 15_000;
 export function useRefreshCoordinator(params: {
   tab: TabId;
   eventCursorRef: { current: number };
-  refreshCurrentView: () => void;
+  refreshForEvents: (events: ApiEventRecord[]) => void;
   refreshFallback: () => void;
   eventIntervalMs?: number;
   staleRefreshMs?: number;
@@ -18,7 +20,7 @@ export function useRefreshCoordinator(params: {
   const {
     tab,
     eventCursorRef,
-    refreshCurrentView,
+    refreshForEvents,
     refreshFallback,
     eventIntervalMs = DEFAULT_EVENT_INTERVAL_MS,
     staleRefreshMs = DEFAULT_STALE_REFRESH_MS
@@ -37,7 +39,7 @@ export function useRefreshCoordinator(params: {
           eventCursorRef.current = payload.nextCursor;
           if (payload.items.length > 0) {
             lastTriggeredRefreshAtRef.current = Date.now();
-            refreshCurrentView();
+            refreshForEvents(payload.items);
             return;
           }
 
@@ -46,7 +48,7 @@ export function useRefreshCoordinator(params: {
           }
 
           lastTriggeredRefreshAtRef.current = Date.now();
-          refreshCurrentView();
+          refreshFallback();
         })
         .catch(() => {
           if (!visible || Date.now() - lastTriggeredRefreshAtRef.current < staleRefreshMs) {
@@ -61,5 +63,5 @@ export function useRefreshCoordinator(params: {
     return () => {
       window.clearInterval(timer);
     };
-  }, [eventCursorRef, eventIntervalMs, refreshCurrentView, refreshFallback, staleRefreshMs]);
+  }, [eventCursorRef, eventIntervalMs, refreshFallback, refreshForEvents, staleRefreshMs]);
 }

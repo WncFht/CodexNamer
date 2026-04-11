@@ -1,3 +1,5 @@
+import type { ApiEventRecord, ApiEventType } from "@codexnamer/shared";
+
 export type TabId = "sessions" | "settings" | "maintenance" | "requeue" | "daemon";
 export type UiNotice = {
   tone: "info" | "success" | "error";
@@ -39,6 +41,55 @@ function parseUrlTab(value: string | null): TabId {
     return value;
   }
   return "sessions";
+}
+
+function mergeResourceSet(resourceSet: Set<DataResource>, ...resources: DataResource[]): void {
+  for (const resource of resources) {
+    resourceSet.add(resource);
+  }
+}
+
+function addResourcesForEventType(
+  resourceSet: Set<DataResource>,
+  tab: TabId,
+  type: ApiEventType,
+  options?: { includePromptPreview?: boolean }
+): void {
+  switch (type) {
+    case "scan.completed":
+      mergeResourceSet(resourceSet, "sessions", "overview", "preview");
+      return;
+    case "session.suggested":
+      mergeResourceSet(resourceSet, "sessions", "preview");
+      return;
+    case "session.applied":
+    case "session.renamed":
+    case "session.freeze.changed":
+    case "batch.apply.completed":
+    case "maintenance.rename_requeued":
+      mergeResourceSet(resourceSet, "sessions", "overview", "preview");
+      return;
+    case "config.updated":
+      mergeResourceSet(resourceSet, "sessions", "overview", "preview");
+      if (tab === "settings") {
+        mergeResourceSet(resourceSet, "config", "providers");
+        if (options?.includePromptPreview) {
+          mergeResourceSet(resourceSet, "prompt-preview");
+        }
+      }
+      if (tab === "settings" || tab === "maintenance" || tab === "requeue" || tab === "daemon") {
+        mergeResourceSet(resourceSet, "daemon");
+      }
+      return;
+    case "maintenance.compact.completed":
+      mergeResourceSet(resourceSet, "overview");
+      if (tab === "maintenance") {
+        mergeResourceSet(resourceSet, "doctor");
+      }
+      return;
+    default:
+      return;
+  }
 }
 
 export function readUiStateFromUrl(): UrlUiState {
@@ -143,6 +194,20 @@ export function liveRefreshResourcesForTab(
     resources.push("overview", "daemon");
   }
   return resources;
+}
+
+export function eventRefreshResourcesForTab(
+  tab: TabId,
+  events: readonly Pick<ApiEventRecord, "type">[],
+  options?: {
+    includePromptPreview?: boolean;
+  }
+): DataResource[] {
+  const merged = new Set<DataResource>();
+  for (const event of events) {
+    addResourcesForEventType(merged, tab, event.type, options);
+  }
+  return [...merged];
 }
 
 export function mergeResources(...resourceGroups: readonly DataResource[][]): DataResource[] {

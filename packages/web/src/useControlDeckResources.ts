@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef } from "react";
 
+import type { ApiEventRecord } from "@codexnamer/shared";
+
 import {
+  eventRefreshResourcesForTab,
   liveRefreshResourcesForTab,
   mergeResources,
   panelResourcesForTab,
   type DataResource,
   type TabId
 } from "./control-deck-model.js";
-import type { ConfigDocument } from "./types.js";
 import { usePanelResourceStore } from "./resources/usePanelResourceStore.js";
 import { useRefreshCoordinator } from "./resources/useRefreshCoordinator.js";
 import { useSessionResourceStore } from "./resources/useSessionResourceStore.js";
+import type { ConfigDocument } from "./types.js";
 
 type UseControlDeckResourcesOptions = {
   tab: TabId;
@@ -236,12 +239,55 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     [loadResources, refreshDetail]
   );
 
+  const refreshForEvents = useCallback(
+    (events: ApiEventRecord[]) => {
+      const nextTab = latestUiStateRef.current.tab;
+      const nextThreadId = latestUiStateRef.current.selectedId;
+      const resources = eventRefreshResourcesForTab(nextTab, events, {
+        includePromptPreview: nextTab === "settings"
+      });
+      const tasks: Array<Promise<unknown>> = [];
+
+      if (resources.length > 0) {
+        tasks.push(
+          loadResources(resources, {
+            threadId: nextThreadId,
+            urgentPromptPreview: nextTab === "settings" && resources.includes("prompt-preview")
+          })
+        );
+      }
+
+      const shouldRefreshDetail =
+        nextTab === "sessions" &&
+        nextThreadId !== undefined &&
+        events.some((event) => {
+          if (
+            event.type === "scan.completed" ||
+            event.type === "batch.apply.completed" ||
+            event.type === "maintenance.rename_requeued"
+          ) {
+            return true;
+          }
+          return typeof event.payload.threadId === "string" && event.payload.threadId === nextThreadId;
+        });
+
+      if (shouldRefreshDetail && nextThreadId) {
+        tasks.push(refreshDetail(nextThreadId));
+      }
+
+      if (tasks.length === 0) {
+        return;
+      }
+
+      void Promise.all(tasks).catch(() => undefined);
+    },
+    [loadResources, refreshDetail]
+  );
+
   useRefreshCoordinator({
     tab,
     eventCursorRef,
-    refreshCurrentView: () => {
-      refreshCurrentView();
-    },
+    refreshForEvents,
     refreshFallback: () => {
       refreshCurrentView();
     }
@@ -271,6 +317,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     selectedSummary,
     patchSelectedSession,
     refreshCurrentView,
+    refreshForEvents,
     refreshSessions,
     refreshPreview,
     refreshPromptPreview: (userConfig?: ConfigDocument, refreshOptions?: { urgent?: boolean }) =>

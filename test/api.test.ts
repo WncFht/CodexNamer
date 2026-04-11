@@ -275,6 +275,20 @@ describe("local api", () => {
     expect(filtered.json().items[0].threadId).toBe("019d-api-filter-1");
     expect(filtered.json().workspaces).toHaveLength(2);
 
+    const limited = await app.inject({
+      method: "GET",
+      url: "/api/v1/sessions?limit=1"
+    });
+    expect(limited.statusCode).toBe(200);
+    expect(limited.json().items).toHaveLength(1);
+    expect(limited.json().total).toBe(2);
+
+    const invalidLimit = await app.inject({
+      method: "GET",
+      url: "/api/v1/sessions?limit=0"
+    });
+    expect(invalidLimit.statusCode).toBe(400);
+
     const preview = await app.inject({
       method: "GET",
       url: "/api/v1/auto-rename/preview"

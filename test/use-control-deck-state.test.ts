@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  eventRefreshResourcesForTab,
   liveRefreshResourcesForTab,
   panelResourcesForTab
 } from "../packages/web/src/control-deck-model.js";
@@ -41,11 +42,39 @@ describe("useControlDeckState resource planning", () => {
   });
 
   it("refreshes overview and daemon on the requeue tab", () => {
-    expect(liveRefreshResourcesForTab("requeue")).toEqual([
+    expect(liveRefreshResourcesForTab("requeue")).toEqual(["sessions", "preview", "overview", "daemon"]);
+  });
+
+  it("narrows event-driven refresh to settings resources when config changes", () => {
+    expect(eventRefreshResourcesForTab("settings", [{ type: "config.updated" }])).toEqual([
       "sessions",
-      "preview",
       "overview",
+      "preview",
+      "config",
+      "providers",
       "daemon"
     ]);
+    expect(eventRefreshResourcesForTab("settings", [{ type: "config.updated" }], { includePromptPreview: true })).toEqual([
+      "sessions",
+      "overview",
+      "preview",
+      "config",
+      "providers",
+      "prompt-preview",
+      "daemon"
+    ]);
+  });
+
+  it("refreshes only the impacted runtime slices for maintenance events", () => {
+    expect(eventRefreshResourcesForTab("maintenance", [{ type: "maintenance.compact.completed" }])).toEqual([
+      "overview",
+      "doctor"
+    ]);
+    expect(
+      eventRefreshResourcesForTab("maintenance", [
+        { type: "session.applied" },
+        { type: "maintenance.rename_requeued" }
+      ])
+    ).toEqual(["sessions", "overview", "preview"]);
   });
 });

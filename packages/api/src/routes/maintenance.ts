@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 
 import type { CodexNamer } from "@codexnamer/core";
+import { renameReplayRequestSchema } from "@codexnamer/shared";
 
 import type { ApiEventLog } from "../event-log.js";
 
 export function registerMaintenanceRoutes(app: FastifyInstance, manager: CodexNamer, eventLog: ApiEventLog) {
   app.post("/api/v1/maintenance/compact-index", async (request) => {
-    const body = (request.body as { dryRun?: boolean } | undefined) ?? {};
+    const body = ((request.body as { dryRun?: boolean } | undefined) ?? {}) as { dryRun?: boolean };
     const result = await manager.compactIndex({ dryRun: body.dryRun ?? true });
     eventLog.publish("maintenance.compact.completed", {
       dryRun: result.dryRun,
@@ -19,15 +20,8 @@ export function registerMaintenanceRoutes(app: FastifyInstance, manager: CodexNa
   });
 
   app.post("/api/v1/maintenance/requeue-renames", async (request) => {
-    const body =
-      (request.body as { since?: string; basis?: "session-updated-at" | "last-applied-at" } | undefined) ?? {};
-    if (!body.since?.trim()) {
-      throw new Error("since is required");
-    }
-    const result = await manager.requeueRenamesSince({
-      since: body.since,
-      basis: body.basis ?? "session-updated-at"
-    });
+    const body = renameReplayRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
+    const result = await manager.requeueRenamesSince(body);
     eventLog.publish("maintenance.rename_requeued", {
       since: result.since,
       basis: result.basis,
@@ -38,14 +32,7 @@ export function registerMaintenanceRoutes(app: FastifyInstance, manager: CodexNa
   });
 
   app.post("/api/v1/maintenance/requeue-preview", async (request) => {
-    const body =
-      (request.body as { since?: string; basis?: "session-updated-at" | "last-applied-at" } | undefined) ?? {};
-    if (!body.since?.trim()) {
-      throw new Error("since is required");
-    }
-    return manager.previewRequeueRenamesSince({
-      since: body.since,
-      basis: body.basis ?? "session-updated-at"
-    });
+    const body = renameReplayRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
+    return manager.previewRequeueRenamesSince(body);
   });
 }

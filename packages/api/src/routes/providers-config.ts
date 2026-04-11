@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
 
 import type { CodexNamer } from "@codexnamer/core";
-import type { ConfigDocument } from "@codexnamer/shared";
+import {
+  configUpdateRequestSchema,
+  providerTestRequestSchema
+} from "@codexnamer/shared";
 
 import type { ApiEventLog } from "../event-log.js";
 
@@ -18,7 +21,7 @@ export function registerProviderAndConfigRoutes(app: FastifyInstance, manager: C
   });
 
   app.post("/api/v1/providers/test", async (request) => {
-    const body = (request.body as { userConfig?: ConfigDocument } | undefined) ?? {};
+    const body = providerTestRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
     return manager.testProvider({ userConfig: body.userConfig });
   });
 
@@ -27,9 +30,8 @@ export function registerProviderAndConfigRoutes(app: FastifyInstance, manager: C
   app.get("/api/v1/config", async () => manager.getConfigView());
 
   app.put("/api/v1/config", async (request) => {
-    const body = (request.body as (ConfigDocument & { userConfig?: ConfigDocument }) | undefined) ?? {};
-    const patch = body.userConfig ?? body;
-    const result = await manager.updateConfig(patch);
+    const body = configUpdateRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
+    const result = await manager.updateConfig(body.userConfig);
     eventLog.publish("config.updated", {
       writtenTo: result.writtenTo,
       restartRequired: result.restartRequired

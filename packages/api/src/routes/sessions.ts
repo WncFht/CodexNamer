@@ -1,51 +1,36 @@
 import type { FastifyInstance } from "fastify";
 
 import type { CodexNamer } from "@codexnamer/core";
+import {
+  batchApplyRequestSchema,
+  renameRequestSchema,
+  sessionDetailQuerySchema,
+  sessionListQuerySchema,
+  sessionTranscriptQuerySchema
+} from "@codexnamer/shared";
 
 import type { ApiEventLog } from "../event-log.js";
-import { filterAndSortSessions, parseBooleanQuery, parseNumberQuery } from "../lib/query.js";
 
 export function registerSessionRoutes(app: FastifyInstance, manager: CodexNamer, eventLog: ApiEventLog) {
   app.get("/api/v1/sessions", async (request) => {
-    const query = (request.query as Record<string, unknown> | undefined) ?? {};
-    const dirtyFilter = parseBooleanQuery(query.dirty);
-    const allSessions = await manager.listSessions({
-      dirty: dirtyFilter
-    });
-    const workspaces = await manager.listWorkspaces({
-      dirty: dirtyFilter
-    });
-    const items = await filterAndSortSessions(allSessions, query, {
-      loadDetailText: (threadId) => manager.db.getSessionDetail(threadId)
-    });
-
-    return {
-      items,
-      total: items.length,
-      workspaces,
-      counts: {
-        dirty: allSessions.filter((item) => item.dirty).length,
-        frozen: allSessions.filter((item) => item.frozen).length
-      },
-      nextCursor: null
-    };
+    const query = sessionListQuerySchema.parse((request.query as Record<string, unknown> | undefined) ?? {});
+    return manager.querySessions(query);
   });
 
   app.get("/api/v1/workspaces", async (request) => {
-    const query = (request.query as Record<string, unknown> | undefined) ?? {};
-    const dirty = parseBooleanQuery(query.dirty);
+    const query = sessionListQuerySchema.parse((request.query as Record<string, unknown> | undefined) ?? {});
     return {
       items: await manager.listWorkspaces({
-        dirty
+        dirty: query.dirty
       })
     };
   });
 
   app.get("/api/v1/sessions/:id", async (request, reply) => {
     const params = request.params as { id: string };
-    const query = (request.query as Record<string, unknown> | undefined) ?? {};
+    const query = sessionDetailQuerySchema.parse((request.query as Record<string, unknown> | undefined) ?? {});
     const detail = await manager.getSessionDetail(params.id, {
-      includeTranscript: parseBooleanQuery(query.includeTranscript) ?? false
+      includeTranscript: query.includeTranscript ?? false
     });
     if (!detail) {
       return reply.status(404).send({
@@ -58,17 +43,9 @@ export function registerSessionRoutes(app: FastifyInstance, manager: CodexNamer,
 
   app.get("/api/v1/sessions/:id/transcript", async (request) => {
     const params = request.params as { id: string };
-    const query = (request.query as Record<string, unknown> | undefined) ?? {};
-    const roleValue = typeof query.role === "string" ? query.role : "all";
-    const role = ["all", "user", "assistant", "tool", "system"].includes(roleValue) ? roleValue : "all";
+    const query = sessionTranscriptQuerySchema.parse((request.query as Record<string, unknown> | undefined) ?? {});
 
-    return manager.getSessionTranscriptPage(params.id, {
-      page: parseNumberQuery(query.page),
-      pageSize: parseNumberQuery(query.pageSize),
-      includeHidden: parseBooleanQuery(query.includeHidden),
-      role: role as "all" | "user" | "assistant" | "tool" | "system",
-      query: typeof query.query === "string" ? query.query : undefined
-    });
+    return manager.getSessionTranscriptPage(params.id, query);
   });
 
   app.get("/api/v1/sessions/:id/history", async (request) => {
@@ -100,10 +77,7 @@ export function registerSessionRoutes(app: FastifyInstance, manager: CodexNamer,
 
   app.post("/api/v1/sessions/:id/rename", async (request) => {
     const params = request.params as { id: string };
-    const body = (request.body as { name?: string } | undefined) ?? {};
-    if (!body.name?.trim()) {
-      throw new Error("name is required");
-    }
+    const body = renameRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
     const result = await manager.rename(params.id, body.name);
     eventLog.publish("session.renamed", {
       threadId: params.id,
@@ -138,7 +112,7 @@ export function registerSessionRoutes(app: FastifyInstance, manager: CodexNamer,
   }));
 
   app.post("/api/v1/sessions/batch/apply", async (request) => {
-    const body = (request.body as { filter?: { dirty?: boolean }; previewOnly?: boolean } | undefined) ?? {};
+    const body = batchApplyRequestSchema.parse((request.body as Record<string, unknown> | undefined) ?? {});
     if (body.filter?.dirty === false) {
       throw new Error("Only dirty batch processing is supported in v1.");
     }

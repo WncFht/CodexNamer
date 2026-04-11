@@ -3,20 +3,113 @@ import fs from "node:fs/promises";
 import type {
   ScanReport,
   SessionDetail,
+  SessionListQuery,
   SessionSummary,
+  SessionsResponse,
   WorkspaceSummary
 } from "@codexnamer/shared";
 
 import { estimateSessionStatus } from "../auto-rename.js";
+import { buildSessionRevision } from "../revision.js";
+import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "../rollout.js";
 import {
   applyOfficialNamingPolicy,
   applyRuleSignatureState,
   filterVisibleRenameHistory,
   getBlockedOfficialNameThreadIds
 } from "./naming-policy.js";
-import { buildSessionRevision } from "../revision.js";
-import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "../rollout.js";
 import type { ManagerServiceContext } from "./shared.js";
+
+function normalizeSearchValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed ? trimmed : undefined;
+}
+
+function filterAndSortSessions(
+  sessions: SessionSummary[],
+  query: SessionListQuery,
+  options?: {
+    loadDetailText?: (threadId: string) => {
+      firstUserMessage?: string;
+      lastUserMessage?: string;
+      lastAgentMessage?: string;
+    } | undefined;
+  }
+): SessionSummary[] {
+  const project = normalizeSearchValue(query.project);
+  const provider = normalizeSearchValue(query.provider);
+  const workspace = normalizeSearchValue(query.workspace);
+  const search = normalizeSearchValue(query.search);
+  const filtered: SessionSummary[] = [];
+
+  for (const item of sessions) {
+    if (query.frozen !== undefined && item.frozen !== query.frozen) {
+      continue;
+    }
+    if (query.status && item.statusEstimate !== query.status) {
+      continue;
+    }
+    if (project && !item.projectName?.toLowerCase().includes(project)) {
+      continue;
+    }
+    if (provider && !item.provider?.toLowerCase().includes(provider)) {
+      continue;
+    }
+    if (workspace) {
+      const workspaceHaystack = [item.workspaceId, item.workspaceLabel, item.cwd]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!workspaceHaystack.includes(workspace)) {
+        continue;
+      }
+    }
+    if (search) {
+      const detail = options?.loadDetailText?.(item.threadId);
+      const haystack = [
+        item.threadId,
+        item.projectName,
+        item.workspaceLabel,
+        item.workspaceId,
+        item.officialName,
+        item.candidateName,
+        item.provider,
+        item.model,
+        item.statusEstimate,
+        detail?.firstUserMessage,
+        detail?.lastUserMessage,
+        detail?.lastAgentMessage
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(search)) {
+        continue;
+      }
+    }
+    filtered.push(item);
+  }
+
+  const sort = query.sort ?? "updatedAt";
+  const order = query.order ?? "desc";
+  return filtered.sort((left, right) => {
+    const leftValue =
+      sort === "project"
+        ? left.projectName ?? ""
+        : sort === "officialName"
+          ? left.officialName ?? ""
+          : left.updatedAt ?? "";
+    const rightValue =
+      sort === "project"
+        ? right.projectName ?? ""
+        : sort === "officialName"
+          ? right.officialName ?? ""
+          : right.updatedAt ?? "";
+
+    const compare = String(leftValue).localeCompare(String(rightValue));
+    return order === "asc" ? compare : -compare;
+  });
+}
 
 export async function performScan(context: ManagerServiceContext): Promise<ScanReport> {
   const rolloutFiles = await discoverRolloutFiles(context.config.general.codexHome);
@@ -104,6 +197,34 @@ export async function listSessions(
       applyRuleSignatureState(applyOfficialNamingPolicy(session, blockedOfficialThreadIds), context.currentRuleSignature)
     )
     .filter((session) => (options?.dirty === undefined ? true : session.dirty === options.dirty));
+}
+
+export async function querySessions(
+  context: ManagerServiceContext,
+  query: SessionListQuery
+): Promise<SessionsResponse> {
+  const allSessions = await listSessions(context, {
+    dirty: query.dirty
+  });
+  const workspaces = await listWorkspaces(context, {
+    dirty: query.dirty
+  });
+  const filteredSessions = filterAndSortSessions(allSessions, query, {
+    loadDetailText: (threadId) => context.db.getSessionDetail(threadId)
+  });
+  const total = filteredSessions.length;
+  const items = typeof query.limit === "number" ? filteredSessions.slice(0, query.limit) : filteredSessions;
+
+  return {
+    items,
+    total,
+    workspaces,
+    counts: {
+      dirty: allSessions.filter((item) => item.dirty).length,
+      frozen: allSessions.filter((item) => item.frozen).length
+    },
+    nextCursor: null
+  };
 }
 
 export async function listWorkspaces(
