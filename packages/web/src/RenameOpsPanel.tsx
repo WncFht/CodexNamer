@@ -20,6 +20,7 @@ import {
   buildSweepActionOption,
   buildSweepTrendOption
 } from "./features/maintenance/chart-options.js";
+import { OpsActionSection } from "./features/maintenance/OpsActionSection.js";
 import { OpsOverviewSection } from "./features/maintenance/OpsOverviewSection.js";
 import { OpsPrimaryChartsSection } from "./features/maintenance/OpsPrimaryChartsSection.js";
 
@@ -40,6 +41,7 @@ export function RenameOpsPanel(props: {
   onSelectRequestLog: (id?: number) => void;
   onRefreshRuntime: () => void | Promise<void>;
   onRefreshPreview: (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => void | Promise<void>;
+  onOpenRequeue: () => void;
 }) {
   const {
     aiRequestLogs: initialAiRequestLogs,
@@ -48,6 +50,7 @@ export function RenameOpsPanel(props: {
     doctor,
     onRefreshPreview,
     onRefreshRuntime,
+    onOpenRequeue,
     onSelectRequestLog,
     overview,
     preview,
@@ -286,6 +289,10 @@ export function RenameOpsPanel(props: {
       setAdvancedLoaded(true);
     }
   }, []);
+  const openAdvanced = React.useCallback(() => {
+    setAdvancedLoaded(true);
+    setAdvancedOpen(true);
+  }, []);
 
   return (
     <section className="panel-grid ops-layout">
@@ -302,17 +309,57 @@ export function RenameOpsPanel(props: {
         uiLanguage={uiLanguage}
       />
 
-      <OpsPrimaryChartsSection inline={inline} ruleCoverageOption={ruleCoverageOption} sweepTrendOption={sweepTrendOption} />
+      <OpsActionSection
+        activeAiRequestCount={aiRequestLogs?.activeCount ?? 0}
+        failedAiRequestCount={aiRequestLogs?.statusCounts.failed ?? 0}
+        inline={inline}
+        onOpenDiagnostics={openAdvanced}
+        onOpenLogs={openAdvanced}
+        onOpenRequeue={onOpenRequeue}
+        onRefreshPreview={() =>
+          onRefreshPreview({
+            includeCandidateNames: true,
+            urgent: true
+          })
+        }
+        onRefreshRuntime={onRefreshRuntime}
+        previewApplyCount={previewApplyCount}
+        previewRefreshing={previewRefreshing}
+        previewSuggestCount={previewSuggestCount}
+        ruleBacklogCount={ruleBacklogCount}
+        uiLanguage={uiLanguage}
+      />
+
+      <section className="detail-panel ops-span-wide">
+        <div className="panel-topline">
+          <div>
+            <p className="panel-kicker">{inline("趋势", "Trends")}</p>
+            <h3>{inline("趋势与覆盖图", "Trend and coverage charts")}</h3>
+            <p className="settings-copy">
+              {inline(
+                "图表保留给二级分析：先做动作判断，再展开看 sweep 趋势和规则覆盖。",
+                "Charts stay in the secondary layer: decide on the next action first, then expand sweep and coverage trends."
+              )}
+            </p>
+          </div>
+        </div>
+        <details className="settings-disclosure ops-disclosure">
+          <summary>{inline("展开趋势与覆盖图", "Show trend and coverage charts")}</summary>
+          <div className="ops-disclosure-grid">
+            <OpsPrimaryChartsSection inline={inline} ruleCoverageOption={ruleCoverageOption} sweepTrendOption={sweepTrendOption} />
+          </div>
+        </details>
+      </section>
 
       <section className="detail-panel ops-span-wide">
         <div className="panel-topline">
           <div>
             <p className="panel-kicker">{inline("高级", "Advanced")}</p>
-            <h3>{inline("更多分析与诊断", "More analysis and diagnostics")}</h3>
+            <h3>{inline("请求日志与深度诊断", "Request logs and deep diagnostics")}</h3>
             <p className="settings-copy">
               {inline(
-                "更细的图表、模型请求日志和原始诊断都保留，但默认收起，避免概览页一打开就变成操作台。",
-                "Deeper charts, request logs, and the raw doctor payload are still available, but folded by default so the overview does not open like an ops console."
+                "模型请求日志和 doctor 原始诊断都保留，但默认收起，避免概览页一打开就进入排障模式。",
+                "Request logs and doctor output stay available, but folded by default so the overview does not open straight into debugging mode."
               )}
             </p>
           </div>

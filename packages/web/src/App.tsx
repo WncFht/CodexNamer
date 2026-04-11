@@ -225,6 +225,12 @@ export function App() {
             aiRequestLogDetail={state.aiRequestLogDetail}
             daemon={state.daemon}
             doctor={state.doctor}
+            onOpenRequeue={() =>
+              React.startTransition(() => {
+                addAppTransitionType("nav-lateral");
+                state.setTab("requeue");
+              })
+            }
             onRefreshRuntime={() => state.refreshMaintenance()}
             onRefreshPreview={(options) => state.refreshPreview(options)}
             onSelectRequestLog={state.setSelectedRequestLogId}

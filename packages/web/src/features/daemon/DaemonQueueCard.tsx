@@ -17,7 +17,7 @@ export function DaemonQueueCard(props: {
   return (
     <article className="settings-surface-card">
       <p className="panel-kicker">{props.inline("当前队列", "Current queue")}</p>
-      <h4>{props.inline("只保留最关心的排队结果", "Keep only the queue numbers that matter")}</h4>
+      <h4>{props.inline("当前积压与落盘结果", "Backlog and recent landing result")}</h4>
       <dl className="settings-runtime-grid compact">
         <div>
           <dt>{props.inline("建议", "Suggest")}</dt>
@@ -44,12 +44,6 @@ export function DaemonQueueCard(props: {
           <dd>{props.overview?.runtime.configuredAutoApply ?? "--"}</dd>
         </div>
       </dl>
-      <p className="settings-copy">
-        {props.inline(
-          "如果这里长期只有建议而没有自动应用，再去看下面的技术细节就够了。",
-          "If this stays stuck on suggestions without auto-apply, the folded technical details below are usually enough for debugging."
-        )}
-      </p>
     </article>
   );
 }

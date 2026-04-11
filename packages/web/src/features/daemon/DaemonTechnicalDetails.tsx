@@ -14,8 +14,8 @@ export function DaemonTechnicalDetails(props: {
           <h3>{props.inline("进程细节与日志", "Process details and logs")}</h3>
           <p className="settings-copy">
             {props.inline(
-              "PID、启动命令和日志都保留，但默认收起，避免后台页一上来就变成纯运维面板。",
-              "PID, launch command, and log tail are still available, but folded by default so the page does not open like a pure ops console."
+              "只有在需要排障时再展开这里，平时首屏只保留运行态和积压。",
+              "Only open this when you actually need debugging; the first screen stays focused on runtime and backlog."
             )}
           </p>
         </div>

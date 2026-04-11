@@ -23,7 +23,7 @@ export function DaemonStatusCard(props: {
   return (
     <article className="settings-surface-card">
       <p className="panel-kicker">{props.inline("后台状态", "Worker status")}</p>
-      <h4>{props.inline("先看后台有没有在正常跑", "Check whether the background worker is healthy")}</h4>
+      <h4>{props.inline("运行态摘要", "Runtime summary")}</h4>
       <dl className="settings-runtime-grid compact">
         <div>
           <dt>{props.inline("实际执行", "Execution")}</dt>
@@ -58,12 +58,6 @@ export function DaemonStatusCard(props: {
           </dd>
         </div>
       </dl>
-      <p className="settings-copy">
-        {props.inline(
-          "对多数使用者来说，这一块足够回答两个问题：后台有没有活着，下一轮什么时候会跑。",
-          "For most people this is enough to answer two questions: is the worker alive, and when will it run again."
-        )}
-      </p>
     </article>
   );
 }

@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { formatWhen } from "./browser-utils.js";
-import { DaemonHero } from "./features/daemon/DaemonHero.js";
 import { DaemonQueueCard } from "./features/daemon/DaemonQueueCard.js";
 import { DaemonStatusCard } from "./features/daemon/DaemonStatusCard.js";
 import { DaemonTechnicalDetails } from "./features/daemon/DaemonTechnicalDetails.js";
@@ -10,10 +9,6 @@ import {
   runtimeDaemonStatusTone
 } from "./runtime-display.js";
 import type { AutoRenamePreviewResponse, DaemonControlStatus, OverviewResponse } from "./types.js";
-
-function chipTone(running: boolean): "success" | "manual" {
-  return running ? "success" : "manual";
-}
 
 function deriveNextSweepAt(status: DaemonControlStatus | null, nowMs: number): string | undefined {
   if (!status?.running) {
@@ -116,31 +111,69 @@ export function DaemonPanel(props: {
 
   return (
     <section className="settings-layout daemon-layout">
-      <DaemonHero
-        actioning={props.actioning}
-        inline={inline}
-        onRefresh={props.onRefresh}
-        onStart={props.onStart}
-        onStop={props.onStop}
-        running={Boolean(props.daemon?.running)}
-      />
+      <header className="daemon-header">
+        <div className="daemon-header-copy">
+          <p className="panel-kicker">{inline("后台", "Background")}</p>
+          <h2>{inline("先看运行态，再决定要不要排障", "Check runtime first, then decide whether debugging is needed")}</h2>
+          <p>
+            {inline(
+              "大多数时候只需要确认 daemon 是否在跑、下一轮什么时候触发，以及当前积压有没有继续堆高。",
+              "Most of the time you only need to know whether the daemon is alive, when the next sweep fires, and whether backlog is still growing."
+            )}
+          </p>
+        </div>
 
-      <div className="settings-chip-row">
-        <span className={`chip ${chipTone(Boolean(props.daemon?.running))}`}>
-          {inline("后台状态", "Background status")}: {daemonStatusLabel(props.daemon, props.uiLanguage)}
-        </span>
-        <span className={`chip ${props.overview?.runtime.daemonAutoApply ? "success" : "warning"}`}>
-          {inline("自动应用", "Auto apply")}:{" "}
-          {props.overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}
-        </span>
-        <span className={`chip ${props.daemon?.running ? "success" : "manual"}`}>
-          {inline("下一轮定时 sweep", "Next scheduled sweep")}: {countdownLabel}
-        </span>
-        <span
-          className={`chip ${runtimeDaemonStatusTone(runtimeDisplay.daemonStatus)}`}
-        >
-          {inline("最近 sweep", "Last sweep heartbeat")}: {formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}
-        </span>
+        <div className="daemon-actions">
+          <button className="btn-sm" onClick={props.onRefresh} type="button">
+            {inline("刷新状态", "Refresh")}
+          </button>
+          {props.daemon?.running ? (
+            <button
+              className="btn-sm"
+              disabled={props.actioning === "stop"}
+              onClick={() => void props.onStop()}
+              type="button"
+            >
+              {props.actioning === "stop" ? inline("停止中...", "Stopping...") : inline("停止后台", "Stop background worker")}
+            </button>
+          ) : (
+            <button
+              className="btn-sm primary"
+              disabled={props.actioning === "start"}
+              onClick={() => void props.onStart()}
+              type="button"
+            >
+              {props.actioning === "start" ? inline("启动中...", "Starting...") : inline("启动后台", "Start background worker")}
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="daemon-summary-strip">
+        <article className="settings-summary-metric daemon-summary-metric">
+          <span className="settings-summary-metric-label">{inline("后台状态", "Background status")}</span>
+          <strong>{daemonStatusLabel(props.daemon, props.uiLanguage)}</strong>
+          <p>{inline("运行态心跳", "Runtime heartbeat")}: {formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}</p>
+        </article>
+        <article className="settings-summary-metric daemon-summary-metric">
+          <span className="settings-summary-metric-label">{inline("下一轮 sweep", "Next sweep")}</span>
+          <strong>{countdownLabel}</strong>
+          <p>{formatWhen(nextSweepAt, props.uiLanguage)}</p>
+        </article>
+        <article className="settings-summary-metric daemon-summary-metric">
+          <span className="settings-summary-metric-label">{inline("当前积压", "Current backlog")}</span>
+          <strong>{previewApplyCount + previewSuggestCount}</strong>
+          <p>
+            {previewApplyCount} {inline("待应用", "apply")} / {previewSuggestCount} {inline("待建议", "suggest")}
+          </p>
+        </article>
+        <article className="settings-summary-metric daemon-summary-metric">
+          <span className="settings-summary-metric-label">{inline("自动应用策略", "Auto-apply policy")}</span>
+          <strong>{props.overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}</strong>
+          <p className={`daemon-summary-copy ${runtimeDaemonStatusTone(runtimeDisplay.daemonStatus)}`}>
+            {props.overview?.runtime.configuredAutoApply ?? "--"}
+          </p>
+        </article>
       </div>
 
       <div className="settings-stage-grid daemon-grid">
