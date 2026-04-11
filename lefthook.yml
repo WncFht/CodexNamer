@@ -5,7 +5,5 @@ pre-commit:
 
 pre-push:
   commands:
-    build-runtime:
-      run: npm run build:runtime
-    test:
-      run: npm test
+    validate:
+      run: npm run validate:full

@@ -28,17 +28,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: TypeScript build
-        run: npm run build
-
-      - name: Runtime build
-        run: npm run build:runtime
-
-      - name: Web production build
-        run: npm run web:build
-
-      - name: Test suite
-        run: npm test
+      - name: Full validation
+        run: npm run validate:full

@@ -20,13 +20,10 @@ export type SettingsDraft = {
   }>;
   namingCustomPrompt: string;
   renameAutoApply: string;
-  freezeManualName: boolean;
   scanIntervalSeconds: string;
   candidateIdleSeconds: string;
   finalizeIdleSeconds: string;
   renameCooldownSeconds: string;
-  minRolloutGrowthBytes: string;
-  minTaskCompleteDelta: string;
   maxAutoRenamesPerSession: string;
   aiBackend: string;
   aiProviderSource: string;
@@ -243,16 +240,10 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
     namingTags: normalizeNamingTags(naming.tags),
     namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
-    freezeManualName: asBoolean(rename.freezeManualName || rename.freeze_manual_name, true),
     scanIntervalSeconds: asNumberString(watch.scanIntervalSeconds || watch.scan_interval_seconds, "300"),
     candidateIdleSeconds: asNumberString(watch.candidateIdleSeconds || watch.candidate_idle_seconds, "120"),
     finalizeIdleSeconds: asNumberString(watch.finalizeIdleSeconds || watch.finalize_idle_seconds, "600"),
     renameCooldownSeconds: asNumberString(watch.renameCooldownSeconds || watch.rename_cooldown_seconds, "900"),
-    minRolloutGrowthBytes: asNumberString(
-      watch.minRolloutGrowthBytes || watch.min_rollout_growth_bytes,
-      "4096"
-    ),
-    minTaskCompleteDelta: asNumberString(watch.minTaskCompleteDelta || watch.min_task_complete_delta, "1"),
     maxAutoRenamesPerSession: asNumberString(
       watch.maxAutoRenamesPerSession || watch.max_auto_renames_per_session,
       "2"
@@ -321,16 +312,13 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
       uiLanguage: draft.uiLanguage
     },
     rename: {
-      autoApply: draft.renameAutoApply as RenameAutoApply,
-      freezeManualName: draft.freezeManualName
+      autoApply: draft.renameAutoApply as RenameAutoApply
     },
     watch: {
       scanIntervalSeconds: parseNumber(draft.scanIntervalSeconds),
       candidateIdleSeconds: parseNumber(draft.candidateIdleSeconds),
       finalizeIdleSeconds: parseNumber(draft.finalizeIdleSeconds),
       renameCooldownSeconds: parseNumber(draft.renameCooldownSeconds),
-      minRolloutGrowthBytes: parseNumber(draft.minRolloutGrowthBytes),
-      minTaskCompleteDelta: parseNumber(draft.minTaskCompleteDelta),
       maxAutoRenamesPerSession: parseNumber(draft.maxAutoRenamesPerSession)
     },
     naming: {

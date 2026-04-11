@@ -11,8 +11,7 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize",
-        freezeManualName: true
+        autoApply: "idle-finalize"
       }
     });
 
@@ -34,8 +33,7 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize",
-        freezeManualName: true
+        autoApply: "idle-finalize"
       }
     });
 
@@ -66,16 +64,13 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize",
-        freezeManualName: true
+        autoApply: "idle-finalize"
       },
       watch: {
         scanIntervalSeconds: 300,
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 900,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });
@@ -119,16 +114,13 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "disabled",
-        freezeManualName: true
+        autoApply: "disabled"
       },
       watch: {
         scanIntervalSeconds: 300,
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 900,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });
@@ -248,8 +240,7 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize",
-        freezeManualName: true
+        autoApply: "idle-finalize"
       }
     });
 

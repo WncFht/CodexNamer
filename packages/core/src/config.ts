@@ -216,8 +216,7 @@ const DEFAULT_CONFIG: EffectiveConfig = {
     uiLanguage: "en-US"
   },
   rename: {
-    autoApply: "idle-finalize",
-    freezeManualName: true
+    autoApply: "idle-finalize"
   },
   watch: {
     ...DEFAULT_WATCH
@@ -349,16 +348,13 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
     rename: {
       autoApply: getString(rename, "auto_apply", "autoApply") as
         | EffectiveConfig["rename"]["autoApply"]
-        | undefined,
-      freezeManualName: getBoolean(rename, "freeze_manual_name", "freezeManualName")
+        | undefined
     },
     watch: {
       scanIntervalSeconds: getNumber(watch, "scan_interval_seconds", "scanIntervalSeconds"),
       candidateIdleSeconds: getNumber(watch, "candidate_idle_seconds", "candidateIdleSeconds"),
       finalizeIdleSeconds: getNumber(watch, "finalize_idle_seconds", "finalizeIdleSeconds"),
       renameCooldownSeconds: getNumber(watch, "rename_cooldown_seconds", "renameCooldownSeconds"),
-      minRolloutGrowthBytes: getNumber(watch, "min_rollout_growth_bytes", "minRolloutGrowthBytes"),
-      minTaskCompleteDelta: getNumber(watch, "min_task_complete_delta", "minTaskCompleteDelta"),
       maxAutoRenamesPerSession: getNumber(
         watch,
         "max_auto_renames_per_session",
@@ -415,9 +411,9 @@ function normalizeConfigDocumentInput(raw: Record<string, unknown>): ConfigDocum
 }
 
 function mergeProviderProfiles(
-  baseProfiles: EffectiveConfig["providerProfiles"] | undefined,
-  patchProfiles: EffectiveConfig["providerProfiles"]
-): EffectiveConfig["providerProfiles"] {
+  baseProfiles: ConfigDocument["providerProfiles"] | undefined,
+  patchProfiles: NonNullable<ConfigDocument["providerProfiles"]>
+): ConfigDocument["providerProfiles"] {
   const existingById = new Map((baseProfiles ?? []).map((profile) => [profile.profileId, profile]));
 
   return patchProfiles.map((profile) => {
@@ -503,16 +499,13 @@ function serializeConfigDocument(document: ConfigDocument): string {
       ui_language: document.general?.uiLanguage
     }),
     rename: stripEmptyRecord({
-      auto_apply: document.rename?.autoApply,
-      freeze_manual_name: document.rename?.freezeManualName
+      auto_apply: document.rename?.autoApply
     }),
     watch: stripEmptyRecord({
       scan_interval_seconds: document.watch?.scanIntervalSeconds,
       candidate_idle_seconds: document.watch?.candidateIdleSeconds,
       finalize_idle_seconds: document.watch?.finalizeIdleSeconds,
       rename_cooldown_seconds: document.watch?.renameCooldownSeconds,
-      min_rollout_growth_bytes: document.watch?.minRolloutGrowthBytes,
-      min_task_complete_delta: document.watch?.minTaskCompleteDelta,
       max_auto_renames_per_session: document.watch?.maxAutoRenamesPerSession
     }),
     naming: stripEmptyRecord({

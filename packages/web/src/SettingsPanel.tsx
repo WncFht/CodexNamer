@@ -1505,18 +1505,6 @@ function SchedulerSection(props: {
             ]}
             value={props.draft.renameAutoApply as RenameAutoApply}
           />
-          <div className="settings-checks">
-            <label className="toggle">
-              <input
-                checked={props.draft.freezeManualName}
-                onChange={(event) => {
-                  props.updateDraftField("freezeManualName", event.target.checked);
-                }}
-                type="checkbox"
-              />
-              {props.text.tt("freezeManualName")}
-            </label>
-          </div>
         </article>
 
         <article className="settings-surface-card settings-span-two">
@@ -1561,24 +1549,6 @@ function SchedulerSection(props: {
                   props.updateDraftField("renameCooldownSeconds", event.target.value);
                 }}
                 value={props.draft.renameCooldownSeconds}
-              />
-            </label>
-            <label className="settings-field">
-              <span>{props.text.tt("minRolloutGrowth")}</span>
-              <input
-                onChange={(event) => {
-                  props.updateDraftField("minRolloutGrowthBytes", event.target.value);
-                }}
-                value={props.draft.minRolloutGrowthBytes}
-              />
-            </label>
-            <label className="settings-field">
-              <span>{props.text.tt("minTaskDelta")}</span>
-              <input
-                onChange={(event) => {
-                  props.updateDraftField("minTaskCompleteDelta", event.target.value);
-                }}
-                value={props.draft.minTaskCompleteDelta}
               />
             </label>
             <label className="settings-field">

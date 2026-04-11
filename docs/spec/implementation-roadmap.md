@@ -73,5 +73,4 @@
 ### 仍在演进
 
 - provider 测试链稳定性
-- `freeze_manual_name` 是否真正进入调度逻辑
 - auto-apply 是否增加“稳定一轮”保护

@@ -48,30 +48,11 @@
 
 ## 3. 当前仍然存在的实现边界
 
-### 3.1 调度还没真正消费 ingest 增量阈值
-
-配置里有：
-
-- `min_rollout_growth_bytes`
-- `min_task_complete_delta`
-
-但 `evaluateAutoRename()` 当前仍主要基于：
-
-- dirty
-- idle
-- frozen
-- cooldown
-- `max_auto_renames_per_session`
-
-### 3.2 auto-apply 还没有“稳定一轮”保护
+### 3.1 auto-apply 还没有“稳定一轮”保护
 
 当前 `finalize_ready` 在 daemon auto-apply 生效时就可能直接落盘，尚未引入“候选稳定一轮 sweep”这类额外 gate。
 
-### 3.3 `freeze_manual_name` 仍是持久化配置，但还没进入调度主逻辑
-
-Settings / 配置文件里仍保留该字段，但当前真正参与调度保护的是会话级 `freeze`。
-
-### 3.4 provider 测试链仍需要持续整平
+### 3.2 provider 测试链仍需要持续整平
 
 核心 provider 解析与请求路径已实现，但 provider 连通性相关测试仍有继续收敛空间。
 

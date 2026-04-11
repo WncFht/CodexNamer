@@ -50,8 +50,6 @@ describe("auto rename evaluation", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 300,
         renameCooldownSeconds: 900,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });
@@ -73,8 +71,6 @@ describe("auto rename evaluation", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 900,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });
@@ -96,8 +92,6 @@ describe("auto rename evaluation", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 3600,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });

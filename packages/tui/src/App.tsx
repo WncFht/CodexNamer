@@ -926,14 +926,6 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       return;
     }
 
-    if (key === "freezeManualName") {
-      setSettingsDraft({
-        ...settingsDraft,
-        freezeManualName: value.trim().toLowerCase() === "true"
-      });
-      return;
-    }
-
     if (key === "maintenanceBackupBeforeCompact") {
       setSettingsDraft({
         ...settingsDraft,

@@ -19,12 +19,12 @@ function deriveNextSweepAt(status: DaemonControlStatus | null, nowMs: number): s
   }
 
   if (!status.startedAt || typeof status.intervalSeconds !== "number") {
-    return status.nextSweepAt;
+    return undefined;
   }
 
   const startedAtMs = Date.parse(status.startedAt);
   if (!Number.isFinite(startedAtMs)) {
-    return status.nextSweepAt;
+    return undefined;
   }
 
   const intervalMs = Math.max(1, Math.trunc(status.intervalSeconds)) * 1000;

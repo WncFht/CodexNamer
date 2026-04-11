@@ -19,9 +19,6 @@ ui_language = "zh-CN"
 # - "idle-finalize" = daemon may auto-apply finalize-ready renames
 auto_apply = "disabled"
 
-# Keep manually assigned names untouched.
-freeze_manual_name = true
-
 [ai]
 # "responses" is the recommended default for OpenAI-style providers.
 # Set "none" if you want heuristic naming only.

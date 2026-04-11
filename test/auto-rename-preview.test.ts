@@ -24,8 +24,6 @@ describe("auto rename preview guards", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 3600,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });
@@ -108,8 +106,6 @@ describe("auto rename preview guards", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 0,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 1
       }
     });

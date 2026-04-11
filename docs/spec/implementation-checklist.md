@@ -98,4 +98,3 @@
 
 - [ ] provider 连通性相关的全量测试稳定性
 - [ ] auto-apply 稳定性 gate
-- [ ] `freeze_manual_name` 是否继续保留

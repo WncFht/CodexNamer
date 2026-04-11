@@ -14,13 +14,10 @@ export type SettingKey =
   | "namingTagsJson"
   | "namingCustomPrompt"
   | "renameAutoApply"
-  | "freezeManualName"
   | "scanIntervalSeconds"
   | "candidateIdleSeconds"
   | "finalizeIdleSeconds"
   | "renameCooldownSeconds"
-  | "minRolloutGrowthBytes"
-  | "minTaskCompleteDelta"
   | "maxAutoRenamesPerSession"
   | "aiBackend"
   | "aiProviderSource"
@@ -51,13 +48,10 @@ export type SettingsDraft = {
   namingTagsJson: string;
   namingCustomPrompt: string;
   renameAutoApply: string;
-  freezeManualName: boolean;
   scanIntervalSeconds: string;
   candidateIdleSeconds: string;
   finalizeIdleSeconds: string;
   renameCooldownSeconds: string;
-  minRolloutGrowthBytes: string;
-  minTaskCompleteDelta: string;
   maxAutoRenamesPerSession: string;
   aiBackend: string;
   aiProviderSource: string;
@@ -208,13 +202,10 @@ export function buildSettingsDraft(configView: ConfigView): SettingsDraft {
     namingTagsJson: toJsonString(naming.tags, "[]"),
     namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
-    freezeManualName: asBoolean(rename.freezeManualName || rename.freeze_manual_name, true),
     scanIntervalSeconds: asNumberString(watch.scanIntervalSeconds || watch.scan_interval_seconds, "300"),
     candidateIdleSeconds: asNumberString(watch.candidateIdleSeconds || watch.candidate_idle_seconds, "120"),
     finalizeIdleSeconds: asNumberString(watch.finalizeIdleSeconds || watch.finalize_idle_seconds, "600"),
     renameCooldownSeconds: asNumberString(watch.renameCooldownSeconds || watch.rename_cooldown_seconds, "900"),
-    minRolloutGrowthBytes: asNumberString(watch.minRolloutGrowthBytes || watch.min_rollout_growth_bytes, "4096"),
-    minTaskCompleteDelta: asNumberString(watch.minTaskCompleteDelta || watch.min_task_complete_delta, "1"),
     maxAutoRenamesPerSession: asNumberString(watch.maxAutoRenamesPerSession || watch.max_auto_renames_per_session, "2"),
     aiBackend: asString(ai.backend, "responses"),
     aiProviderSource: asString(ai.providerSource || ai.provider_source, "codex-config"),
@@ -253,16 +244,13 @@ export function encodeSettingsDraft(draft: SettingsDraft): ConfigDocument {
       uiLanguage: draft.uiLanguage
     },
     rename: {
-      autoApply: draft.renameAutoApply as TuiRenameAutoApply,
-      freezeManualName: draft.freezeManualName
+      autoApply: draft.renameAutoApply as TuiRenameAutoApply
     },
     watch: {
       scanIntervalSeconds: parseNumber(draft.scanIntervalSeconds),
       candidateIdleSeconds: parseNumber(draft.candidateIdleSeconds),
       finalizeIdleSeconds: parseNumber(draft.finalizeIdleSeconds),
       renameCooldownSeconds: parseNumber(draft.renameCooldownSeconds),
-      minRolloutGrowthBytes: parseNumber(draft.minRolloutGrowthBytes),
-      minTaskCompleteDelta: parseNumber(draft.minTaskCompleteDelta),
       maxAutoRenamesPerSession: parseNumber(draft.maxAutoRenamesPerSession)
     },
     naming: {
@@ -353,12 +341,6 @@ export function cycleSettingsFieldValue(
       renameAutoApply: cycle(draft.renameAutoApply, ["disabled", "idle-finalize"] as const)
     };
   }
-  if (key === "freezeManualName") {
-    return {
-      ...draft,
-      freezeManualName: !draft.freezeManualName
-    };
-  }
   if (key === "aiBackend") {
     return {
       ...draft,
@@ -410,13 +392,10 @@ export function buildSettingsFields(params: {
     { key: "namingTagsJson", label: inline("命名 / Tags JSON", "Naming / Tags JSON"), value: draft?.namingTagsJson ?? "" },
     { key: "namingCustomPrompt", label: inline("命名 / Prompt override", "Naming / Prompt override"), value: draft?.namingCustomPrompt ?? "" },
     { key: "renameAutoApply", label: inline("重命名 / 自动应用", "Rename / Auto apply"), value: draft?.renameAutoApply ?? "" },
-    { key: "freezeManualName", label: inline("重命名 / 冻结手动名", "Rename / Freeze manual"), value: String(draft?.freezeManualName ?? false) },
     { key: "scanIntervalSeconds", label: inline("调度 / 扫描间隔", "Scheduler / Scan interval"), value: draft?.scanIntervalSeconds ?? "" },
     { key: "candidateIdleSeconds", label: inline("调度 / 候选空闲秒数", "Scheduler / Candidate idle sec"), value: draft?.candidateIdleSeconds ?? "" },
     { key: "finalizeIdleSeconds", label: inline("调度 / 终稿空闲秒数", "Scheduler / Finalize idle sec"), value: draft?.finalizeIdleSeconds ?? "" },
     { key: "renameCooldownSeconds", label: inline("调度 / 冷却秒数", "Scheduler / Cooldown sec"), value: draft?.renameCooldownSeconds ?? "" },
-    { key: "minRolloutGrowthBytes", label: inline("调度 / 最小增长字节", "Scheduler / Min rollout bytes"), value: draft?.minRolloutGrowthBytes ?? "" },
-    { key: "minTaskCompleteDelta", label: inline("调度 / 最小 task delta", "Scheduler / Min task delta"), value: draft?.minTaskCompleteDelta ?? "" },
     { key: "maxAutoRenamesPerSession", label: inline("调度 / 单会话自动上限", "Scheduler / Max auto renames"), value: draft?.maxAutoRenamesPerSession ?? "" },
     { key: "aiBackend", label: "AI / Backend", value: draft?.aiBackend ?? "" },
     { key: "aiProviderSource", label: inline("AI / Provider 来源", "AI / Provider source"), value: draft?.aiProviderSource ?? "" },

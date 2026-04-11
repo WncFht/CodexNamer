@@ -82,8 +82,6 @@ export interface WatchConfig {
   candidateIdleSeconds: number;
   finalizeIdleSeconds: number;
   renameCooldownSeconds: number;
-  minRolloutGrowthBytes: number;
-  minTaskCompleteDelta: number;
   maxAutoRenamesPerSession: number;
 }
 
@@ -102,7 +100,6 @@ export interface NamingConfig {
 
 export interface RenameConfig {
   autoApply: "disabled" | "idle-finalize";
-  freezeManualName: boolean;
 }
 
 export interface GeneralConfig {
@@ -132,6 +129,20 @@ export interface ProviderProfile {
   headers?: Record<string, string>;
   enabled: boolean;
   isDefault: boolean;
+}
+
+export interface ProviderProfileDocument {
+  profileId: string;
+  requestType?: Exclude<AiBackend, "none">;
+  displayName?: string;
+  providerRef?: string;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  apiKeyRef?: string;
+  headers?: Record<string, string>;
+  enabled?: boolean;
+  isDefault?: boolean;
 }
 
 export interface CodexInheritedAuth {
@@ -177,7 +188,7 @@ export interface ConfigDocument {
   watch?: Partial<WatchConfig>;
   naming?: Partial<NamingConfig>;
   ai?: Partial<AiConfig>;
-  providerProfiles?: ProviderProfile[];
+  providerProfiles?: ProviderProfileDocument[];
   maintenance?: Partial<MaintenanceConfig>;
 }
 
@@ -654,6 +665,8 @@ export interface OverviewReport {
       basis: "session-updated-at" | "last-applied-at";
       queued: number;
       clearedCandidates: number;
+      skipped: number;
+      skipCounts?: Record<string, number>;
     }>;
   };
   activity: {
@@ -670,4 +683,101 @@ export interface OverviewReport {
       aiApplied: number;
     }>;
   };
+}
+
+export interface DaemonLogEntry {
+  at: string;
+  stream: "stdout" | "stderr";
+  line: string;
+}
+
+export interface DaemonControlStatus {
+  running: boolean;
+  pid?: number;
+  startedAt?: string;
+  stoppedAt?: string;
+  intervalSeconds?: number;
+  apiProcessId: number;
+  command: {
+    cwd: string;
+    executable: string;
+    scriptPath: string;
+    args: string[];
+  };
+  recentLogs: DaemonLogEntry[];
+  lastExitCode?: number;
+  lastExitSignal?: string;
+  lastError?: string;
+}
+
+export interface SessionsResponse {
+  items: SessionSummary[];
+  workspaces: WorkspaceSummary[];
+  total: number;
+  counts: {
+    dirty: number;
+    frozen: number;
+  };
+  nextCursor: string | null;
+}
+
+export interface ProviderResponse {
+  ai: Record<string, unknown>;
+  providerProfiles: Array<Record<string, unknown>>;
+  inheritedCodex: Record<string, unknown>;
+  resolvedProvider: Record<string, unknown>;
+  lastProviderTest?: ProviderTestResult;
+}
+
+export type OverviewResponse = OverviewReport;
+export type DoctorResponse = DoctorReport;
+
+export interface BatchApplyItem {
+  threadId: string;
+  action: "applied" | "skipped" | "preview";
+  name?: string;
+  reason?: string;
+}
+
+export interface BatchApplyResponse {
+  items: BatchApplyItem[];
+}
+
+export interface AutoRenamePreviewResponse {
+  items: AutoRenamePreview[];
+}
+
+export type PromptPreviewResponse = PromptPreview;
+export type AiRequestLogResponse = AiRequestLogReport;
+export type AiRequestLogDetailResponse = AiRequestLogDetail;
+export type ProviderTestResponse = ProviderTestResult;
+
+export interface ParseCodexProviderResponse {
+  source: "codex-config";
+  profile: {
+    requestType?: ProviderWireApi;
+    providerRef?: string;
+    baseUrl?: string;
+    model?: string;
+    apiKey?: string;
+  };
+}
+
+export type ApiEventsResponse = ApiEventBatch;
+export type RenameSuggestResponse = RenameSuggestion;
+
+export interface RenameApplyResponse {
+  written: boolean;
+  name: string;
+}
+
+export interface RenameFreezeResponse {
+  threadId: string;
+  frozen: boolean;
+}
+
+export interface ConfigUpdateResponse {
+  writtenTo: string;
+  restartRequired: boolean;
+  config: ConfigView;
 }

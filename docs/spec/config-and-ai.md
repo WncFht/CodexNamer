@@ -21,12 +21,11 @@
 ### `[rename]`
 
 - `auto_apply = "disabled" | "idle-finalize"`
-- `freeze_manual_name = true | false`
 
 说明：
 
 - 当前真正控制自动落盘的是 `auto_apply`
-- `freeze_manual_name` 仍会被读取和写回，但当前调度保护态实际只有会话级 `freeze`
+- 当前调度保护态只有会话级 `freeze`
 
 ### `[watch]`
 
@@ -34,9 +33,11 @@
 - `candidate_idle_seconds`
 - `finalize_idle_seconds`
 - `rename_cooldown_seconds`
-- `min_rollout_growth_bytes`
-- `min_task_complete_delta`
 - `max_auto_renames_per_session`
+
+说明：
+
+- 当前自动改名判定只依赖 `dirty / idle / frozen / cooldown / max_auto_renames_per_session`
 
 ### `[naming]`
 
@@ -93,15 +94,12 @@ ui_language = "zh-CN"
 
 [rename]
 auto_apply = "disabled"
-freeze_manual_name = true
 
 [watch]
 scan_interval_seconds = 300
 candidate_idle_seconds = 120
 finalize_idle_seconds = 600
 rename_cooldown_seconds = 900
-min_rollout_growth_bytes = 4096
-min_task_complete_delta = 1
 max_auto_renames_per_session = 2
 
 [naming]

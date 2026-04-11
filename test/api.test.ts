@@ -238,8 +238,6 @@ describe("local api", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 600,
         renameCooldownSeconds: 900,
-        minRolloutGrowthBytes: 4096,
-        minTaskCompleteDelta: 1,
         maxAutoRenamesPerSession: 2
       }
     });
