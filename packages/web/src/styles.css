@@ -2419,24 +2419,8 @@ pre {
   flex: 1;
 }
 
-.transcript-toolbar-actions {
-  align-items: flex-start;
-}
 
-.transcript-mode-note {
-  display: grid;
-  gap: 2px;
-  max-width: 28rem;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-}
 
-.transcript-mode-note strong {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-}
 
 .chat-search {
   flex: 1;
@@ -2571,12 +2555,6 @@ pre {
   word-break: break-word;
 }
 
-.transcript-highlight {
-  background: rgba(201, 100, 66, 0.18);
-  color: inherit;
-  border-radius: 4px;
-  padding: 0 2px;
-}
 
 .chat-footer-panels,
 .panel-grid {

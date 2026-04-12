@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { useDeferredValue, useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { fetchSessionTranscript } from "./api.js";
 import { formatWhen, transcriptTone } from "./browser-utils.js";
@@ -10,53 +9,19 @@ type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
 
 const TRANSCRIPT_PAGE_SIZE = 30;
 
-function highlightContent(content: string, query: string) {
-  if (!query) {
-    return [content];
-  }
-
-  const normalizedContent = content.toLowerCase();
-  const normalizedQuery = query.toLowerCase();
-  const fragments: Array<string | ReactNode> = [];
-  let cursor = 0;
-
-  while (cursor < content.length) {
-    const matchAt = normalizedContent.indexOf(normalizedQuery, cursor);
-    if (matchAt === -1) {
-      fragments.push(content.slice(cursor));
-      break;
-    }
-    if (matchAt > cursor) {
-      fragments.push(content.slice(cursor, matchAt));
-    }
-    fragments.push(
-      <mark className="transcript-highlight" key={`${matchAt}-${normalizedQuery}`}>
-        {content.slice(matchAt, matchAt + normalizedQuery.length)}
-      </mark>
-    );
-    cursor = matchAt + normalizedQuery.length;
-  }
-
-  return fragments;
-}
-
 export function TranscriptPanel(props: {
   detail: SessionDetail;
   showHiddenTranscript: boolean;
   onToggleShowHiddenTranscript: (value: boolean) => void;
   uiLanguage: UiLanguage;
 }) {
-  const [query, setQuery] = useState("");
   const [role, setRole] = useState<TranscriptRoleFilter>("user");
   const [pageState, setPageState] = useState<SessionTranscriptPage | null>(null);
   const [items, setItems] = useState<SessionTranscriptPage["items"]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const deferredQuery = useDeferredValue(query.trim());
-  const searchInputId = useId();
 
   useEffect(() => {
-    setQuery("");
     setRole("user");
   }, [props.detail.threadId]);
 
@@ -69,8 +34,7 @@ export function TranscriptPanel(props: {
       page: 1,
       pageSize: TRANSCRIPT_PAGE_SIZE,
       includeHidden: props.showHiddenTranscript,
-      role,
-      query: deferredQuery || undefined
+      role
     })
       .then((payload) => {
         if (!active) {
@@ -96,7 +60,7 @@ export function TranscriptPanel(props: {
     return () => {
       active = false;
     };
-  }, [deferredQuery, props.detail.threadId, props.showHiddenTranscript, role]);
+  }, [props.detail.threadId, props.showHiddenTranscript, role]);
 
   const loadEarlier = async () => {
     if (!pageState?.hasMore || loading) {
@@ -110,8 +74,7 @@ export function TranscriptPanel(props: {
         page: pageState.page + 1,
         pageSize: pageState.pageSize,
         includeHidden: props.showHiddenTranscript,
-        role,
-        query: deferredQuery || undefined
+        role
       });
       setItems((previous) => [...nextPage.items, ...previous]);
       setPageState(nextPage);
@@ -124,51 +87,15 @@ export function TranscriptPanel(props: {
 
   const totalShown = items.length;
   const hiddenOlderCount = Math.max(0, (pageState?.totalItems ?? 0) - totalShown);
-  const renderedItems = useMemo(() => items, [items]);
   const tt = (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key);
-  const userFocusMode = role === "user";
-  const modeTitle = userFocusMode
-    ? props.uiLanguage === "zh-CN"
-      ? "当前模式：user focus"
-      : "Current mode: user focus"
-    : props.uiLanguage === "zh-CN"
-      ? "当前模式：full trace"
-      : "Current mode: full trace";
-  const modeHint = userFocusMode
-    ? props.uiLanguage === "zh-CN"
-      ? "默认只看 user，方便快速辨别不同会话；需要完整上下文时再切到 full trace。"
-      : "Defaulting to user-only makes sessions easier to scan; switch to full trace when you need the full context."
-    : props.uiLanguage === "zh-CN"
-      ? "现在会把 assistant / tool / system 一起显示出来；想快速浏览时可以切回 user focus。"
-      : "Assistant, tool, and system turns are included now; switch back to user focus when you want a quicker scan.";
 
   return (
     <section className="chat-view-shell">
       <div className="chat-toolbar">
         <div className="chat-toolbar-copy">
           <p className="panel-kicker">{tt("transcript")}</p>
-          <label className="chat-search" htmlFor={searchInputId}>
-            <span className="sr-only">{tt("searchConversationLabel")}</span>
-            <input
-              id={searchInputId}
-              name="conversation-search"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={tt("searchConversation")}
-              type="search"
-              value={query}
-            />
-          </label>
         </div>
-        <div className="chat-toolbar-actions transcript-toolbar-actions">
-          <div className="transcript-mode-note">
-            <strong>{modeTitle}</strong>
-            <span>{modeHint}</span>
-          </div>
-          {userFocusMode ? (
-            <button className="btn-chip" onClick={() => setRole("all")} type="button">
-              {props.uiLanguage === "zh-CN" ? "切到完整轨迹" : "Switch to full trace"}
-            </button>
-          ) : null}
+        <div className="chat-toolbar-actions">
           {(["all", "user", "assistant", "tool", "system"] as const).map((item) => (
             <button
               className={role === item ? "btn-chip active" : "btn-chip"}
@@ -207,10 +134,10 @@ export function TranscriptPanel(props: {
         ) : null}
 
         {error ? <div className="error-banner transcript-error">{error}</div> : null}
-        {!loading && renderedItems.length === 0 ? <div className="empty-note">{tt("noTranscript")}</div> : null}
+        {!loading && items.length === 0 ? <div className="empty-note">{tt("noTranscript")}</div> : null}
 
         <div className="messages-container">
-          {renderedItems.map((item) => (
+          {items.map((item) => (
             <article className="message-turn" data-role={item.role} key={item.id}>
               <div className="turn-header">
                 <div className="turn-header-left">
@@ -221,7 +148,7 @@ export function TranscriptPanel(props: {
                 </div>
                 <span className="message-time">{formatWhen(item.timestamp, props.uiLanguage)}</span>
               </div>
-              <pre className="turn-body">{highlightContent(item.content, deferredQuery)}</pre>
+              <pre className="turn-body">{item.content}</pre>
             </article>
           ))}
         </div>
