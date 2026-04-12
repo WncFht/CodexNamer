@@ -1,125 +1,32 @@
-# Repo AGENTS for CodexNamer
+# Repository Guidelines
 
-These rules supplement the global AGENTS bootstrap.
+## Project Structure & Module Organization
 
-## VCS source of truth
+This monorepo keeps runtime concerns split by package. `packages/core` holds rename, ingest, state, provider, and writeback logic. `packages/shared` contains shared DTOs and schemas. User-facing entry points live in `packages/api`, `packages/cli`, `packages/daemon`, `packages/web`, and `packages/tui`. Specs, ADRs, and design notes live under `docs/`; automated tests live in `test/`; helper scripts such as hook and UI launchers live in `scripts/`.
 
-- This repository is JJ-first because it contains `.jj/`.
-- Use `jj` for routine local VCS work: status, diff, log, commit, rebase, workspace, bookmark, fetch, and push.
-- Treat Git as the transport and interoperability layer for GitHub, CI, and Git-only tools.
-- Avoid routine `git commit`, `git checkout`, `git switch`, `git branch`, `git rebase`, or `git push origin HEAD:main` unless the user explicitly asks for Git.
+## Build, Test, and Development Commands
 
-## Always inspect state first
+- `npm install` — install dependencies and run `prepare` to install Lefthook.
+- `npm run lint` — run ESLint with zero warnings allowed.
+- `npm run build` — compile all TypeScript project references.
+- `npm run build:runtime` — build shared/core/api/cli/daemon without the web bundle.
+- `npm run web` / `npm run api` / `npm run tui` / `npm run daemon -- --once` — start local surfaces for development.
+- `npm run web:build` — build the Vite dashboard.
+- `npm test` or `npm run test:watch` — run the Vitest suite.
+- `npm run validate:full` — CI-equivalent check used before push.
 
-Before mutating repo history or bookmarks, run:
+## Coding Style & Naming Conventions
 
-```bash
-jj st
-jj workspace list
-jj bookmark list
-```
+Use TypeScript ESM, 2-space indentation, double quotes, and semicolons to match the existing codebase. Keep business rules in `packages/core` and shared types in `packages/shared`; Web/TUI/CLI should consume DTOs instead of duplicating writeback logic. React components use `PascalCase.tsx` (for example, `SessionBrowser.tsx`). Hooks start with `use*`. Core modules use descriptive kebab-case names such as `auto-rename.ts`, `rename-repository.ts`, and `runtime-overview-service.ts`.
 
-Also run `jj st` again after mutations.
+## Testing Guidelines
 
-## Default steady state
+Vitest runs in a Node environment and picks up `test/**/*.test.ts`. Add or update regression tests for rename semantics, config parsing, API contract changes, and UI state derivation when practical. No numeric coverage gate is enforced, but behavior changes should ship with matching tests.
 
-Keep the repository in this shape whenever possible:
+## Commit & Pull Request Guidelines
 
-- one long-lived bookmark: `main`
-- one primary workspace: `default`
-- current working-copy change `@` is an empty `next`
+Recent history follows Conventional Commit style, for example `refactor(web): ...`, `feat(service): ...`, `style(web): ...`, and `docs: ...`. Keep changes small and reviewable; separate UI polish, refactors, and semantic behavior changes when possible. PRs should explain user-visible impact, note any doc updates, and include screenshots for dashboard/TUI changes.
 
-Do not leave behind extra workspaces, empty anonymous changes, or stale bookmarks unless the user explicitly wants them preserved.
+## Local-First & JJ Workflow Notes
 
-## Workspace policy
-
-If the current workspace has unrelated changes, belongs to another task, or the work may proceed in parallel, create a sibling JJ workspace instead of mixing changes into `default`:
-
-```bash
-jj workspace add ../codexnamer-<task> --name <task> -r main -m "<task>"
-```
-
-When the task is done and merged, clean up the temporary workspace:
-
-```bash
-jj workspace forget <task>
-rm -rf ../codexnamer-<task>
-```
-
-## Commit policy
-
-- Prefer small, reviewable logical changes.
-- Name the current change before doing substantial work with `jj describe -m "..."`
-- Finalize with `jj commit -m "..."`
-- Immediately rename the new empty working copy to `next`:
-
-```bash
-jj describe -m "next"
-```
-
-Avoid leaving `(no description set)`, `wip`, or mixed multi-purpose commits.
-
-## Bookmark and remote policy
-
-- `main` is the only long-lived bookmark.
-- Non-`main` bookmarks are temporary and should exist only for PRs, shared review, or temporary CI/debug branches.
-- Remember that pushed bookmarks appear on GitHub as branches.
-
-### Direct-to-main flow
-
-Use this only when the user explicitly wants the work landed on `main` without a separate PR branch:
-
-```bash
-jj git fetch --remote origin
-jj bookmark move main --to @-
-jj git push --remote origin --bookmark main
-```
-
-### PR / review flow
-
-Create a temporary bookmark only when the work needs a remote branch:
-
-```bash
-jj bookmark create <name> -r @-
-jj git push --remote origin --bookmark <name>
-```
-
-After the PR merges, clean it up:
-
-```bash
-jj git fetch --remote origin
-jj bookmark delete <name>
-jj git push --remote origin --deleted
-jj git export
-```
-
-## Validation before push
-
-Before pushing `main` or any review bookmark, run the full CI-equivalent validation:
-
-```bash
-npm run lint
-npm run build
-npm run build:runtime
-npm run web:build
-npm test
-```
-
-Do not push if this sequence fails.
-
-## Cleanup expectations
-
-At the end of a task, verify:
-
-```bash
-jj st
-jj workspace list
-jj bookmark list
-```
-
-The expected end state is:
-
-- no unintended file changes
-- no stale temporary workspaces
-- no stale remote-tracking bookmarks waiting to be deleted
-- `@` renamed to `next`
+This project is local-first: prefer updating logic around `session_index.jsonl` writeback instead of patching Codex internals. The repo is also JJ-first for maintainers; before history or bookmark changes, run `jj st`, `jj workspace list`, and `jj bookmark list`. Before pushing, run `npm run validate:full`.
