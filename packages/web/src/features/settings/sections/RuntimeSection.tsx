@@ -15,8 +15,8 @@ export function RuntimeSection(props: {
       kicker={props.text.tt("runtime")}
       title={props.text.inline("运行时解析结果与 provider 路径", "Resolved runtime state and provider path")}
       copy={props.text.inline(
-        "Prompt 已经移到命名策略区，这里只保留运行时路径、provider 解析和配置落点，方便排查真正会命中的后端。",
-        "Prompt has moved into the Naming policy section. This view keeps runtime paths, provider resolution, and config locations so you can inspect the backend that is actually in effect."
+        "查看当前运行时路径、provider 解析和配置位置。",
+        "View runtime paths, provider resolution, and config locations."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">

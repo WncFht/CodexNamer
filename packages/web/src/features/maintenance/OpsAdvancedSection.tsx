@@ -18,24 +18,24 @@ export function OpsAdvancedSection(props: {
         <ChartCard
           buildOption={props.sweepActionOption}
           copy={props.inline(
-            "把每轮 sweep 拆成 suggest / apply / skip / auto-applied，先看 daemon 是在排队、跳过，还是已经落盘。",
-            "Break each sweep into suggest / apply / skip / auto-applied so you can see whether the daemon is mostly queuing, skipping, or actually landing titles."
+            "展示每轮 sweep 的 suggest、apply、skip 和 auto-apply 分布。",
+            "Shows the suggest, apply, skip, and auto-apply distribution of each sweep."
           )}
           title={props.inline("Sweep 动作拆分", "Sweep action breakdown")}
         />
         <ChartCard
           buildOption={props.pipelineOption}
           copy={props.inline(
-            "会话会先落在活跃、候选就绪、可终稿这些阶段里，用来判断整体卡在哪一段。",
-            "Sessions flow through stages like active, candidate-ready, and finalize-ready. Use this to see where the system is currently bottlenecked."
+            "展示会话在各个阶段的分布。",
+            "Shows the distribution of sessions across pipeline stages."
           )}
           title={props.inline("会话阶段分布", "Session stage distribution")}
         />
         <ChartCard
           buildOption={props.flowOption}
           copy={props.inline(
-            "把当前预览队列里的原因映射到动作，用来解释为什么是跳过、建议还是应用。",
-            "Maps current preview reasons to actions so you can explain why items are skipping, suggesting, or applying."
+            "展示预览原因与动作之间的对应关系。",
+            "Shows how preview reasons map to actions."
           )}
           runtime="sankey"
           title={props.inline("原因到动作的流向", "Reason to action flow")}
@@ -43,8 +43,8 @@ export function OpsAdvancedSection(props: {
         <ChartCard
           buildOption={props.activityOption}
           copy={props.inline(
-            "最近 14 天的 rename 活动，用来区分真正落盘、仅预览和跳过。",
-            "Rename activity across the last 14 days, separating landed applies, preview-only passes, and skips."
+            "展示最近 14 天的命名活动。",
+            "Shows rename activity over the last 14 days."
           )}
           title={props.inline("近期重命名活动", "Recent rename activity")}
         />

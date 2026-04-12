@@ -13,10 +13,7 @@ export function DaemonTechnicalDetails(props: {
           <p className="panel-kicker">{props.inline("高级", "Advanced")}</p>
           <h3>{props.inline("进程细节与日志", "Process details and logs")}</h3>
           <p className="settings-copy">
-            {props.inline(
-              "只有在需要排障时再展开这里，平时首屏只保留运行态和积压。",
-              "Only open this when you actually need debugging; the first screen stays focused on runtime and backlog."
-            )}
+            {props.inline("查看进程参数、工作目录和最近日志。", "View process arguments, working directory, and recent logs.")}
           </p>
         </div>
       </div>

@@ -70,8 +70,8 @@ function TagPresetDialog(props: {
             <span className="settings-tag-pill settings-tag-tone-1">#{previewLabel}</span>
             <p>
               {props.text.inline(
-                "tag 是给 AI 的命名规则预设。结构化模式下，AI 返回 tagId，后端再按组件顺序拼出最终标题。",
-                "Tags are AI-facing naming presets. In structured mode, AI returns a tagId and the backend assembles the final title from components."
+                "Tag 用于给常见场景设置可复用的命名规则。",
+                "Tags define reusable naming rules for common scenarios."
               )}
             </p>
           </div>
@@ -320,10 +320,10 @@ export function NamingSection(props: {
   return (
     <SettingsSectionFrame
       kicker={props.text.inline("Naming policy", "Naming policy")}
-      title={props.text.inline("按组件和上下文控制最终标题", "Control final titles with components and context")}
+      title={props.text.inline("命名规则与标题结构", "Naming rules and title structure")}
       copy={props.text.inline(
-        "先决定 AI 读哪些内容，再排标题组件顺序，右侧直接看结构预览和真实 prompt。",
-        "Choose what the AI reads, arrange title components, and inspect both structure and prompt on the right."
+        "设置上下文、标题结构和 Prompt。",
+        "Set context, title structure, and prompt."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -388,11 +388,11 @@ export function NamingSection(props: {
             />
           </div>
           <div className="settings-inline-note">
-            <strong>{props.text.inline("区别与 Prompt 语言", "Difference and prompt language")}</strong>
+            <strong>{props.text.inline("上下文策略与输出语言", "Context strategy and output language")}</strong>
             <p>
               {props.text.inline(
-                "摘要型策略更稳；transcript 与 paired 策略更具体。Prompt 指令语言跟随界面语言，最终标题输出语言由上面的 `language` 控制。",
-                "Summary strategies are steadier; transcript and paired strategies are more specific. Prompt instruction language follows the UI language, while `language` above controls the final title language."
+                "选择上下文策略，并单独设置标题输出语言。",
+                "Choose a context strategy and set the title output language separately."
               )}
             </p>
           </div>
@@ -405,8 +405,8 @@ export function NamingSection(props: {
               <h4>{props.text.inline("结构化组件与最终标题预览", "Structured components and final title preview")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "结构化模式下，AI 返回字段，后端按这里的顺序组装标题；需要强制特殊规则时再用 prompt 覆写。",
-                  "In structured mode, the AI returns fields and the backend assembles the title in this order; use prompt override only for special rules."
+                  "按顺序编辑标题组件并查看预览。",
+                  "Edit title components in order and review the preview."
                 )}
               </p>
             </div>
@@ -572,8 +572,8 @@ export function NamingSection(props: {
               <strong>{renderNamingStructurePreview(props.draft, props.text.uiLanguage)}</strong>
               <p>
                 {props.text.inline(
-                  "这是结构化模式下的示意标题。真正运行时，Tag 由 AI 决定是否命中以及命中哪一个 preset。",
-                  "This is a structural preview. At runtime, AI decides whether a tag preset applies and which preset id to return."
+                  "按当前组件顺序生成的标题示例。",
+                  "A sample title generated from the current component order."
                 )}
               </p>
             </aside>
@@ -587,8 +587,8 @@ export function NamingSection(props: {
               <h4>{props.text.inline("把规则做成可编辑预设", "Make rules editable presets")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "Tag 是 AI 命名时可选的预设规则。你可以直接定义适用场景和含义，不用自己手写整段 prompt。",
-                  "Tags are presets the AI can choose while naming. You only need to define when each one applies and what it means."
+                  "为常见场景定义可复用的标签规则。",
+                  "Define reusable tag rules for common scenarios."
                 )}
               </p>
             </div>
@@ -669,11 +669,11 @@ export function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Replay queue", "Replay queue")}</p>
-              <h4>{props.text.inline("到独立页面管理规则变更后的归队", "Handle rule-change requeue on its own page")}</h4>
+              <h4>{props.text.inline("规则变更后的重新入队", "Requeue after rule changes")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
-                  "设置页只负责编辑规则；重新归队现在在单独页面里先做 preview，再决定哪些会话需要入队。",
-                  "Settings only edit the rule; requeue now lives on a dedicated page where you preview first, then decide which sessions should re-enter the queue."
+                  "在独立页面查看预览和入队结果。",
+                  "Use the dedicated page to view preview and queue results."
                 )}
               </p>
             </div>
@@ -693,10 +693,7 @@ export function NamingSection(props: {
               <p className="panel-kicker">{props.text.tt("promptPreview")}</p>
               <h4>{props.text.inline("命名策略实际发送给 AI 的 Prompt", "The prompt actually sent to AI for naming")}</h4>
               <p className="settings-copy">
-                {props.text.inline(
-                  "这里直接展示当前命名策略真实生成的 prompt。界面语言切换后，Prompt 指令语言也会跟着切换；而最终标题语言仍由上面的 `language` 控制。",
-                  "This shows the prompt currently generated from the naming policy. When UI language changes, the prompt instruction language changes too; the final title language is still controlled by `language` above."
-                )}
+                {props.text.inline("当前命名策略生成的 Prompt。", "Prompt generated from the current naming policy.")}
               </p>
             </div>
             <div className="settings-inline-actions">

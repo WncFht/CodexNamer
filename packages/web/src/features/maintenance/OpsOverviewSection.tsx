@@ -35,13 +35,12 @@ export function OpsOverviewSection(props: {
           <p className="settings-copy">
             {props.runtimeDisplay.sweepRunning
               ? props.inline(
-                  "后台 sweep 正在运行，先看执行模式、dirty / pending 和 AI 请求活跃数。",
-                  "A background sweep is running. Focus first on execution mode, dirty/pending volume, and active AI requests."
+                  "后台 sweep 运行中。这里显示执行状态、积压和最近一轮结果。",
+                  "A background sweep is running. This view shows execution status, backlog, and the latest sweep result."
                 )
-              : props.overview?.runtime.explain ||
-                props.inline(
-                  "先判断有没有在跑、有没有积压、下一步该去补扫还是看诊断。",
-                  "Start by checking whether the system is running, whether work is piling up, and whether replay or diagnostics is the next step."
+              : props.inline(
+                  "这里显示执行状态、积压和最近一轮结果。",
+                  "This view shows execution status, backlog, and the latest sweep result."
                 )}
           </p>
         </div>

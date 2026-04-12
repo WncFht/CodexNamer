@@ -75,12 +75,12 @@ export function AiProviderSection(props: {
     : props.text.inline("Codex 配置", "Codex config");
   const sourceDetailCopy = usingManualSource
     ? props.text.inline(
-        "当来源为 `manual` 时，rename 和测试都会使用这里选中的手动配置。",
-        "When the source is `manual`, rename and provider tests use the selected manual profile here."
+        "当前使用手动配置。",
+        "The current source is the manual configuration."
       )
     : props.text.inline(
-        "当来源为 `codex-config` 时，rename 和测试都会直接读取当前 Codex 配置与鉴权。",
-        "When the source is `codex-config`, rename and provider tests read the current Codex config and auth directly."
+        "当前读取 Codex 配置。",
+        "The current source is the Codex configuration."
       );
   const connectivityTone = props.providerTestResult
     ? props.providerTestResult.ok
@@ -95,15 +95,15 @@ export function AiProviderSection(props: {
   const connectivityLatency = props.providerTestResult?.latencyMs ? `${props.providerTestResult.latencyMs} ms` : props.text.tt("nA");
   const connectivitySummary =
     firstNonEmptyString(props.providerTestResult?.responseText, props.providerTestResult?.error) ??
-    props.text.inline("还没有测试结果，先重新解析或手动调整配置后再测。", "No connectivity result yet. Reload or adjust the config, then run a test.");
+    props.text.inline("还没有测试结果。", "No connectivity result yet.");
 
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("provider")}
-      title={props.text.inline("把命名请求走向讲清楚", "Make the naming request path easy to inspect")}
+      title={props.text.inline("AI 提供方与连通性", "AI provider and connectivity")}
       copy={props.text.inline(
-        "先确定请求类型与配置来源，再看当前实际命中的 provider、凭证和连通性。这里只保留 builder + AI 路径，不再做静默回退。",
-        "Choose the request type and config source first, then inspect the provider, credentials, and connectivity actually in effect. This panel only supports the builder plus AI path, with no silent fallback."
+        "设置请求类型、配置来源，并查看当前 provider 与测试结果。",
+        "Set request type and config source, then view the current provider and test result."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -193,7 +193,7 @@ export function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Resolved route", "Resolved route")}</p>
-              <h4>{props.text.inline("当前请求会怎么走", "How requests will actually flow")}</h4>
+              <h4>{props.text.inline("当前请求路径", "Current request route")}</h4>
             </div>
           </div>
           <dl className="settings-runtime-grid compact">
@@ -220,7 +220,7 @@ export function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Resolved target", "Resolved target")}</p>
-              <h4>{props.text.inline("当前会打到哪个 provider", "Which provider is in effect right now")}</h4>
+              <h4>{props.text.inline("当前 provider", "Current provider")}</h4>
             </div>
           </div>
           <dl className="settings-runtime-grid compact">

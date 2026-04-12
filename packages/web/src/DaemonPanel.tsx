@@ -114,11 +114,11 @@ export function DaemonPanel(props: {
       <header className="daemon-header">
         <div className="daemon-header-copy">
           <p className="panel-kicker">{inline("后台", "Background")}</p>
-          <h2>{inline("先看运行态，再决定要不要排障", "Check runtime first, then decide whether debugging is needed")}</h2>
+          <h2>{inline("后台状态与调度", "Background status and schedule")}</h2>
           <p>
             {inline(
-              "大多数时候只需要确认 daemon 是否在跑、下一轮什么时候触发，以及当前积压有没有继续堆高。",
-              "Most of the time you only need to know whether the daemon is alive, when the next sweep fires, and whether backlog is still growing."
+              "查看 daemon 状态、下一轮 sweep 和当前积压。",
+              "View daemon status, the next sweep, and current backlog."
             )}
           </p>
         </div>

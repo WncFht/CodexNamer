@@ -244,10 +244,7 @@ export function RequeuePanel(props: {
             <p className="panel-kicker">{inline("补扫旧标题", "Replay older titles")}</p>
             <h3>{inline("按新规则补跑旧标题", "Replay older titles with the latest rule")}</h3>
             <p className="settings-copy">
-              {inline(
-                "先选一个时间范围，预览会受到影响的旧标题，再确认是否按当前规则补跑。",
-                "Pick a time range, preview older titles that would be affected, then confirm whether to replay them with the current rule."
-              )}
+              {inline("按当前规则预览并重新入队旧标题。", "Preview and requeue older titles with the current rule.")}
             </p>
           </div>
           <div className="header-actions">
@@ -282,13 +279,10 @@ export function RequeuePanel(props: {
       <section className="detail-panel ops-replay-panel ops-span-wide">
         <div className="panel-topline">
           <div>
-            <p className="panel-kicker">{inline("步骤 1", "Step 1")}</p>
-            <h3>{inline("先选范围，再预览", "Choose a range, then preview")}</h3>
+            <p className="panel-kicker">{inline("范围", "Range")}</p>
+            <h3>{inline("选择补扫范围", "Choose replay range")}</h3>
             <p className="settings-copy">
-              {inline(
-                "默认只显示最常用的时间范围；更细的筛选放到高级选项里。",
-                "Start with the most common time-range choices; finer controls stay in advanced options."
-              )}
+              {inline("常用时间范围在这里，更多筛选在高级选项。", "Common time ranges appear here, with more filters in advanced options.")}
             </p>
           </div>
         </div>
@@ -322,7 +316,7 @@ export function RequeuePanel(props: {
           </label>
           <div className="requeue-actions">
             <button className="btn-sm" disabled={!replaySince || previewing} onClick={() => void handlePreview()} type="button">
-              {previewing ? inline("预览中...", "Previewing...") : inline("先预览", "Preview first")}
+              {previewing ? inline("预览中...", "Previewing...") : inline("预览匹配项", "Preview matches")}
             </button>
             {hasPreview ? (
               <button
@@ -359,13 +353,8 @@ export function RequeuePanel(props: {
 
         {!hasPreview ? (
           <div className="ops-queue-empty requeue-placeholder">
-            <strong>{inline("1. 选范围 → 2. 预览 → 3. 确认重新入队", "1. Choose a range → 2. Preview → 3. Confirm replay")}</strong>
-            <span>
-              {inline(
-                "预览前不显示明细，避免一进来就看到一整屏空卡片和空表格。",
-                "Details stay hidden until a preview runs, so the page does not open with a wall of empty cards and tables."
-              )}
-            </span>
+            <strong>{inline("选择时间范围后查看预览", "Choose a time range to view the preview")}</strong>
+            <span>{inline("预览结果会显示匹配、入队和跳过明细。", "The preview shows matched, queued, and skipped results.")}</span>
           </div>
         ) : (
           <>
@@ -550,9 +539,7 @@ export function RequeuePanel(props: {
           <div>
             <p className="panel-kicker">{inline("历史", "History")}</p>
             <h3>{inline("最近执行记录", "Recent replay runs")}</h3>
-            <p className="settings-copy">
-              {inline("默认收起，避免首屏先看到一大段历史。", "Collapsed by default so the first screen stays focused on the next action.")}
-            </p>
+            <p className="settings-copy">{inline("查看最近的重新入队记录。", "View recent replay runs.")}</p>
           </div>
         </div>
         <details className="settings-disclosure ops-disclosure">

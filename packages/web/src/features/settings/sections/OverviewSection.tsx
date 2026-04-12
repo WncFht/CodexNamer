@@ -20,8 +20,8 @@ export function OverviewSection(props: {
       kicker={props.text.tt("controlState")}
       title={props.text.inline("当前命名系统总览", "Rename system overview")}
       copy={props.text.inline(
-        "这里把命名系统最关键的几个指标放在一起，方便你判断现在是策略问题、provider 问题，还是 simply 队列积压。",
-        "This section puts the key rename metrics together so you can tell whether the problem is policy, provider configuration, or simply queue backlog."
+        "集中显示队列、命名和运行状态。",
+        "Shows queue, naming, and runtime status in one place."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">

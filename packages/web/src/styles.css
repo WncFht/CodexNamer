@@ -761,6 +761,7 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
 }
 
 .settings-field span,
@@ -787,6 +788,8 @@ pre {
 .settings-field textarea,
 .settings-field select {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border-radius: 12px;
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
@@ -1277,6 +1280,7 @@ pre {
   box-shadow: var(--shadow-sm);
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .settings-card-header {
@@ -1284,6 +1288,10 @@ pre {
   justify-content: space-between;
   gap: 14px;
   align-items: flex-start;
+}
+
+.settings-card-header > * {
+  min-width: 0;
 }
 
 .settings-inline-actions {
@@ -1889,8 +1897,9 @@ pre {
 
 .settings-provider-groups {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .settings-provider-group {
@@ -1900,6 +1909,13 @@ pre {
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background: color-mix(in srgb, var(--bg-secondary) 84%, white 16%);
+  min-width: 0;
+}
+
+.settings-provider-group .settings-two-up,
+.settings-provider-group .settings-runtime-grid,
+.settings-provider-group .settings-checks {
+  min-width: 0;
 }
 
 @media (max-width: 1180px) {

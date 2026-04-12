@@ -22,12 +22,9 @@ export function OpsActionSection(props: {
       <div className="panel-topline ops-runtime-header">
         <div>
           <p className="panel-kicker">{props.inline("动作", "Actions")}</p>
-          <h3>{props.inline("先决定下一步要处理什么", "Decide what to do next")}</h3>
+          <h3>{props.inline("常用操作", "Common actions")}</h3>
           <p className="settings-copy">
-            {props.inline(
-              "先看 backlog、规则补扫和模型请求状态，再决定是刷新 preview、看日志，还是去重新入队。",
-              "Check backlog, replay backlog, and AI request status first, then decide whether to refresh preview, inspect logs, or open replay."
-            )}
+            {props.inline("刷新预览、查看日志、诊断和重新入队入口。", "Refresh preview, open logs, diagnostics, and replay tools.")}
           </p>
         </div>
       </div>

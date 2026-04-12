@@ -356,12 +356,7 @@ export function RenameOpsPanel(props: {
           <div>
             <p className="panel-kicker">{inline("高级", "Advanced")}</p>
             <h3>{inline("请求日志与深度诊断", "Request logs and deep diagnostics")}</h3>
-            <p className="settings-copy">
-              {inline(
-                "模型请求日志和 doctor 原始诊断都保留，但默认收起，避免概览页一打开就进入排障模式。",
-                "Request logs and doctor output stay available, but folded by default so the overview does not open straight into debugging mode."
-              )}
-            </p>
+            <p className="settings-copy">{inline("查看请求日志、图表和原始诊断。", "View request logs, charts, and raw diagnostics.")}</p>
           </div>
         </div>
         <details className="settings-disclosure ops-disclosure" onToggle={handleAdvancedToggle} open={advancedOpen}>
