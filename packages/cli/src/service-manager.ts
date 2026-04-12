@@ -1,0 +1,637 @@
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { startApiServer, waitForShutdown } from "@codexnamer/api";
+import { loadEffectiveConfig } from "@codexnamer/core";
+
+const SERVICE_CONFIG_FILENAME = "service-config.json";
+const POSIX_LAUNCHER_FILENAME = "run-service.sh";
+const WINDOWS_LAUNCHER_FILENAME = "run-service.ps1";
+const LINUX_UNIT_NAME = "codexnamer.service";
+const MAC_LABEL = "dev.codexnamer.agent";
+const WINDOWS_TASK_NAME = "CodexNamer";
+
+export type ManagedServicePlatform = "linux" | "macos" | "windows";
+
+export type ServiceCommandOptions = {
+  cwd?: string;
+  configPath?: string;
+  host?: string;
+  port?: string | number;
+  webRoot?: string;
+  daemon?: boolean;
+  start?: boolean;
+};
+
+export type ManagedServiceRuntimeConfig = {
+  version: 1;
+  platform: ManagedServicePlatform;
+  installedAt: string;
+  cwd: string;
+  stateDir: string;
+  host: string;
+  port: number;
+  webRoot: string;
+  autoStartDaemon: boolean;
+  url: string;
+};
+
+export type ManagedServicePaths = {
+  serviceDir: string;
+  serviceConfigPath: string;
+  shellLauncherPath: string;
+  powerShellLauncherPath: string;
+  logsDir: string;
+  stdoutLogPath: string;
+  stderrLogPath: string;
+  linuxUnitPath: string;
+  macPlistPath: string;
+};
+
+export type ManagedServiceDescriptor = {
+  descriptorPath: string;
+  descriptorText: string;
+  shellLauncherText: string;
+  powerShellLauncherText: string;
+};
+
+type CommandResult = {
+  command: string;
+  args: string[];
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  ok: boolean;
+  error?: string;
+};
+
+type InstalledService = {
+  runtime: ManagedServiceRuntimeConfig;
+  paths: ManagedServicePaths;
+};
+
+function resolveCliEntryPath(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.js");
+}
+
+function resolveCurrentBundledWebRoot(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+}
+
+function quoteForPosixShell(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function quoteForPowerShell(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function resolvePort(portValue: string | number | undefined, fallback: number): number {
+  if (typeof portValue === "number" && Number.isFinite(portValue)) {
+    return portValue;
+  }
+  if (typeof portValue === "string" && portValue.length > 0) {
+    const parsed = Number(portValue);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
+function resolveServeWebRoot(explicitWebRoot?: string): string | undefined {
+  if (explicitWebRoot) {
+    const resolved = path.resolve(explicitWebRoot);
+    return existsSync(path.join(resolved, "index.html")) ? resolved : undefined;
+  }
+
+  const bundledRoot = resolveCurrentBundledWebRoot();
+  return existsSync(path.join(bundledRoot, "index.html")) ? bundledRoot : undefined;
+}
+
+function runCommand(command: string, args: string[]): CommandResult {
+  const result = spawnSync(command, args, {
+    encoding: "utf8"
+  });
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  const exitCode = typeof result.status === "number" ? result.status : null;
+  return {
+    command,
+    args,
+    exitCode,
+    stdout,
+    stderr,
+    ok: !result.error && exitCode === 0,
+    error: result.error?.message
+  };
+}
+
+function assertCommandOk(result: CommandResult, context: string): void {
+  if (result.ok) {
+    return;
+  }
+  const detail = result.error ?? result.stderr.trim() ?? result.stdout.trim() ?? "unknown error";
+  throw new Error(`${context} failed: ${detail}`);
+}
+
+function plistEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll(`"`, "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+export function resolveManagedServicePlatform(platform: NodeJS.Platform = process.platform): ManagedServicePlatform {
+  switch (platform) {
+    case "linux":
+      return "linux";
+    case "darwin":
+      return "macos";
+    case "win32":
+      return "windows";
+    default:
+      throw new Error(`Unsupported platform for managed service install: ${platform}`);
+  }
+}
+
+export function resolveManagedServicePaths(params: {
+  stateDir: string;
+  homeDir?: string;
+}): ManagedServicePaths {
+  const homeDir = params.homeDir ?? os.homedir();
+  const serviceDir = path.join(params.stateDir, "service");
+  const logsDir = path.join(serviceDir, "logs");
+  return {
+    serviceDir,
+    serviceConfigPath: path.join(serviceDir, SERVICE_CONFIG_FILENAME),
+    shellLauncherPath: path.join(serviceDir, POSIX_LAUNCHER_FILENAME),
+    powerShellLauncherPath: path.join(serviceDir, WINDOWS_LAUNCHER_FILENAME),
+    logsDir,
+    stdoutLogPath: path.join(logsDir, "service.stdout.log"),
+    stderrLogPath: path.join(logsDir, "service.stderr.log"),
+    linuxUnitPath: path.join(homeDir, ".config", "systemd", "user", LINUX_UNIT_NAME),
+    macPlistPath: path.join(homeDir, "Library", "LaunchAgents", `${MAC_LABEL}.plist`)
+  };
+}
+
+export function buildManagedServiceDescriptor(params: {
+  platform: ManagedServicePlatform;
+  runtime: ManagedServiceRuntimeConfig;
+  paths: ManagedServicePaths;
+  cliEntryPath: string;
+  nodePath: string;
+}): ManagedServiceDescriptor {
+  const shellLauncherText = [
+    "#!/usr/bin/env sh",
+    "set -eu",
+    `mkdir -p ${quoteForPosixShell(params.paths.logsDir)}`,
+    `cd ${quoteForPosixShell(params.runtime.cwd)}`,
+    `exec ${quoteForPosixShell(params.nodePath)} ${quoteForPosixShell(params.cliEntryPath)} service-host --config ${quoteForPosixShell(params.paths.serviceConfigPath)}`
+  ].join("\n") + "\n";
+
+  const powerShellLauncherText = [
+    "$ErrorActionPreference = 'Stop'",
+    `New-Item -ItemType Directory -Force -Path ${quoteForPowerShell(params.paths.logsDir)} | Out-Null`,
+    `Set-Location -LiteralPath ${quoteForPowerShell(params.runtime.cwd)}`,
+    `& ${quoteForPowerShell(params.nodePath)} ${quoteForPowerShell(params.cliEntryPath)} service-host --config ${quoteForPowerShell(params.paths.serviceConfigPath)} 1>> ${quoteForPowerShell(params.paths.stdoutLogPath)} 2>> ${quoteForPowerShell(params.paths.stderrLogPath)}`,
+    "exit $LASTEXITCODE"
+  ].join("\r\n") + "\r\n";
+
+  if (params.platform === "linux") {
+    return {
+      descriptorPath: params.paths.linuxUnitPath,
+      descriptorText: [
+        "[Unit]",
+        "Description=CodexNamer local service",
+        "After=default.target",
+        "",
+        "[Service]",
+        "Type=simple",
+        `WorkingDirectory=${params.runtime.cwd}`,
+        `ExecStart=/bin/sh ${params.paths.shellLauncherPath}`,
+        "Restart=on-failure",
+        "RestartSec=5",
+        "",
+        "[Install]",
+        "WantedBy=default.target"
+      ].join("\n") + "\n",
+      shellLauncherText,
+      powerShellLauncherText
+    };
+  }
+
+  if (params.platform === "macos") {
+    const programArgs = ["/bin/sh", params.paths.shellLauncherPath]
+      .map((value) => `    <string>${plistEscape(value)}</string>`)
+      .join("\n");
+    return {
+      descriptorPath: params.paths.macPlistPath,
+      descriptorText: [
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">",
+        "<plist version=\"1.0\">",
+        "<dict>",
+        "  <key>Label</key>",
+        `  <string>${plistEscape(MAC_LABEL)}</string>`,
+        "  <key>ProgramArguments</key>",
+        "  <array>",
+        programArgs,
+        "  </array>",
+        "  <key>RunAtLoad</key>",
+        "  <true/>",
+        "  <key>KeepAlive</key>",
+        "  <true/>",
+        "  <key>WorkingDirectory</key>",
+        `  <string>${plistEscape(params.runtime.cwd)}</string>`,
+        "  <key>StandardOutPath</key>",
+        `  <string>${plistEscape(params.paths.stdoutLogPath)}</string>`,
+        "  <key>StandardErrorPath</key>",
+        `  <string>${plistEscape(params.paths.stderrLogPath)}</string>`,
+        "</dict>",
+        "</plist>"
+      ].join("\n") + "\n",
+      shellLauncherText,
+      powerShellLauncherText
+    };
+  }
+
+  return {
+    descriptorPath: WINDOWS_TASK_NAME,
+    descriptorText: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${params.paths.powerShellLauncherPath}"`,
+    shellLauncherText,
+    powerShellLauncherText
+  };
+}
+
+async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
+  platform: ManagedServicePlatform;
+  runtime: ManagedServiceRuntimeConfig;
+  paths: ManagedServicePaths;
+  descriptor: ManagedServiceDescriptor;
+}> {
+  const effective = await loadEffectiveConfig({
+    cwd: options?.cwd,
+    configPath: options?.configPath
+  });
+  const platform = resolveManagedServicePlatform();
+  const webRoot = resolveServeWebRoot(options?.webRoot);
+  if (!webRoot) {
+    throw new Error(
+      "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html."
+    );
+  }
+
+  const runtime: ManagedServiceRuntimeConfig = {
+    version: 1,
+    platform,
+    installedAt: new Date().toISOString(),
+    cwd: path.resolve(options?.cwd ?? process.cwd()),
+    stateDir: effective.general.stateDir,
+    host: options?.host ?? "127.0.0.1",
+    port: resolvePort(options?.port, 42110),
+    webRoot,
+    autoStartDaemon: options?.daemon !== false,
+    url: `http://${options?.host ?? "127.0.0.1"}:${resolvePort(options?.port, 42110)}`
+  };
+  const paths = resolveManagedServicePaths({
+    stateDir: runtime.stateDir
+  });
+  const descriptor = buildManagedServiceDescriptor({
+    platform,
+    runtime,
+    paths,
+    cliEntryPath: resolveCliEntryPath(),
+    nodePath: process.execPath
+  });
+
+  return {
+    platform,
+    runtime,
+    paths,
+    descriptor
+  };
+}
+
+async function writeInstallArtifacts(context: {
+  runtime: ManagedServiceRuntimeConfig;
+  paths: ManagedServicePaths;
+  descriptor: ManagedServiceDescriptor;
+}): Promise<void> {
+  await fs.mkdir(context.paths.serviceDir, { recursive: true });
+  await fs.mkdir(context.paths.logsDir, { recursive: true });
+  await fs.writeFile(context.paths.serviceConfigPath, JSON.stringify(context.runtime, null, 2) + "\n", "utf8");
+  await fs.writeFile(context.paths.shellLauncherPath, context.descriptor.shellLauncherText, "utf8");
+  await fs.chmod(context.paths.shellLauncherPath, 0o755);
+  await fs.writeFile(context.paths.powerShellLauncherPath, context.descriptor.powerShellLauncherText, "utf8");
+
+  if (context.runtime.platform === "linux") {
+    await fs.mkdir(path.dirname(context.paths.linuxUnitPath), { recursive: true });
+    await fs.writeFile(context.paths.linuxUnitPath, context.descriptor.descriptorText, "utf8");
+    return;
+  }
+
+  if (context.runtime.platform === "macos") {
+    await fs.mkdir(path.dirname(context.paths.macPlistPath), { recursive: true });
+    await fs.writeFile(context.paths.macPlistPath, context.descriptor.descriptorText, "utf8");
+  }
+}
+
+async function getServiceConfigCandidates(options?: ServiceCommandOptions): Promise<string[]> {
+  const candidates = new Set<string>();
+  const addStateDir = (stateDir: string | undefined) => {
+    if (!stateDir) {
+      return;
+    }
+    candidates.add(path.join(stateDir, "service", SERVICE_CONFIG_FILENAME));
+  };
+
+  try {
+    const config = await loadEffectiveConfig({
+      cwd: options?.cwd,
+      configPath: options?.configPath
+    });
+    addStateDir(config.general.stateDir);
+  } catch {
+    // ignore config resolution failures; status may still find an existing install
+  }
+
+  try {
+    const config = await loadEffectiveConfig({
+      cwd: os.homedir(),
+      configPath: options?.configPath
+    });
+    addStateDir(config.general.stateDir);
+  } catch {
+    // ignore secondary resolution failures
+  }
+
+  addStateDir(path.join(os.homedir(), ".local", "state", "codexnamer"));
+
+  return [...candidates];
+}
+
+async function loadInstalledService(options?: ServiceCommandOptions): Promise<InstalledService | undefined> {
+  const candidates = await getServiceConfigCandidates(options);
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    const runtime = JSON.parse(await fs.readFile(candidate, "utf8")) as ManagedServiceRuntimeConfig;
+    const paths = resolveManagedServicePaths({
+      stateDir: runtime.stateDir
+    });
+    return {
+      runtime,
+      paths
+    };
+  }
+  return undefined;
+}
+
+function currentLaunchctlDomain(): string {
+  const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+  if (typeof uid !== "number") {
+    throw new Error("launchctl user domain is unavailable on this platform");
+  }
+  return `gui/${uid}`;
+}
+
+function queryPlatformStatus(runtime: ManagedServiceRuntimeConfig): CommandResult {
+  if (runtime.platform === "linux") {
+    return runCommand("systemctl", ["--user", "status", "--no-pager", LINUX_UNIT_NAME]);
+  }
+  if (runtime.platform === "macos") {
+    return runCommand("launchctl", ["print", `${currentLaunchctlDomain()}/${MAC_LABEL}`]);
+  }
+  return runCommand("schtasks", ["/Query", "/TN", WINDOWS_TASK_NAME, "/FO", "LIST", "/V"]);
+}
+
+async function probeServiceHealth(runtime: ManagedServiceRuntimeConfig): Promise<{
+  healthy: boolean;
+  statusCode?: number;
+  error?: string;
+}> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1500);
+    const response = await fetch(new URL("/api/v1/health", runtime.url), {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    return {
+      healthy: response.ok,
+      statusCode: response.status
+    };
+  } catch (error) {
+    return {
+      healthy: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+export async function installManagedService(options?: ServiceCommandOptions): Promise<Record<string, unknown>> {
+  const context = await buildInstallContext(options);
+  await writeInstallArtifacts(context);
+
+  if (context.platform === "linux") {
+    assertCommandOk(runCommand("systemctl", ["--user", "daemon-reload"]), "systemd daemon-reload");
+    assertCommandOk(runCommand("systemctl", ["--user", "enable", LINUX_UNIT_NAME]), "systemd enable");
+  } else if (context.platform === "windows") {
+    const taskCommand = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${context.paths.powerShellLauncherPath}"`;
+    assertCommandOk(
+      runCommand("schtasks", [
+        "/Create",
+        "/TN",
+        WINDOWS_TASK_NAME,
+        "/SC",
+        "ONLOGON",
+        "/RL",
+        "LIMITED",
+        "/TR",
+        taskCommand,
+        "/F"
+      ]),
+      "Task Scheduler create"
+    );
+  }
+
+  if (options?.start) {
+    await startManagedService();
+  }
+
+  return {
+    installed: true,
+    platform: context.platform,
+    url: context.runtime.url,
+    configPath: context.paths.serviceConfigPath,
+    shellLauncherPath: context.paths.shellLauncherPath,
+    powerShellLauncherPath: context.paths.powerShellLauncherPath,
+    descriptorPath: context.descriptor.descriptorPath,
+    autoStartDaemon: context.runtime.autoStartDaemon
+  };
+}
+
+export async function startManagedService(): Promise<Record<string, unknown>> {
+  const installed = await loadInstalledService();
+  if (!installed) {
+    throw new Error("No installed managed service found. Run `codexnamer service install` first.");
+  }
+
+  if (installed.runtime.platform === "linux") {
+    assertCommandOk(runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]), "systemd start");
+  } else if (installed.runtime.platform === "macos") {
+    const bootoutResult = runCommand("launchctl", ["bootout", `${currentLaunchctlDomain()}/${MAC_LABEL}`]);
+    if (!bootoutResult.ok && !/Could not find service/i.test(`${bootoutResult.stdout}\n${bootoutResult.stderr}`)) {
+      // ignore only missing-service cases
+    }
+    assertCommandOk(
+      runCommand("launchctl", ["bootstrap", currentLaunchctlDomain(), installed.paths.macPlistPath]),
+      "launchctl bootstrap"
+    );
+    assertCommandOk(
+      runCommand("launchctl", ["kickstart", "-k", `${currentLaunchctlDomain()}/${MAC_LABEL}`]),
+      "launchctl kickstart"
+    );
+  } else {
+    assertCommandOk(runCommand("schtasks", ["/Run", "/TN", WINDOWS_TASK_NAME]), "Task Scheduler run");
+  }
+
+  return {
+    started: true,
+    platform: installed.runtime.platform,
+    url: installed.runtime.url
+  };
+}
+
+export async function stopManagedService(): Promise<Record<string, unknown>> {
+  const installed = await loadInstalledService();
+  if (!installed) {
+    throw new Error("No installed managed service found. Run `codexnamer service install` first.");
+  }
+
+  if (installed.runtime.platform === "linux") {
+    assertCommandOk(runCommand("systemctl", ["--user", "stop", LINUX_UNIT_NAME]), "systemd stop");
+  } else if (installed.runtime.platform === "macos") {
+    assertCommandOk(
+      runCommand("launchctl", ["bootout", `${currentLaunchctlDomain()}/${MAC_LABEL}`]),
+      "launchctl bootout"
+    );
+  } else {
+    assertCommandOk(runCommand("schtasks", ["/End", "/TN", WINDOWS_TASK_NAME]), "Task Scheduler end");
+  }
+
+  return {
+    stopped: true,
+    platform: installed.runtime.platform,
+    url: installed.runtime.url
+  };
+}
+
+export async function restartManagedService(): Promise<Record<string, unknown>> {
+  const installed = await loadInstalledService();
+  if (!installed) {
+    throw new Error("No installed managed service found. Run `codexnamer service install` first.");
+  }
+
+  try {
+    await stopManagedService();
+  } catch {
+    // continue into start; restart should be resilient to already-stopped services
+  }
+  await startManagedService();
+  return {
+    restarted: true,
+    platform: installed.runtime.platform,
+    url: installed.runtime.url
+  };
+}
+
+export async function uninstallManagedService(): Promise<Record<string, unknown>> {
+  const installed = await loadInstalledService();
+  if (!installed) {
+    return {
+      removed: false,
+      reason: "not-installed"
+    };
+  }
+
+  if (installed.runtime.platform === "linux") {
+    runCommand("systemctl", ["--user", "stop", LINUX_UNIT_NAME]);
+    runCommand("systemctl", ["--user", "disable", LINUX_UNIT_NAME]);
+    await fs.rm(installed.paths.linuxUnitPath, { force: true });
+    runCommand("systemctl", ["--user", "daemon-reload"]);
+  } else if (installed.runtime.platform === "macos") {
+    runCommand("launchctl", ["bootout", `${currentLaunchctlDomain()}/${MAC_LABEL}`]);
+    await fs.rm(installed.paths.macPlistPath, { force: true });
+  } else {
+    runCommand("schtasks", ["/Delete", "/TN", WINDOWS_TASK_NAME, "/F"]);
+  }
+
+  await fs.rm(installed.paths.serviceDir, { recursive: true, force: true });
+
+  return {
+    removed: true,
+    platform: installed.runtime.platform
+  };
+}
+
+export async function getManagedServiceStatus(): Promise<Record<string, unknown>> {
+  const installed = await loadInstalledService();
+  if (!installed) {
+    return {
+      installed: false,
+      serviceName:
+        process.platform === "linux"
+          ? LINUX_UNIT_NAME
+          : process.platform === "darwin"
+            ? MAC_LABEL
+            : WINDOWS_TASK_NAME
+    };
+  }
+
+  const [commandStatus, health] = await Promise.all([
+    Promise.resolve(queryPlatformStatus(installed.runtime)),
+    probeServiceHealth(installed.runtime)
+  ]);
+
+  return {
+    installed: true,
+    platform: installed.runtime.platform,
+    serviceName:
+      installed.runtime.platform === "linux"
+        ? LINUX_UNIT_NAME
+        : installed.runtime.platform === "macos"
+          ? MAC_LABEL
+          : WINDOWS_TASK_NAME,
+    url: installed.runtime.url,
+    configPath: installed.paths.serviceConfigPath,
+    logs: {
+      stdout: installed.paths.stdoutLogPath,
+      stderr: installed.paths.stderrLogPath
+    },
+    runtime: installed.runtime,
+    commandStatus,
+    health
+  };
+}
+
+export async function runManagedServiceHost(configPath: string): Promise<void> {
+  const runtime = JSON.parse(await fs.readFile(configPath, "utf8")) as ManagedServiceRuntimeConfig;
+  process.chdir(runtime.cwd);
+  const app = await startApiServer({
+    host: runtime.host,
+    port: runtime.port,
+    webRoot: runtime.webRoot,
+    autoStartDaemon: runtime.autoStartDaemon,
+    operator: "service-host"
+  });
+  await waitForShutdown(app);
+}

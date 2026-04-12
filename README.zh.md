@@ -100,13 +100,61 @@ npm install
 npm run build
 ```
 
-### 启动 Web
+### 启动本地服务
+
+```bash
+npm run serve
+```
+
+这是更接近产品形态的本地入口：
+
+- 单个长期运行的本地进程
+- 同一端口同时提供 API 和构建后的 Web UI
+- 默认自动拉起 API 托管的 daemon
+- 收到 `SIGINT` / `SIGTERM` 时做优雅退出
+
+默认地址：
+
+- `http://127.0.0.1:42110`
+
+### 安装成用户级后台服务
+
+现在已经提供围绕 `codexnamer serve` 的跨平台用户级 service 封装：
+
+```bash
+# 给当前用户注册 service
+npm run cli -- service install
+
+# 启动 / 停止 / 重启 / 查看状态
+npm run cli -- service start
+npm run cli -- service stop
+npm run cli -- service restart
+npm run cli -- service status
+
+# 卸载注册
+npm run cli -- service uninstall
+```
+
+平台对应关系：
+
+- Linux → `systemd --user`
+- macOS → `LaunchAgent`
+- Windows → 任务计划程序（`ONLOGON`）
+
+当前范围：
+
+- 已实现 install / start / stop / restart / status / uninstall
+- service 跑的就是同一套 `serve` 常驻流程和构建后的 Web 资产
+- Linux 路径已经纳入本仓库完整校验链
+- macOS / Windows 的命令生成已经实现，但在这个 Linux 工作区里还没有做 live 验证
+
+### 启动 Web 开发入口
 
 ```bash
 npm run web
 ```
 
-这个启动器会自动：
+这个入口仍然主要用于开发。启动器会自动：
 
 - 复用一个健康的本地 API
 - 或在 `42110+` 范围内启动新的 API
@@ -138,6 +186,12 @@ curl http://127.0.0.1:42110/api/v1/health
 ```
 
 现在 `npm run api` 会按当前配置的扫描间隔，默认自动拉起一个 controller-managed daemon。
+
+如果你还想让它顺便托管已经构建好的 dashboard：
+
+```bash
+npm run api -- --host 127.0.0.1 --port 42110 --web-root packages/web/dist
+```
 
 ### 启动 daemon
 
@@ -280,6 +334,7 @@ npm test
 常用本地入口：
 
 ```bash
+npm run serve
 npm run web
 npm run tui
 npm run api

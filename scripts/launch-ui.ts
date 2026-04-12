@@ -148,7 +148,11 @@ function isLauncherCommand(cmdline: string[], mode: UiMode): boolean {
 }
 
 function isApiCommand(cmdline: string[]): boolean {
-  return cmdline.some((value) => matchesCommandPath(value, "packages/api/src/index.ts"));
+  return cmdline.some(
+    (value) =>
+      matchesCommandPath(value, "packages/api/src/index.ts") ||
+      matchesCommandPath(value, "packages/api/dist/index.js")
+  );
 }
 
 function isWebDevCommand(cmdline: string[]): boolean {

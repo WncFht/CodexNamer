@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -461,5 +462,64 @@ describe("local api", () => {
     expect(written).toContain('value = " / "');
     expect(written).toContain('custom_prompt = "Always output a Chinese classification tag first."');
     expect(written).toContain('candidate_idle_seconds = 33');
+  });
+
+  it("serves built web assets and SPA fallback when configured", async () => {
+    const workspace = await createTempWorkspace();
+    const manager = await createManagerForTest({
+      codexHome: workspace.codexHome,
+      stateDir: workspace.stateDir
+    });
+    cleanup.push(async () => manager.close());
+
+    const webRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codexnamer-web-"));
+    cleanup.push(async () => {
+      await fs.rm(webRoot, { recursive: true, force: true });
+    });
+    await fs.mkdir(path.join(webRoot, "assets"), { recursive: true });
+    await fs.writeFile(
+      path.join(webRoot, "index.html"),
+      "<!doctype html><html><body><div id=\"root\">CodexNamer Web Shell</div></body></html>",
+      "utf8"
+    );
+    await fs.writeFile(path.join(webRoot, "assets", "app.js"), "console.log('codexnamer');", "utf8");
+
+    const app = await buildApiServer({
+      manager,
+      operator: "api-test",
+      staticWebRoot: webRoot
+    });
+    cleanup.push(async () => {
+      await app.close();
+    });
+
+    const root = await app.inject({
+      method: "GET",
+      url: "/"
+    });
+    expect(root.statusCode).toBe(200);
+    expect(root.headers["content-type"]).toContain("text/html");
+    expect(root.body).toContain("CodexNamer Web Shell");
+
+    const asset = await app.inject({
+      method: "GET",
+      url: "/assets/app.js"
+    });
+    expect(asset.statusCode).toBe(200);
+    expect(asset.body).toContain("codexnamer");
+
+    const deepLink = await app.inject({
+      method: "GET",
+      url: "/daemon/runtime"
+    });
+    expect(deepLink.statusCode).toBe(200);
+    expect(deepLink.headers["content-type"]).toContain("text/html");
+    expect(deepLink.body).toContain("CodexNamer Web Shell");
+
+    const missingApiRoute = await app.inject({
+      method: "GET",
+      url: "/api/v1/does-not-exist"
+    });
+    expect(missingApiRoute.statusCode).toBe(404);
   });
 });

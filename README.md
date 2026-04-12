@@ -101,13 +101,61 @@ npm install
 npm run build
 ```
 
-### Start the Web app
+### Start the local service
+
+```bash
+npm run serve
+```
+
+This is the product-style local entry point:
+
+- one long-lived local process
+- serves the built Web UI from the same port as the API
+- auto-starts the API-managed daemon by default
+- shuts down cleanly on `SIGINT` / `SIGTERM`
+
+Default URL:
+
+- `http://127.0.0.1:42110`
+
+### Install as a user service
+
+CodexNamer now exposes a cross-platform user-service wrapper around `codexnamer serve`:
+
+```bash
+# Register the service for the current user
+npm run cli -- service install
+
+# Start / stop / restart / inspect
+npm run cli -- service start
+npm run cli -- service stop
+npm run cli -- service restart
+npm run cli -- service status
+
+# Remove the registration again
+npm run cli -- service uninstall
+```
+
+Platform mapping:
+
+- Linux → `systemd --user`
+- macOS → `LaunchAgent`
+- Windows → Task Scheduler (`ONLOGON`)
+
+Current scope:
+
+- install / start / stop / restart / status / uninstall are implemented
+- the service runs the same `serve` flow with built Web assets
+- Linux behavior is covered by this repo's CI-equivalent validation chain
+- macOS / Windows command generation is implemented, but not live-verified in this Linux workspace yet
+
+### Start the Web dev launcher
 
 ```bash
 npm run web
 ```
 
-The launcher will:
+This remains the development entry point. The launcher will:
 
 - reuse a healthy local API if one already exists
 - or start a new API on an available `42110+` port
@@ -139,6 +187,12 @@ curl http://127.0.0.1:42110/api/v1/health
 ```
 
 `npm run api` now auto-starts a controller-managed daemon with the configured scan interval.
+
+If you also want it to serve a built dashboard from the same process:
+
+```bash
+npm run api -- --host 127.0.0.1 --port 42110 --web-root packages/web/dist
+```
 
 ### Start the daemon
 
@@ -281,6 +335,7 @@ npm test
 Useful local entry points:
 
 ```bash
+npm run serve
 npm run web
 npm run tui
 npm run api

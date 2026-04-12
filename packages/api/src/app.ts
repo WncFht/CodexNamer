@@ -1,3 +1,7 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+
+import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { CodexNamer } from "@codexnamer/core";
@@ -20,6 +24,7 @@ export type ApiServer = FastifyInstance & {
 export async function buildApiServer(options?: {
   manager?: CodexNamer;
   operator?: string;
+  staticWebRoot?: string;
 }): Promise<ApiServer> {
   const app = Fastify({
     logger: false
@@ -54,6 +59,37 @@ export async function buildApiServer(options?: {
   registerRuntimeRoutes(app, manager, eventLog);
   registerMaintenanceRoutes(app, manager, eventLog);
   registerDaemonRoutes(app, daemonController);
+
+  if (options?.staticWebRoot) {
+    const staticWebRoot = path.resolve(options.staticWebRoot);
+    const indexHtmlPath = path.join(staticWebRoot, "index.html");
+    if (!existsSync(indexHtmlPath)) {
+      throw new Error(`Web build not found at ${indexHtmlPath}. Run the web build first or pass a valid --web-root.`);
+    }
+
+    await app.register(fastifyStatic, {
+      root: staticWebRoot,
+      prefix: "/"
+    });
+
+    app.setNotFoundHandler((request, reply) => {
+      const requestPath = request.url.split("?")[0] ?? "/";
+      const shouldServeSpaShell =
+        request.method === "GET" &&
+        !requestPath.startsWith("/api/") &&
+        path.posix.extname(requestPath) === "";
+
+      if (shouldServeSpaShell) {
+        return reply.type("text/html; charset=utf-8").sendFile("index.html");
+      }
+
+      void reply.status(404).send({
+        error: "Not Found",
+        message: `Route ${request.method}:${request.url} not found`,
+        statusCode: 404
+      });
+    });
+  }
 
   return Object.assign(app, {
     daemonController

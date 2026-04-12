@@ -8,6 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "dependencies": {
+    "@codexnamer/api": "0.1.0",
     "@codexnamer/core": "0.1.0",
     "cac": "^6.7.14"
   }

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-import chokidar from "chokidar";
+import chokidar, { type FSWatcher } from "chokidar";
 
 import { CodexNamer } from "@codexnamer/core";
 
@@ -23,6 +24,8 @@ function parseArgs(argv: string[]): { once: boolean; intervalSeconds: number } {
 export class SessionSweepDaemon {
   private timer?: NodeJS.Timeout;
   private pendingTimer?: NodeJS.Timeout;
+  private watcher?: FSWatcher;
+  private activeSweep?: Promise<void>;
   private sweepRunning = false;
   private rerunRequested = false;
 
@@ -50,6 +53,24 @@ export class SessionSweepDaemon {
     console.log(JSON.stringify({ type: "daemon_sweep", summary, previews, applied: sweep.applied }, null, 2));
   }
 
+  private async runManagedSweep(errorLabel: string): Promise<void> {
+    const execution = (async () => {
+      try {
+        await this.runOnce();
+      } catch (error) {
+        console.error(errorLabel, error);
+      }
+    })();
+
+    this.activeSweep = execution.finally(() => {
+      if (this.activeSweep === execution) {
+        this.activeSweep = undefined;
+      }
+    });
+
+    await this.activeSweep;
+  }
+
   private triggerSweep(): void {
     if (this.sweepRunning) {
       this.rerunRequested = true;
@@ -59,9 +80,7 @@ export class SessionSweepDaemon {
     this.sweepRunning = true;
     void (async () => {
       try {
-        await this.runOnce();
-      } catch (error) {
-        console.error("[daemon] sweep failed", error);
+        await this.runManagedSweep("[daemon] sweep failed");
       } finally {
         this.sweepRunning = false;
         if (this.rerunRequested) {
@@ -83,14 +102,10 @@ export class SessionSweepDaemon {
   }
 
   async start(): Promise<void> {
-    try {
-      await this.runOnce();
-    } catch (error) {
-      console.error("[daemon] initial sweep failed", error);
-    }
+    await this.runManagedSweep("[daemon] initial sweep failed");
 
     const codexHome = this.manager.config.general.codexHome;
-    const watcher = chokidar.watch(
+    this.watcher = chokidar.watch(
       [
         path.join(codexHome, "sessions", "**", "*.jsonl"),
         path.join(codexHome, "session_index.jsonl")
@@ -100,22 +115,82 @@ export class SessionSweepDaemon {
       }
     );
 
-    watcher.on("add", () => this.scheduleSoon());
-    watcher.on("change", () => this.scheduleSoon());
+    this.watcher.on("add", () => this.scheduleSoon());
+    this.watcher.on("change", () => this.scheduleSoon());
 
     this.timer = setInterval(() => {
       this.triggerSweep();
     }, this.intervalSeconds * 1000);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.timer) {
       clearInterval(this.timer);
+      this.timer = undefined;
     }
     if (this.pendingTimer) {
       clearTimeout(this.pendingTimer);
+      this.pendingTimer = undefined;
+    }
+
+    this.rerunRequested = false;
+
+    if (this.watcher) {
+      const activeWatcher = this.watcher;
+      this.watcher = undefined;
+      await activeWatcher.close();
+    }
+
+    if (this.activeSweep) {
+      await this.activeSweep;
     }
   }
+}
+
+async function waitForShutdown(daemon: SessionSweepDaemon, manager: CodexNamer): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let closing = false;
+    const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+    const handlers = new Map<NodeJS.Signals, () => void>();
+
+    const cleanup = () => {
+      for (const [signal, handler] of handlers) {
+        process.off(signal, handler);
+      }
+      handlers.clear();
+    };
+
+    const close = async () => {
+      if (closing) {
+        return;
+      }
+      closing = true;
+      cleanup();
+      try {
+        await daemon.stop();
+        await manager.close();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    for (const signal of signals) {
+      const handler = () => {
+        void close();
+      };
+      handlers.set(signal, handler);
+      process.on(signal, handler);
+    }
+  });
+}
+
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) {
+    return false;
+  }
+  return import.meta.url === pathToFileURL(entry).href;
 }
 
 async function main(): Promise<void> {
@@ -133,6 +208,12 @@ async function main(): Promise<void> {
   }
 
   await daemon.start();
+  await waitForShutdown(daemon, manager);
 }
 
-void main();
+if (isMainModule()) {
+  void main().catch((error) => {
+    console.error(`[daemon] ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+}

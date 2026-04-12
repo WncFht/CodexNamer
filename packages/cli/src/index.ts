@@ -1,12 +1,29 @@
 #!/usr/bin/env node
 
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cac } from "cac";
 
+import { startApiServer, waitForShutdown } from "@codexnamer/api";
 import { CodexNamer } from "@codexnamer/core";
+import {
+  getManagedServiceStatus,
+  installManagedService,
+  restartManagedService,
+  runManagedServiceHost,
+  startManagedService,
+  stopManagedService,
+  uninstallManagedService
+} from "./service-manager.js";
 
 type IdOptions = { id?: string };
 type RenameOptions = { id?: string; name?: string };
 type BatchApplyOptions = { dirty?: boolean; preview?: boolean };
+type ServeOptions = { host?: string; port?: string | number; webRoot?: string; daemon?: boolean };
+type ServiceInstallOptions = ServeOptions & { start?: boolean };
+type ServiceHostOptions = { config?: string };
 
 async function withManager<T>(fn: (manager: CodexNamer) => Promise<T>): Promise<T> {
   const manager = await CodexNamer.create({ operator: "cli" });
@@ -27,12 +44,136 @@ function normalizeArgv(argv: string[]): string[] {
   if (argv[2] === "config" && argv[3] === "print") {
     return [...argv.slice(0, 2), "config-print", ...argv.slice(4)];
   }
+  if (argv[2] === "service" && typeof argv[3] === "string") {
+    const serviceSubcommand = argv[3];
+    if (serviceSubcommand === "run") {
+      return [...argv.slice(0, 2), "serve", ...argv.slice(4)];
+    }
+    if (["install", "start", "stop", "restart", "status", "uninstall"].includes(serviceSubcommand)) {
+      return [...argv.slice(0, 2), `service-${serviceSubcommand}`, ...argv.slice(4)];
+    }
+  }
   return argv;
+}
+
+function resolveServeWebRoot(explicitWebRoot?: string): string | undefined {
+  if (explicitWebRoot) {
+    const resolved = path.resolve(explicitWebRoot);
+    return existsSync(path.join(resolved, "index.html")) ? resolved : undefined;
+  }
+
+  const bundledRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+  return existsSync(path.join(bundledRoot, "index.html")) ? bundledRoot : undefined;
+}
+
+function resolvePort(portValue: string | number | undefined, fallback: number): number {
+  if (typeof portValue === "number" && Number.isFinite(portValue)) {
+    return portValue;
+  }
+  if (typeof portValue === "string" && portValue.length > 0) {
+    const parsed = Number(portValue);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
 }
 
 const normalizedArgv = normalizeArgv(process.argv);
 
 const cli = cac("codexnamer");
+
+cli
+  .command("serve", "Run the long-lived local service with built Web assets")
+  .option("--host <host>", "Host to bind")
+  .option("--port <port>", "Port to bind")
+  .option("--web-root <path>", "Directory containing a built Web app")
+  .option("--no-daemon", "Do not auto-start the background daemon")
+  .action(async (options: ServeOptions) => {
+    const host = options.host ?? "127.0.0.1";
+    const port = resolvePort(options.port, 42110);
+    const webRoot = resolveServeWebRoot(options.webRoot);
+    if (!webRoot) {
+      throw new Error(
+        "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html."
+      );
+    }
+
+    const app = await startApiServer({
+      host,
+      port,
+      webRoot,
+      autoStartDaemon: options.daemon !== false,
+      operator: "serve"
+    });
+
+    console.error(`[codexnamer] Service listening at http://${host}:${port}/`);
+    console.error(`[codexnamer] Web root: ${webRoot}`);
+    console.error(
+      options.daemon === false
+        ? "[codexnamer] Daemon auto-start is disabled for this run."
+        : "[codexnamer] Daemon auto-start is enabled for this run."
+    );
+
+    await waitForShutdown(app);
+  });
+
+cli
+  .command("service-install", "Install the local service into the OS user service manager")
+  .option("--host <host>", "Host to bind")
+  .option("--port <port>", "Port to bind")
+  .option("--web-root <path>", "Directory containing a built Web app")
+  .option("--no-daemon", "Do not auto-start the background daemon")
+  .option("--start", "Start the service immediately after install")
+  .action(async (options: ServiceInstallOptions) => {
+    const result = await installManagedService(options);
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+cli
+  .command("service-start", "Start the installed local service")
+  .action(async () => {
+    const result = await startManagedService();
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+cli
+  .command("service-stop", "Stop the installed local service")
+  .action(async () => {
+    const result = await stopManagedService();
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+cli
+  .command("service-restart", "Restart the installed local service")
+  .action(async () => {
+    const result = await restartManagedService();
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+cli
+  .command("service-status", "Show installed service status and health")
+  .action(async () => {
+    const result = await getManagedServiceStatus();
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+cli
+  .command("service-uninstall", "Remove the installed local service")
+  .action(async () => {
+    const result = await uninstallManagedService();
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+cli
+  .command("service-host", "Internal service entrypoint")
+  .option("--config <path>", "Path to service runtime config")
+  .action(async (options: ServiceHostOptions) => {
+    if (!options.config) {
+      throw new Error("--config is required");
+    }
+    await runManagedServiceHost(path.resolve(options.config));
+  });
 
 cli
   .command("list", "List known sessions")
