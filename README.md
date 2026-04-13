@@ -48,6 +48,9 @@ This project adds an external management layer on top of Codex's local data mode
 - **Daemon control in Web UI**  
   The Local API auto-starts a managed sweep daemon by default, and the Web app can stop/restart it while showing the next scheduled sweep countdown.
 
+- **Product-style Web UI**  
+  The Web surface now uses a warm Bokushi-inspired design system with unified cards, pills, light/dark/system themes, a lighter workspace rail, and maintenance charts that share one semantic palette.
+
 - **Practical queue operations**  
   Freeze sessions, requeue by rule signature, detect name collisions, compact `session_index.jsonl`, inspect provider diagnostics, and review AI request logs.
 
@@ -166,6 +169,13 @@ This remains the development entry point. The launcher will:
 Default Web URL:
 
 - `http://127.0.0.1:43110`
+
+Current Web UI behavior:
+
+- three-state theme toggle: `system → light → dark`
+- content-first Sessions / Settings / Maintenance / Daemon surfaces
+- unified maintenance chart palette driven by shared design tokens
+- AI provider diagnostics presented as one effective-config snapshot + connectivity receipt
 
 ### Start the TUI
 

@@ -347,8 +347,7 @@ a:hover {
 .settings-preview-card,
 .settings-tag-card-button,
 .settings-choice,
-.settings-nav-item,
-.sidebar-stat-row {
+.settings-nav-item {
   border: 1px solid var(--color-border-soft);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-soft);
@@ -362,7 +361,6 @@ a:hover {
 .btn-refresh,
 .btn-sm,
 .btn-chip,
-.pane-btn,
 .sidebar-btn,
 .project-item,
 .session-context-menu-item,
@@ -384,7 +382,6 @@ a:hover {
 .btn-refresh,
 .btn-sm,
 .btn-chip,
-.pane-btn,
 .sidebar-btn,
 .project-item,
 .settings-builder-chip,
@@ -401,7 +398,6 @@ a:hover {
 .btn-refresh,
 .btn-sm,
 .btn-chip,
-.pane-btn,
 .sidebar-btn,
 .project-item,
 .settings-builder-chip,
@@ -427,7 +423,6 @@ a:hover {
 .btn-refresh:hover,
 .btn-sm:hover,
 .btn-chip:hover,
-.pane-btn:hover,
 .sidebar-btn:hover,
 .project-item:hover,
 .settings-builder-chip:hover,
@@ -507,7 +502,6 @@ a:hover {
   box-shadow: none;
 }
 
-.pane-btn:focus-visible,
 .sidebar-btn:focus-visible,
 .project-item:focus-visible,
 .btn-refresh:focus-visible,
@@ -619,14 +613,6 @@ pre.settings-json {
   color: var(--color-text-primary);
 }
 
-.sidebar-copy {
-  margin-top: var(--space-2);
-  max-width: 18rem;
-  font-size: var(--font-size-xs);
-  line-height: 1.6;
-  color: var(--color-text-secondary);
-}
-
 .theme-toggle {
   flex: 0 0 auto;
 }
@@ -651,13 +637,6 @@ pre.settings-json {
   transform: scale(1.04) rotate(-8deg);
 }
 
-.pane-btn {
-  min-width: auto;
-  padding: 0.55rem 0.85rem;
-  background: color-mix(in srgb, var(--color-bg-surface) 64%, var(--color-bg-muted) 36%);
-  color: var(--color-text-secondary);
-}
-
 .sidebar-actions {
   gap: var(--space-2);
   padding: var(--space-4);
@@ -672,6 +651,9 @@ pre.settings-json {
 }
 
 #projectList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
   padding: var(--space-4);
 }
 
@@ -681,7 +663,6 @@ pre.settings-json {
 }
 
 .project-group-wrapper:not(:first-child) {
-  margin-top: var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-soft);
 }
@@ -693,17 +674,31 @@ pre.settings-json {
   text-transform: uppercase;
 }
 
+.project-group-items {
+  display: grid;
+  gap: var(--space-2);
+}
+
 .project-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3);
   width: 100%;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-bg-surface) 54%, var(--color-bg-muted) 46%);
   color: var(--color-text-secondary);
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    color var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
 .project-item .name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -711,50 +706,40 @@ pre.settings-json {
 }
 
 .project-item .count {
+  min-width: 2.25rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-bg-muted) 64%, var(--color-bg-surface) 36%);
   color: var(--color-text-muted);
   font-size: var(--font-size-2xs);
+  text-align: center;
 }
 
-.sidebar-footer {
-  display: grid;
-  gap: var(--space-2);
-  padding: 0 var(--space-4) var(--space-4);
-}
-
-.sidebar-stat-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-bg-surface) 60%, var(--color-bg-muted) 40%);
-}
-
-.sidebar-stat-row span {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-2xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.sidebar-stat-row strong {
+.project-item:hover {
+  border-color: var(--color-border-soft);
+  background: color-mix(in srgb, var(--color-bg-surface) 70%, var(--color-bg-muted) 30%);
   color: var(--color-text-primary);
-  font-size: var(--font-size-xs);
 }
 
-#sidebar.collapsed {
-  background: color-mix(in srgb, var(--color-bg-muted) 72%, var(--color-bg-page) 28%);
+.project-item.active {
+  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-accent-soft) 78%, var(--color-bg-surface) 22%),
+      color-mix(in srgb, var(--color-bg-surface) 84%, var(--color-accent-soft) 16%)
+    ),
+    var(--color-bg-surface);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 
-#sidebar.collapsed .sidebar-header {
-  padding-inline: var(--space-3);
-  align-items: center;
+.project-item.active:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
 }
 
-#sidebar.collapsed .sidebar-header-actions {
-  width: 100%;
-  justify-content: center;
+.project-item.active .count {
+  background: color-mix(in srgb, var(--color-accent-soft) 80%, var(--color-bg-surface) 20%);
+  color: var(--color-link);
 }
 
 .history-layout {
@@ -1239,6 +1224,10 @@ pre.settings-json {
   color: var(--color-text-primary);
 }
 
+.settings-provider-snapshot-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
 .settings-choice {
   min-height: 0;
 }
@@ -1390,8 +1379,13 @@ pre.settings-json {
 .requeue-summary-card[data-tone="success"],
 .ops-state-card[data-tone="success"],
 .ops-reason-card[data-tone="success"] {
-  border-color: color-mix(in srgb, var(--color-success) 24%, var(--color-border));
-  background: color-mix(in srgb, var(--color-success) 10%, var(--color-bg-surface) 90%);
+  border-color: color-mix(in srgb, var(--color-success) 18%, var(--color-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-success) 4%, var(--color-bg-surface) 96%),
+      color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
+    );
 }
 
 .ops-runtime-inline-item.warning,
@@ -1399,15 +1393,25 @@ pre.settings-json {
 .requeue-summary-card[data-tone="warning"],
 .ops-state-card[data-tone="warning"],
 .ops-reason-card[data-tone="warning"] {
-  border-color: color-mix(in srgb, var(--color-warning) 28%, var(--color-border));
-  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-surface) 88%);
+  border-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-warning) 5%, var(--color-bg-surface) 95%),
+      color-mix(in srgb, var(--color-bg-muted) 14%, var(--color-bg-surface) 86%)
+    );
 }
 
 .ops-runtime-inline-item.manual,
 .ops-state-card[data-tone="manual"],
 .ops-reason-card[data-tone="manual"] {
-  border-color: color-mix(in srgb, var(--color-note) 24%, var(--color-border));
-  background: color-mix(in srgb, var(--color-note) 10%, var(--color-bg-surface) 90%);
+  border-color: color-mix(in srgb, var(--color-note) 18%, var(--color-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-note) 4%, var(--color-bg-surface) 96%),
+      color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
+    );
 }
 
 .ops-action-button-row,
@@ -1418,6 +1422,103 @@ pre.settings-json {
 .settings-provider-flow,
 .daemon-actions {
   gap: var(--space-2);
+}
+
+.settings-provider-flow {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: var(--space-1);
+}
+
+.settings-provider-step {
+  display: inline-flex;
+  align-items: center;
+  min-height: 0;
+  padding: 0.45rem 0.78rem;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent-soft) 52%, var(--color-bg-surface) 48%);
+  box-shadow: none;
+}
+
+.settings-provider-step strong {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-link);
+}
+
+.settings-connectivity-card {
+  background: color-mix(in srgb, var(--color-bg-surface) 86%, var(--color-bg-muted) 14%);
+}
+
+.settings-connectivity-card.success {
+  border-color: color-mix(in srgb, var(--color-success) 18%, var(--color-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-success) 4%, var(--color-bg-surface) 96%),
+      color-mix(in srgb, var(--color-bg-muted) 10%, var(--color-bg-surface) 90%)
+    );
+}
+
+.settings-connectivity-card.danger {
+  border-color: color-mix(in srgb, var(--color-danger) 18%, var(--color-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-danger) 4%, var(--color-bg-surface) 96%),
+      color-mix(in srgb, var(--color-bg-muted) 10%, var(--color-bg-surface) 90%)
+    );
+}
+
+.settings-connectivity-card.idle {
+  border-color: color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-accent-soft) 20%, var(--color-bg-surface) 80%),
+      color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
+    );
+}
+
+.settings-connectivity-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.settings-connectivity-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.settings-connectivity-stat {
+  display: grid;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-bg-surface) 76%, var(--color-bg-muted) 24%);
+  box-shadow: none;
+}
+
+.settings-connectivity-stat span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-connectivity-stat strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.settings-connectivity-note {
+  margin: 0;
 }
 
 .ops-chart-canvas {
@@ -1565,7 +1666,6 @@ pre.settings-json {
   .sidebar-header,
   .sidebar-actions,
   #projectList,
-  .sidebar-footer,
   .settings-header,
   .settings-shell,
   .daemon-header,
@@ -1681,7 +1781,6 @@ pre.settings-json {
   .btn-refresh,
   .btn-sm,
   .btn-chip,
-  .pane-btn,
   .sidebar-btn,
   .project-item,
   .session-item,

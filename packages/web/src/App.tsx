@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { formatWhen } from "./browser-utils.js";
 import { copyTextToClipboard } from "./clipboard.js";
 import { SidebarRail } from "./app-shell/SidebarRail.js";
 import { TopNoticeBanner } from "./app-shell/TopNoticeBanner.js";
@@ -128,15 +127,13 @@ export function App() {
       className={paneLayout.sessionFocusMode ? "session-focus-mode" : undefined}
       style={
         {
-          "--sidebar-width": `${paneLayout.workspacePaneCollapsed ? 88 : paneLayout.workspacePaneWidth}px`,
+          "--sidebar-width": `${paneLayout.workspacePaneWidth}px`,
           "--session-list-width": `${paneLayout.sessionPaneCollapsed ? 0 : paneLayout.sessionPaneWidth}px`
         } as React.CSSProperties
       }
     >
       <SidebarRail
         allWorkspacesId={ALL_WORKSPACES_ID}
-        formatWhen={(value) => formatWhen(value, uiLanguage)}
-        lastSyncAt={state.lastSyncAt}
         onSelectTab={(tab) =>
           React.startTransition(() => {
             addAppTransitionType("nav-lateral");
@@ -144,19 +141,14 @@ export function App() {
           })
         }
         onSelectWorkspace={state.setSelectedWorkspaceId}
-        onToggleCollapsed={() => paneLayout.setWorkspacePaneCollapsed((value) => !value)}
-        previewApplyCount={previewApplyCount}
-        previewSuggestCount={previewSuggestCount}
         selectedWorkspaceId={state.selectedWorkspaceId}
         tab={state.tab}
         themeLabel={themeModeLabel}
         themeMode={theme.mode}
         themeResolved={theme.resolvedTheme}
         totalWorkspaceSessionCount={totalWorkspaceSessionCount}
-        visibleSessionCount={state.sessions.length}
         onCycleTheme={theme.cycleMode}
         tt={tt as (key: string) => string}
-        workspacePaneCollapsed={paneLayout.workspacePaneCollapsed}
         workspaces={state.workspaces}
       />
 

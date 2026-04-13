@@ -13,10 +13,10 @@ export function RuntimeSection(props: {
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("runtime")}
-      title={props.text.inline("运行时解析结果与 provider 路径", "Resolved runtime state and provider path")}
+      title={props.text.inline("运行时与解析结果", "Runtime and resolved configuration")}
       copy={props.text.inline(
-        "查看当前运行时路径、provider 解析和配置位置。",
-        "View runtime paths, provider resolution, and config locations."
+        "查看配置来源、路径和 provider 解析结果。",
+        "Inspect config sources, paths, and resolved provider state."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">

@@ -71,23 +71,23 @@ export function SettingsNav(props: {
   const labels: Record<SettingsSectionId, { title: string; copy: string }> = {
     naming: {
       title: props.text.inline("命名策略", "Naming policy"),
-      copy: props.text.inline("规则、上下文和标题结构。", "Rules, context, and title structure.")
+      copy: props.text.inline("标题结构与上下文。", "Title structure and context.")
     },
     ai: {
       title: props.text.inline("AI 提供方", "AI provider"),
-      copy: props.text.inline("后端、配置来源与 profile。", "Backend, source, and profiles.")
+      copy: props.text.inline("后端、来源与模型。", "Backend, source, and model.")
     },
     scheduler: {
       title: props.text.inline("调度阈值", "Scheduler"),
-      copy: props.text.inline("自动应用与空闲阈值。", "Auto-apply and idle thresholds.")
+      copy: props.text.inline("自动应用与阈值。", "Auto-apply and thresholds.")
     },
     runtime: {
       title: props.text.inline("运行时", "Runtime"),
-      copy: props.text.inline("解析结果、路径与 provider 状态。", "Resolved paths, provider state, and runtime info.")
+      copy: props.text.inline("解析结果与环境。", "Resolved runtime and environment.")
     },
     overview: {
       title: props.text.inline("总览", "Overview"),
-      copy: props.text.inline("当前命名队列与系统状态。", "Current rename queue and system state.")
+      copy: props.text.inline("队列、状态与统计。", "Queue, status, and stats.")
     }
   };
 

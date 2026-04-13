@@ -18,10 +18,10 @@ export function OverviewSection(props: {
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("controlState")}
-      title={props.text.inline("当前命名系统总览", "Rename system overview")}
+      title={props.text.inline("命名系统总览", "Naming system overview")}
       copy={props.text.inline(
-        "集中显示队列、命名和运行状态。",
-        "Shows queue, naming, and runtime status in one place."
+        "查看队列、命名和运行态。",
+        "Review queue, naming, and runtime state."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">

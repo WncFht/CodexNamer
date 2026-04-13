@@ -1,7 +1,7 @@
 # 前端设计系统重构计划（Niracler / Bokushi 参考）
 
 日期：`2026-04-13`
-状态：`implemented on 2026-04-13`
+状态：`implemented + reviewed on 2026-04-13`
 参考：
 
 - 外部设计稿：`docs/research/niracler-design.md`
@@ -499,3 +499,108 @@
 - `docs/reviews/assets/frontend-daemon-niracler-explicit-light-2026-04-13.png`
 - `docs/reviews/assets/frontend-sessions-niracler-dark-2026-04-13.png`
 - `docs/reviews/assets/frontend-settings-niracler-dark-2026-04-13.png`
+
+## 11. 当日收尾审查与二次修正
+
+在首轮设计系统落地后，又针对真实页面做了一轮对照 `design.md` 的收尾审查。本轮不再扩大页面范围，重点修正了剩余的不一致项。
+
+### 11.1 Sidebar 最终状态
+
+最终左侧 rail 已进一步收敛：
+
+- 保留品牌标题、主题按钮、tab 导航、workspace 列表
+- 去掉了说明性副文案
+- 去掉了 “当前选择” 面板
+- 去掉了左栏底部统计块
+- 去掉了 workspace sidebar 的折叠入口
+
+对应代码：
+
+- `packages/web/src/app-shell/SidebarRail.tsx`
+- `packages/web/src/app-shell/usePaneLayoutState.ts`
+- `packages/web/src/App.tsx`
+- `packages/web/src/design-system.css`
+
+说明：
+
+- 不只是隐藏了按钮，而是把 `workspacePaneCollapsed` 的前端生效链路一起清掉
+- 当前 sidebar 只保留 design.md 更鼓励的 content-first 导航结构
+
+### 11.2 Settings / AI provider 的最终收敛
+
+Settings 在首轮落地后仍有两类偏差：
+
+1. 顶部与 section copy 偏说明型
+2. AI provider 中部分字段重复出现
+
+最终修正后：
+
+- `Overview / Scheduler / Runtime` 的 section copy 已进一步缩短
+- `AI provider` 收敛成三层：
+  - 接入方式
+  - 当前生效配置
+  - 连通性回执
+- 连通性卡片上方保留：
+  - 状态
+  - Ping
+  - 测试时间
+- 下方不再重复这三项，改为：
+  - `baseUrl`
+  - `model`
+  - `transport`
+  - `credential`
+
+对应代码：
+
+- `packages/web/src/SettingsPanel.tsx`
+- `packages/web/src/features/settings/shared.tsx`
+- `packages/web/src/features/settings/sections/AiProviderSection.tsx`
+- `packages/web/src/features/settings/sections/OverviewSection.tsx`
+- `packages/web/src/features/settings/sections/SchedulerSection.tsx`
+- `packages/web/src/features/settings/sections/RuntimeSection.tsx`
+
+### 11.3 图表配色统一结论
+
+这轮额外修掉的不是“某个图太绿”，而是图表之间的语义色不一致。
+
+最终统一后的图表语义：
+
+- `accent`：主流程 / finalize-ready / apply queue
+- `note`：suggest / candidate / pending
+- `success`：已应用 / auto-applied / latest
+- `warning`：dirty / active / unknown
+- `danger`：failed / outdated
+- `muted`：skip / discovered / neutral
+
+额外修正点：
+
+- `charting.tsx` 的 fallback 颜色改到 Bokushi token，不再回落到旧主题色
+- `Rename activity` 的 applied area 改成 success tint
+- `preview / suggest` 在多张图里统一到 `note`
+- Sankey 的 apply / suggest 节点色也按相同语义统一
+
+对应代码：
+
+- `packages/web/src/features/maintenance/charting.tsx`
+- `packages/web/src/features/maintenance/chart-options.ts`
+
+### 11.4 二次验证结果
+
+代码验证：
+
+- `npm run lint`
+- `npm run web:build`
+- `npm test`
+- `npm run build`
+
+二次视觉验证截图：
+
+- `docs/reviews/assets/settings-ai-light-review-2026-04-13.png`
+- `docs/reviews/assets/settings-ai-dark-review-2026-04-13.png`
+- `docs/reviews/assets/maintenance-light-full-review-2026-04-13.png`
+- `docs/reviews/assets/maintenance-dark-full-review-2026-04-13.png`
+
+最终结论：
+
+- 当前前端已经基本收敛到 `docs/research/niracler-design.md` 的目标语气
+- 剩余问题如果还有，也更偏局部组件 polish，而不是系统级风格分裂

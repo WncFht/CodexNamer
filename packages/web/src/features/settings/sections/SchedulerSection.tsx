@@ -13,10 +13,10 @@ export function SchedulerSection(props: {
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("scheduler")}
-      title={props.text.inline("控制什么时候建议、什么时候自动应用", "Control when to suggest and when to auto-apply")}
+      title={props.text.inline("调度与自动应用阈值", "Scheduler and auto-apply thresholds")}
       copy={props.text.inline(
-        "这里是自动 rename 的时间阈值和保护阈值。配置层允许自动应用，但真正是否执行，还要结合运行态里的 daemon 状态一起看。",
-        "These are the timing and protection thresholds for auto rename. Config can allow auto apply, but actual execution still depends on daemon runtime state."
+        "设置扫描频率、空闲阈值和自动应用条件。",
+        "Set scan cadence, idle thresholds, and auto-apply conditions."
       )}
     >
       <div className="settings-stage-grid">

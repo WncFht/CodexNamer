@@ -188,15 +188,11 @@ export function SettingsPanel(props: {
       <header className="settings-header">
         <div className="settings-header-copy">
           <p className="panel-kicker">{inline("设置", "Settings")}</p>
-          <h2>{inline("命名策略与后台设置", "Naming policy and runtime settings")}</h2>
+          <h2>{inline("命名与运行设置", "Naming and runtime settings")}</h2>
           <p>
             {inline(
-              dirty
-                ? "当前有未保存修改。先完成编辑，再保存，并在需要时手动刷新 Prompt 预览。"
-                : "在这里调整命名规则、Provider 和后台阈值。保存后，新配置会进入后续 sweep 与状态统计。",
-              dirty
-                ? "You have unsaved edits. Finish the draft first, then save and refresh prompt preview only when needed."
-                : "Adjust naming rules, provider settings, and runtime thresholds here. Saved changes feed into later sweeps and runtime stats."
+              dirty ? "当前有未保存修改。保存后再按需验证 Prompt。" : "调整命名规则、AI 提供方和后台阈值。",
+              dirty ? "You have unsaved edits. Save first, then verify the prompt when needed." : "Adjust naming rules, AI providers, and runtime thresholds."
             )}
           </p>
         </div>

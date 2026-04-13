@@ -53,12 +53,6 @@ export function AiProviderSection(props: {
         ? [selectedProfile?.model, props.providers?.resolvedProvider?.model, inheritedCodex.model]
         : [props.providers?.resolvedProvider?.model, inheritedCodex.model, selectedProfile?.model])
     ) ?? props.text.tt("nA");
-  const selectedRequestType =
-    firstNonEmptyString(
-      ...(usingManualSource
-        ? [selectedProfile?.requestType, resolvedProvider.requestType, inheritedCodex.wireApi]
-        : [resolvedProvider.requestType, inheritedCodex.wireApi, selectedProfile?.requestType])
-    ) ?? props.text.tt("nA");
   const resolvedRequestedBackend = firstNonEmptyString(resolvedProvider.requestedBackend, props.draft.aiBackend) ?? props.text.tt("nA");
   const resolvedTransport = firstNonEmptyString(resolvedProvider.preferredTransport, resolvedProvider.transport) ?? props.text.tt("nA");
   const resolvedCredential = resolvedProvider.hasCredential
@@ -70,9 +64,6 @@ export function AiProviderSection(props: {
   const requestPath = [props.draft.aiBackend, props.draft.aiProviderSource, selectedProfileLabel, resolvedTransport].filter(Boolean);
   const timeoutOptions = Array.from(new Set([props.draft.aiTimeoutSeconds, "15", "30", "45", "60", "90"])).filter(Boolean);
   const temperatureOptions = Array.from(new Set([props.draft.aiTemperature, "0", "0.2", "0.4", "0.7", "1"])).filter(Boolean);
-  const sourceDetailTitle = usingManualSource
-    ? props.text.inline("手动配置", "Manual config")
-    : props.text.inline("Codex 配置", "Codex config");
   const sourceDetailCopy = usingManualSource
     ? props.text.inline(
         "当前使用手动配置。",
@@ -96,14 +87,28 @@ export function AiProviderSection(props: {
   const connectivitySummary =
     firstNonEmptyString(props.providerTestResult?.responseText, props.providerTestResult?.error) ??
     props.text.inline("还没有测试结果。", "No connectivity result yet.");
+  const snapshotFacts = [
+    { label: props.text.inline("接入后端", "Requested backend"), value: resolvedRequestedBackend },
+    { label: props.text.inline("传输方式", "Transport"), value: resolvedTransport },
+    {
+      label: usingManualSource ? props.text.tt("selectedProfile") : props.text.inline("配置来源", "Config source"),
+      value: selectedProfileLabel
+    },
+    { label: props.text.tt("providerRef"), value: String(resolvedProvider.providerRef ?? selectedProfile?.providerRef ?? props.text.tt("nA")) },
+    { label: props.text.inline("凭证", "Credential"), value: resolvedCredential },
+    { label: props.text.inline("HTTP 直连", "Direct HTTP"), value: directHttpLabel },
+    { label: props.text.tt("baseUrl"), value: selectedBaseUrl },
+    { label: props.text.tt("model"), value: selectedModel },
+    { label: props.text.inline("requires auth", "Requires auth"), value: resolvedProvider.requiresOpenaiAuth ? props.text.inline("是", "Yes") : props.text.inline("否", "No") }
+  ];
 
   return (
     <SettingsSectionFrame
       kicker={props.text.tt("provider")}
-      title={props.text.inline("AI 提供方与连通性", "AI provider and connectivity")}
+      title={props.text.inline("AI 提供方", "AI provider")}
       copy={props.text.inline(
-        "设置请求类型、配置来源，并查看当前 provider 与测试结果。",
-        "Set request type and config source, then view the current provider and test result."
+        "统一查看接入方式、当前生效配置和连通性结果。",
+        "Review access mode, the effective provider config, and connectivity in one place."
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -111,7 +116,10 @@ export function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.tt("ai")}</p>
-              <h4>{props.text.inline("请求类型与配置来源", "Request type and config source")}</h4>
+              <h4>{props.text.inline("接入方式", "Access mode")}</h4>
+              <p className="settings-copy">
+                {props.text.inline("先决定请求类型与配置来源，再执行导入或连通性测试。", "Choose request type and source first, then import or test the provider.")}
+              </p>
             </div>
           </div>
           <div className="settings-two-up">
@@ -180,74 +188,31 @@ export function AiProviderSection(props: {
             </button>
           </div>
           <div className="settings-provider-flow">
-            {requestPath.map((step, index) => (
-              <div className="settings-provider-step" key={`${index}-${step}`}>
-                <span>{index + 1}</span>
+            {requestPath.map((step) => (
+              <div className="settings-provider-step" key={step}>
                 <strong>{step}</strong>
               </div>
             ))}
           </div>
         </article>
 
-        <article className="settings-surface-card">
+        <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
-              <p className="panel-kicker">{props.text.inline("Resolved route", "Resolved route")}</p>
-              <h4>{props.text.inline("当前请求路径", "Current request route")}</h4>
+              <p className="panel-kicker">{props.text.inline("Effective provider", "Effective provider")}</p>
+              <h4>{props.text.inline("当前生效配置", "Effective provider snapshot")}</h4>
+              <p className="settings-copy">
+                {props.text.inline("这里显示最终参与请求的接入方式、模型和接口地址。", "This shows the final route, model, and endpoint used for requests.")}
+              </p>
             </div>
           </div>
-          <dl className="settings-runtime-grid compact">
-            <div>
-              <dt>{props.text.tt("requestType")}</dt>
-              <dd>{resolvedRequestedBackend}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("传输方式", "Transport")}</dt>
-              <dd>{resolvedTransport}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("凭证", "Credential")}</dt>
-              <dd>{resolvedCredential}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("HTTP 直连", "Direct HTTP")}</dt>
-              <dd>{directHttpLabel}</dd>
-            </div>
-          </dl>
-        </article>
-
-        <article className="settings-surface-card">
-          <div className="settings-card-header">
-            <div>
-              <p className="panel-kicker">{props.text.inline("Resolved target", "Resolved target")}</p>
-              <h4>{props.text.inline("当前 provider", "Current provider")}</h4>
-            </div>
-          </div>
-          <dl className="settings-runtime-grid compact">
-            <div>
-              <dt>{usingManualSource ? props.text.tt("selectedProfile") : props.text.inline("配置来源", "Config source")}</dt>
-              <dd>{selectedProfileLabel}</dd>
-            </div>
-            <div>
-              <dt>{props.text.tt("baseUrl")}</dt>
-              <dd>{selectedBaseUrl}</dd>
-            </div>
-            <div>
-              <dt>{props.text.tt("model")}</dt>
-              <dd>{selectedModel}</dd>
-            </div>
-            <div>
-              <dt>{props.text.tt("requestType")}</dt>
-              <dd>{selectedRequestType}</dd>
-            </div>
-            <div>
-              <dt>{props.text.tt("providerRef")}</dt>
-              <dd>{String(resolvedProvider.providerRef ?? selectedProfile?.providerRef ?? props.text.tt("nA"))}</dd>
-            </div>
-            <div>
-              <dt>{props.text.inline("requires auth", "Requires auth")}</dt>
-              <dd>{resolvedProvider.requiresOpenaiAuth ? props.text.inline("是", "Yes") : props.text.inline("否", "No")}</dd>
-            </div>
+          <dl className="settings-runtime-grid compact settings-provider-snapshot-grid">
+            {snapshotFacts.map((fact) => (
+              <div key={`${fact.label}-${fact.value}`}>
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
+              </div>
+            ))}
           </dl>
           <details className="settings-disclosure">
             <summary>{props.text.tt("inspectResolvedProvider")}</summary>
@@ -259,31 +224,44 @@ export function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Connectivity", "Connectivity")}</p>
-              <h4>{props.text.inline("测试结果与延迟", "Test result and latency")}</h4>
+              <h4>{props.text.inline("连通性检查", "Connectivity check")}</h4>
+              <p className="settings-copy">
+                {props.text.inline("测试结果只回显当前接入配置，不影响保存。", "The test result only reflects the current route and does not affect saving.")}
+              </p>
             </div>
           </div>
-          <div className="settings-connectivity-layout">
-            <section className="settings-connectivity-hero">
-              <span className={`settings-status-pill ${connectivityTone}`}>{connectivityStatus}</span>
-              <strong>{connectivityLatency}</strong>
-              <p>{connectivitySummary}</p>
-            </section>
+          <div className="settings-connectivity-stack">
+            <div className="settings-connectivity-summary">
+              <article className="settings-connectivity-stat">
+                <span>{props.text.inline("状态", "Status")}</span>
+                <strong><span className={`settings-status-pill ${connectivityTone}`}>{connectivityStatus}</span></strong>
+              </article>
+              <article className="settings-connectivity-stat">
+                <span>{props.text.inline("Ping", "Ping")}</span>
+                <strong>{connectivityLatency}</strong>
+              </article>
+              <article className="settings-connectivity-stat">
+                <span>{props.text.inline("测试时间", "Tested at")}</span>
+                <strong>{props.providerTestResult?.testedAt ?? props.text.tt("nA")}</strong>
+              </article>
+            </div>
+            <div className="settings-inline-note settings-connectivity-note">{connectivitySummary}</div>
             <dl className="settings-runtime-grid compact settings-connectivity-grid">
               <div>
-                <dt>{props.text.inline("状态", "Status")}</dt>
-                <dd>{connectivityStatus}</dd>
+                <dt>{props.text.tt("baseUrl")}</dt>
+                <dd>{selectedBaseUrl}</dd>
               </div>
               <div>
-                <dt>{props.text.inline("Ping", "Ping")}</dt>
-                <dd>{connectivityLatency}</dd>
+                <dt>{props.text.tt("model")}</dt>
+                <dd>{selectedModel}</dd>
               </div>
               <div>
-                <dt>{props.text.inline("测试时间", "Tested at")}</dt>
-                <dd>{props.providerTestResult?.testedAt ?? props.text.tt("nA")}</dd>
+                <dt>{props.text.inline("传输方式", "Transport")}</dt>
+                <dd>{resolvedTransport}</dd>
               </div>
               <div>
-                <dt>{props.text.inline("结果摘要", "Summary")}</dt>
-                <dd>{connectivitySummary}</dd>
+                <dt>{props.text.inline("凭证", "Credential")}</dt>
+                <dd>{resolvedCredential}</dd>
               </div>
             </dl>
           </div>
@@ -293,7 +271,7 @@ export function AiProviderSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Source detail", "Source detail")}</p>
-              <h4>{sourceDetailTitle}</h4>
+              <h4>{props.text.inline("配置详情", "Source configuration")}</h4>
               <p className="settings-copy">{sourceDetailCopy}</p>
             </div>
           </div>

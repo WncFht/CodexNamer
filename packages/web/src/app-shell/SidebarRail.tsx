@@ -7,21 +7,14 @@ import type { ResolvedTheme, ThemeMode } from "./useThemePreference.js";
 
 export function SidebarRail(props: {
   tab: TabId;
-  workspacePaneCollapsed: boolean;
   totalWorkspaceSessionCount: number;
-  visibleSessionCount: number;
   workspaces: WorkspaceSummary[];
   selectedWorkspaceId: string;
   allWorkspacesId: string;
-  previewApplyCount: number;
-  previewSuggestCount: number;
-  lastSyncAt: string | null;
   tt: (key: string) => string;
   themeLabel: string;
   themeMode: ThemeMode;
   themeResolved: ResolvedTheme;
-  formatWhen: (value?: string | null) => string;
-  onToggleCollapsed: () => void;
   onCycleTheme: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectTab: (tab: TabId) => void;
@@ -33,19 +26,13 @@ export function SidebarRail(props: {
     { id: "requeue", label: props.tt("requeue") },
     { id: "daemon", label: props.tt("daemon") }
   ];
-  const renameQueueCount = props.previewApplyCount + props.previewSuggestCount;
 
   return (
-    <aside
-      className={props.workspacePaneCollapsed ? "collapsed" : undefined}
-      id="sidebar"
-      style={{ viewTransitionName: "persistent-nav" } as React.CSSProperties}
-    >
+    <aside id="sidebar" style={{ viewTransitionName: "persistent-nav" } as React.CSSProperties}>
       <div className="sidebar-header">
         <div className="sidebar-brand-copy">
           <p className="sidebar-kicker">Session Control</p>
           <h1 className="home-link">CodexNamer</h1>
-          <p className="sidebar-copy">{props.tt("sidebarSummary")}</p>
         </div>
         <div className="sidebar-header-actions">
           <ThemeToggle
@@ -54,16 +41,6 @@ export function SidebarRail(props: {
             onToggle={props.onCycleTheme}
             resolvedTheme={props.themeResolved}
           />
-          <button
-            aria-controls="sidebar"
-            aria-expanded={!props.workspacePaneCollapsed}
-            className="pane-btn"
-            onClick={props.onToggleCollapsed}
-            title={props.workspacePaneCollapsed ? props.tt("expandWorkspacePane") : props.tt("collapseWorkspacePane")}
-            type="button"
-          >
-            {props.workspacePaneCollapsed ? props.tt("open") : props.tt("fold")}
-          </button>
         </div>
       </div>
 
@@ -110,21 +87,6 @@ export function SidebarRail(props: {
           </div>
         </div>
       </nav>
-
-      <div className="sidebar-footer compact">
-        <div className="sidebar-stat-row">
-          <span>{props.tt("visible")}</span>
-          <strong>{props.visibleSessionCount}</strong>
-        </div>
-        <div className="sidebar-stat-row">
-          <span>{props.tt("queueSummary")}</span>
-          <strong>{renameQueueCount}</strong>
-        </div>
-        <div className="sidebar-stat-row muted">
-          <span>{props.tt("lastSync")}</span>
-          <strong>{props.formatWhen(props.lastSyncAt)}</strong>
-        </div>
-      </div>
     </aside>
   );
 }

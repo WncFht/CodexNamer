@@ -4,6 +4,54 @@ import type { ChartBuilder, ChartOption, ChartTheme } from "./charting.js";
 
 type InlineText = (zh: string, en: string) => string;
 
+function buildChartTooltip(theme: ChartTheme, axisPointer?: Record<string, unknown>) {
+  return {
+    trigger: axisPointer ? "axis" : "item",
+    ...(axisPointer ? { axisPointer } : {}),
+    confine: true,
+    backgroundColor: theme.tooltipBg,
+    borderColor: theme.tooltipBorder,
+    borderWidth: 1,
+    textStyle: {
+      color: theme.tooltipText,
+      fontSize: 12
+    }
+  };
+}
+
+function buildSliderDataZoom(theme: ChartTheme, startValue: number, endValue: number, zoomLock: boolean) {
+  return [
+    {
+      type: "inside",
+      filterMode: "none",
+      zoomLock,
+      startValue,
+      endValue
+    },
+    {
+      type: "slider",
+      filterMode: "none",
+      height: 18,
+      bottom: 18,
+      borderColor: "transparent",
+      backgroundColor: theme.surface,
+      fillerColor: theme.accentTint,
+      handleStyle: {
+        color: theme.accent,
+        borderColor: theme.border
+      },
+      moveHandleStyle: {
+        color: theme.accent
+      },
+      textStyle: {
+        color: theme.muted
+      },
+      startValue,
+      endValue
+    }
+  ];
+}
+
 function sweepAxisLabel(value: string, language: UiLanguage): string {
   return new Intl.DateTimeFormat(language, {
     month: "numeric",
@@ -32,16 +80,7 @@ export function buildRenameActivityOption(params: {
   return (theme: ChartTheme, echartsLib: any): ChartOption => ({
     backgroundColor: "transparent",
     animationDuration: 280,
-    tooltip: {
-      trigger: "axis",
-      confine: true,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: {
-        color: "#fff",
-        fontSize: 12
-      }
-    },
+    tooltip: buildChartTooltip(theme, { type: "line" }),
     legend: {
       top: 8,
       left: 16,
@@ -65,36 +104,12 @@ export function buildRenameActivityOption(params: {
       bottom: 72,
       containLabel: true
     },
-    dataZoom: [
-      {
-        type: "inside",
-        filterMode: "none",
-        zoomLock: overview.activity.buckets.length <= 8,
-        startValue: Math.max(0, overview.activity.buckets.length - 8),
-        endValue: Math.max(0, overview.activity.buckets.length - 1)
-      },
-      {
-        type: "slider",
-        filterMode: "none",
-        height: 18,
-        bottom: 18,
-        borderColor: "transparent",
-        backgroundColor: theme.surface,
-        fillerColor: "rgba(201, 100, 66, 0.18)",
-        handleStyle: {
-          color: theme.accent,
-          borderColor: theme.surfaceAlt
-        },
-        moveHandleStyle: {
-          color: theme.accent
-        },
-        textStyle: {
-          color: theme.muted
-        },
-        startValue: Math.max(0, overview.activity.buckets.length - 8),
-        endValue: Math.max(0, overview.activity.buckets.length - 1)
-      }
-    ],
+    dataZoom: buildSliderDataZoom(
+      theme,
+      Math.max(0, overview.activity.buckets.length - 8),
+      Math.max(0, overview.activity.buckets.length - 1),
+      overview.activity.buckets.length <= 8
+    ),
     xAxis: {
       type: "category",
       boundaryGap: false,
@@ -145,15 +160,15 @@ export function buildRenameActivityOption(params: {
         data: applied,
         lineStyle: {
           width: 2,
-          color: theme.accent
+          color: theme.success
         },
         itemStyle: {
-          color: theme.accent
+          color: theme.success
         },
         areaStyle: {
           color: new echartsLib.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(201, 100, 66, 0.28)" },
-            { offset: 1, color: "rgba(201, 100, 66, 0.03)" }
+            { offset: 0, color: theme.successAreaStart },
+            { offset: 1, color: theme.successAreaEnd }
           ])
         }
       },
@@ -165,10 +180,10 @@ export function buildRenameActivityOption(params: {
         data: previewOnly,
         lineStyle: {
           width: 2,
-          color: theme.warning
+          color: theme.note
         },
         itemStyle: {
-          color: theme.warning
+          color: theme.note
         }
       },
       {
@@ -199,25 +214,9 @@ export function buildPipelineOption(params: {
     return undefined;
   }
 
-  const stages = [
-    { label: inline("刚发现", "Discovered"), value: overview.pipeline.discovered, color: "#b7b3a7" },
-    { label: inline("活跃中", "Active"), value: overview.pipeline.active, color: "#a57533" },
-    { label: inline("候选就绪", "Candidate ready"), value: overview.pipeline.candidateReady, color: "#6f8a53" },
-    { label: inline("可终稿", "Finalize ready"), value: overview.pipeline.finalizeReady, color: "#c96442" },
-    { label: inline("已应用", "Applied"), value: overview.pipeline.applied, color: "#4f7d66" }
-  ];
-
   return (theme: ChartTheme): ChartOption => ({
     backgroundColor: "transparent",
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow"
-      },
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: { color: "#fff", fontSize: 12 }
-    },
+    tooltip: buildChartTooltip(theme, { type: "shadow" }),
     grid: {
       left: 20,
       right: 20,
@@ -241,7 +240,13 @@ export function buildPipelineOption(params: {
     },
     yAxis: {
       type: "category",
-      data: stages.map((item) => item.label),
+      data: [
+        inline("刚发现", "Discovered"),
+        inline("活跃中", "Active"),
+        inline("候选就绪", "Candidate ready"),
+        inline("可终稿", "Finalize ready"),
+        inline("已应用", "Applied")
+      ],
       axisLabel: {
         color: theme.text,
         fontSize: 11
@@ -256,13 +261,13 @@ export function buildPipelineOption(params: {
     series: [
       {
         type: "bar",
-        data: stages.map((item) => ({
-          value: item.value,
-          itemStyle: {
-            color: item.color,
-            borderRadius: [0, 10, 10, 0]
-          }
-        })),
+        data: [
+          { value: overview.pipeline.discovered, itemStyle: { color: theme.muted, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.pipeline.active, itemStyle: { color: theme.warning, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.pipeline.candidateReady, itemStyle: { color: theme.note, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.pipeline.finalizeReady, itemStyle: { color: theme.accent, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.pipeline.applied, itemStyle: { color: theme.success, borderRadius: [0, 10, 10, 0] } }
+        ],
         barWidth: 18,
         label: {
           show: true,
@@ -307,15 +312,7 @@ export function buildFlowOption(params: {
 
   return (theme: ChartTheme): ChartOption => ({
     backgroundColor: "transparent",
-    tooltip: {
-      trigger: "item",
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: {
-        color: "#fff",
-        fontSize: 12
-      }
-    },
+    tooltip: buildChartTooltip(theme),
     series: [
       {
         type: "sankey",
@@ -348,7 +345,7 @@ export function buildFlowOption(params: {
               name === autoRenameStatusLabel("apply", uiLanguage)
                 ? theme.accent
                 : name === autoRenameStatusLabel("suggest", uiLanguage)
-                  ? theme.warning
+                  ? theme.note
                   : name === autoRenameStatusLabel("skip", uiLanguage)
                     ? theme.muted
                     : theme.manual
@@ -380,13 +377,7 @@ export function buildSweepTrendOption(params: {
   return (theme: ChartTheme, echartsLib: any): ChartOption => ({
     backgroundColor: "transparent",
     animationDuration: 280,
-    tooltip: {
-      trigger: "axis",
-      confine: true,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: { color: "#fff", fontSize: 12 }
-    },
+    tooltip: buildChartTooltip(theme, { type: "line" }),
     legend: {
       top: 8,
       left: 16,
@@ -410,36 +401,7 @@ export function buildSweepTrendOption(params: {
       bottom: 72,
       containLabel: true
     },
-    dataZoom: [
-      {
-        type: "inside",
-        filterMode: "none",
-        zoomLock: recentSweeps.length <= 10,
-        startValue: startIndex,
-        endValue: recentSweeps.length - 1
-      },
-      {
-        type: "slider",
-        filterMode: "none",
-        height: 18,
-        bottom: 18,
-        borderColor: "transparent",
-        backgroundColor: theme.surface,
-        fillerColor: "rgba(201, 100, 66, 0.18)",
-        handleStyle: {
-          color: theme.accent,
-          borderColor: theme.surfaceAlt
-        },
-        moveHandleStyle: {
-          color: theme.accent
-        },
-        textStyle: {
-          color: theme.muted
-        },
-        startValue: startIndex,
-        endValue: recentSweeps.length - 1
-      }
-    ],
+    dataZoom: buildSliderDataZoom(theme, startIndex, recentSweeps.length - 1, recentSweeps.length <= 10),
     xAxis: {
       type: "category",
       boundaryGap: false,
@@ -493,8 +455,8 @@ export function buildSweepTrendOption(params: {
         },
         areaStyle: {
           color: new echartsLib.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(201, 100, 66, 0.26)" },
-            { offset: 1, color: "rgba(201, 100, 66, 0.03)" }
+            { offset: 0, color: theme.accentAreaStart },
+            { offset: 1, color: theme.accentAreaEnd }
           ])
         }
       },
@@ -506,10 +468,10 @@ export function buildSweepTrendOption(params: {
         data: recentSweeps.map((item) => item.dirtyTotal),
         lineStyle: {
           width: 2,
-          color: theme.success
+          color: theme.warning
         },
         itemStyle: {
-          color: theme.success
+          color: theme.warning
         }
       },
       {
@@ -520,10 +482,10 @@ export function buildSweepTrendOption(params: {
         data: recentSweeps.map((item) => item.pending),
         lineStyle: {
           width: 2,
-          color: theme.warning
+          color: theme.note
         },
         itemStyle: {
-          color: theme.warning
+          color: theme.note
         }
       },
       {
@@ -564,16 +526,7 @@ export function buildSweepActionOption(params: {
   return (theme: ChartTheme): ChartOption => ({
     backgroundColor: "transparent",
     animationDuration: 280,
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow"
-      },
-      confine: true,
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: { color: "#fff", fontSize: 12 }
-    },
+    tooltip: buildChartTooltip(theme, { type: "shadow" }),
     legend: {
       top: 8,
       left: 16,
@@ -597,36 +550,7 @@ export function buildSweepActionOption(params: {
       bottom: 72,
       containLabel: true
     },
-    dataZoom: [
-      {
-        type: "inside",
-        filterMode: "none",
-        zoomLock: recentSweeps.length <= 10,
-        startValue: startIndex,
-        endValue: recentSweeps.length - 1
-      },
-      {
-        type: "slider",
-        filterMode: "none",
-        height: 18,
-        bottom: 18,
-        borderColor: "transparent",
-        backgroundColor: theme.surface,
-        fillerColor: "rgba(201, 100, 66, 0.18)",
-        handleStyle: {
-          color: theme.accent,
-          borderColor: theme.surfaceAlt
-        },
-        moveHandleStyle: {
-          color: theme.accent
-        },
-        textStyle: {
-          color: theme.muted
-        },
-        startValue: startIndex,
-        endValue: recentSweeps.length - 1
-      }
-    ],
+    dataZoom: buildSliderDataZoom(theme, startIndex, recentSweeps.length - 1, recentSweeps.length <= 10),
     xAxis: {
       type: "category",
       data: labels,
@@ -664,7 +588,7 @@ export function buildSweepActionOption(params: {
         barMaxWidth: 24,
         data: recentSweeps.map((item) => item.suggest),
         itemStyle: {
-          color: theme.warning,
+          color: theme.note,
           borderRadius: [4, 4, 0, 0]
         }
       },
@@ -718,24 +642,9 @@ export function buildRuleCoverageOption(params: {
     return undefined;
   }
 
-  const coverageItems = [
-    { label: inline("最新规则", "Latest"), value: overview.ruleCoverage.latest, color: "#4f7d66" },
-    { label: inline("规则落后", "Outdated"), value: overview.ruleCoverage.outdated, color: "#c96442" },
-    { label: inline("手动命名", "Manual"), value: overview.ruleCoverage.manual, color: "#8e5a4f" },
-    { label: inline("未知签名", "Unknown"), value: overview.ruleCoverage.unknown, color: "#a57533" }
-  ];
-
   return (theme: ChartTheme): ChartOption => ({
     backgroundColor: "transparent",
-    tooltip: {
-      trigger: "axis",
-      axisPointer: {
-        type: "shadow"
-      },
-      backgroundColor: "rgba(0, 0, 0, 0.85)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: { color: "#fff", fontSize: 12 }
-    },
+    tooltip: buildChartTooltip(theme, { type: "shadow" }),
     grid: {
       left: 20,
       right: 20,
@@ -759,7 +668,12 @@ export function buildRuleCoverageOption(params: {
     },
     yAxis: {
       type: "category",
-      data: coverageItems.map((item) => item.label),
+      data: [
+        inline("最新规则", "Latest"),
+        inline("规则落后", "Outdated"),
+        inline("手动命名", "Manual"),
+        inline("未知签名", "Unknown")
+      ],
       axisLabel: {
         color: theme.text,
         fontSize: 11
@@ -771,13 +685,12 @@ export function buildRuleCoverageOption(params: {
       {
         type: "bar",
         barWidth: 18,
-        data: coverageItems.map((item) => ({
-          value: item.value,
-          itemStyle: {
-            color: item.color,
-            borderRadius: [0, 10, 10, 0]
-          }
-        })),
+        data: [
+          { value: overview.ruleCoverage.latest, itemStyle: { color: theme.success, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.ruleCoverage.outdated, itemStyle: { color: theme.danger, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.ruleCoverage.manual, itemStyle: { color: theme.manual, borderRadius: [0, 10, 10, 0] } },
+          { value: overview.ruleCoverage.unknown, itemStyle: { color: theme.warning, borderRadius: [0, 10, 10, 0] } }
+        ],
         label: {
           show: true,
           position: "right",

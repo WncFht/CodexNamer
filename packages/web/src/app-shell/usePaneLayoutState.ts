@@ -33,9 +33,6 @@ export function usePaneLayoutState(params: {
 }) {
   const workspaceDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
   const sessionDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
-  const [workspacePaneCollapsed, setWorkspacePaneCollapsed] = React.useState(() =>
-    readStoredBoolean("csm:workspacePaneCollapsed", false)
-  );
   const [sessionPaneCollapsed, setSessionPaneCollapsed] = React.useState(() =>
     readStoredBoolean("csm:sessionPaneCollapsed", false)
   );
@@ -43,10 +40,6 @@ export function usePaneLayoutState(params: {
   const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() => readStoredNumber("csm:sessionPaneWidth", 390));
   const [sessionFocusMode, setSessionFocusMode] = React.useState(false);
   const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
-
-  React.useEffect(() => {
-    window.localStorage.setItem("csm:workspacePaneCollapsed", String(workspacePaneCollapsed));
-  }, [workspacePaneCollapsed]);
 
   React.useEffect(() => {
     window.localStorage.setItem("csm:sessionPaneCollapsed", String(sessionPaneCollapsed));
@@ -110,12 +103,10 @@ export function usePaneLayoutState(params: {
   }, []);
 
   const adjustWorkspacePaneWidth = (delta: number) => {
-    setWorkspacePaneCollapsed(false);
     setWorkspacePaneWidth((value) => clampWorkspacePaneWidth(value + delta));
   };
 
   const setWorkspacePaneWidthTo = (value: number) => {
-    setWorkspacePaneCollapsed(false);
     setWorkspacePaneWidth(clampWorkspacePaneWidth(value));
   };
 
@@ -151,7 +142,6 @@ export function usePaneLayoutState(params: {
 
   const startWorkspaceResize = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
-    setWorkspacePaneCollapsed(false);
     workspaceDragRef.current = {
       startX: event.clientX,
       startWidth: workspacePaneWidth
@@ -184,8 +174,6 @@ export function usePaneLayoutState(params: {
   return {
     sessionFocusMode,
     setSessionFocusMode,
-    workspacePaneCollapsed,
-    setWorkspacePaneCollapsed,
     sessionPaneCollapsed,
     setSessionPaneCollapsed,
     workspacePaneWidth,
