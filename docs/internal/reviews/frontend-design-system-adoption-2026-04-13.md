@@ -4,20 +4,20 @@
 状态：`implemented + reviewed on 2026-04-13`
 参考：
 
-- 外部设计稿：`docs/research/niracler-design.md`
+- 外部设计稿：`docs/internal/research/niracler-design.md`
 - 当前前端截图：
   - 当日 Web Sessions / Web Settings 截图已核对
   - 原始截图因包含本地 workspace 与会话信息，未保留在仓库中
 - 现有前端结构说明：
-  - `docs/reviews/frontend-design-audit-2026-04-05.md`
-  - `docs/reviews/frontend-backend-refactor-plan-2026-04-11.md`
-  - `docs/reviews/frontend-backend-remaining-plan-2026-04-11.md`
+  - `docs/internal/reviews/frontend-design-audit-2026-04-05.md`
+  - `docs/internal/reviews/frontend-backend-refactor-plan-2026-04-11.md`
+  - `docs/internal/reviews/frontend-backend-remaining-plan-2026-04-11.md`
 
 ## 1. 目标
 
 这轮不是继续做一层“暖色皮肤”，而是把 Web 前端真正切到一套统一、可维护、可扩展的视觉系统。
 
-目标风格来自 `docs/research/niracler-design.md`：
+目标风格来自 `docs/internal/research/niracler-design.md`：
 
 - 暖纸感、内容优先、低噪音
 - 语义化 token，而不是零散硬编码颜色
@@ -158,7 +158,7 @@
 
 ### 颜色
 
-以 `docs/research/niracler-design.md` 为主：
+以 `docs/internal/research/niracler-design.md` 为主：
 
 - `--color-bg-page`
 - `--color-bg-surface`
@@ -479,8 +479,8 @@
 
 本次实际新增或修改的关键文件：
 
-- `docs/research/niracler-design.md`
-- `docs/reviews/frontend-design-system-adoption-2026-04-13.md`
+- `docs/internal/research/niracler-design.md`
+- `docs/internal/reviews/frontend-design-system-adoption-2026-04-13.md`
 - `packages/web/src/design-system.css`
 - `packages/web/src/app-shell/useThemePreference.ts`
 - `packages/web/src/app-shell/ThemeToggle.tsx`
@@ -597,5 +597,5 @@ Settings 在首轮落地后仍有两类偏差：
 
 最终结论：
 
-- 当前前端已经基本收敛到 `docs/research/niracler-design.md` 的目标语气
+- 当前前端已经基本收敛到 `docs/internal/research/niracler-design.md` 的目标语气
 - 剩余问题如果还有，也更偏局部组件 polish，而不是系统级风格分裂

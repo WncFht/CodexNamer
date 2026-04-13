@@ -1,22 +1,56 @@
 # 配置与 AI 后端
 
-更新时间：`2026-04-09`
+更新时间：`2026-04-13`
 
-## 配置来源优先级
+## 1. 当前配置加载顺序
 
-1. CLI / runtime overrides
-2. 项目级 `.codexnamer.toml`
-3. 用户级 `~/.config/codexnamer/config.toml`
-4. 继承的 `~/.codex/config.toml` / `auth.json`
-5. 内置默认值
+当前真实实现来自 `packages/core/src/config/files.ts` 与 `packages/core/src/config/document.ts`。
 
-## 当前有效配置模型
+配置不是“几份文件并排拼起来”这么简单，而是按下面顺序形成最终运行态：
+
+1. **内置默认值**
+2. **用户级配置**：`~/.config/codexnamer/config.toml`
+3. **项目级覆盖**：`<cwd>/.codexnamer.toml`
+4. **CLI / runtime overrides**
+5. **继承的 Codex provider/auth**：根据最终 `general.codex_home` 再去读取 `~/.codex/config.toml` 与 `auth.json`
+
+说明：
+
+- 第 5 步不是把 Codex 配置整块 merge 到用户配置里，而是把它解析成 `inheritedCodex` 运行时视图，供 provider 解析和诊断使用。
+- Web / TUI 保存设置时，当前只会写回**用户级配置文件**，不会改项目级覆盖文件。
+
+## 2. 路径与 `ConfigView`
+
+当前配置相关路径：
+
+- 用户配置：`~/.config/codexnamer/config.toml`
+- 项目级覆盖：`<cwd>/.codexnamer.toml`
+- 默认状态目录：`~/.local/state/codexnamer`
+
+`GET /api/v1/config` 返回的 `ConfigView` 会包含：
+
+- `paths.cwd`
+- `paths.userConfigPath`
+- `paths.projectConfigPath`
+- `userConfig`（已做 secret redact）
+- `projectOverride`（已做 secret redact）
+- `effectiveConfig`
+
+其中 `effectiveConfig.inheritedCodex.auth` 会显示：
+
+- `authMode`
+- `hasOpenaiApiKey`
+- `hasAccessToken`
+
+真正的 key/token 会被隐藏成 `[redacted]`。
+
+## 3. 当前有效配置模型
 
 ### `[general]`
 
 - `codex_home`
 - `state_dir`
-- `ui_language`
+- `ui_language = "en-US" | "zh-CN"`
 
 ### `[rename]`
 
@@ -34,10 +68,6 @@
 - `finalize_idle_seconds`
 - `rename_cooldown_seconds`
 - `max_auto_renames_per_session`
-
-说明：
-
-- 当前自动改名判定只依赖 `dirty / idle / frozen / cooldown / max_auto_renames_per_session`
 
 ### `[naming]`
 
@@ -63,6 +93,11 @@
 
 ### `[provider.<profile_id>]`
 
+当前 TOML 文件里的手动 provider profile 仍使用：
+
+- `[provider.default]`
+- `[provider.<profile_id>]`
+
 每个 profile 支持：
 
 - `request_type = "responses" | "openai-compatible"`
@@ -76,24 +111,29 @@
 - `enabled`
 - `is_default`
 
+说明：
+
+- Web / TUI / `ConfigView` 在内存里会把它表示成 `providerProfiles[]`
+- 但落到 TOML 时，当前 serializer 仍写成 `[provider.<id>]` 表结构
+
 ### `[maintenance]`
 
 - `suggest_compact_index_above_mb`
 - `suggest_compact_index_above_lines`
 - `backup_before_compact`
 
-## 当前默认值
+## 4. 当前内置默认值
 
-当前内置默认值大意如下：
+当前真实默认值来自 `packages/core/src/config/defaults.ts`：
 
 ```toml
 [general]
 codex_home = "~/.codex"
 state_dir = "~/.local/state/codexnamer"
-ui_language = "zh-CN"
+ui_language = "en-US"
 
 [rename]
-auto_apply = "disabled"
+auto_apply = "idle-finalize"
 
 [watch]
 scan_interval_seconds = 300
@@ -125,9 +165,28 @@ profile = "default"
 timeout_seconds = 45
 temperature = 0.2
 max_concurrency = 1
+
+[maintenance]
+suggest_compact_index_above_mb = 5
+suggest_compact_index_above_lines = 20000
+backup_before_compact = true
 ```
 
-## builder-first 命名
+## 5. `config.example.toml` 为什么和默认值不完全一样
+
+仓库根目录的 `config.example.toml` 是**保守的首次启动样例**，不是内置默认值的逐字镜像。
+
+当前差异主要有两处：
+
+- 样例把 `ui_language` 预设成 `zh-CN`
+- 样例把 `rename.auto_apply` 预设成 `disabled`
+
+这是刻意设计：
+
+- 内置默认值偏向“完整功能可用”
+- 样例配置偏向“先观察再自动落盘”
+
+## 6. builder-first 命名
 
 当前最终标题结构由 `naming.builder` 决定。
 
@@ -149,23 +208,23 @@ max_concurrency = 1
 额外约定：
 
 - `timestamp` 支持 `format`
-- 空值组件不会直接输出
-- 分隔符不会在标题开头单独出现
+- 空值组件会自动跳过
+- 分隔符不会单独出现在标题开头或结尾
 
-## `composition_mode`
+## 7. `composition_mode`
 
 ### `structured`
 
 - 默认模式
 - AI 返回结构化字段
-- 后端根据 `builder` 拼装最终标题
+- 后端再按 `builder` 拼装最终标题
 
 ### `prompt-override`
 
 - 仍保留 builder / tag 语义
 - 但把 `custom_prompt` 作为最高优先级 AI 指令
 
-## 当前 AI backend 语义
+## 8. 当前 AI backend 语义
 
 ### `backend = "none"`
 
@@ -175,15 +234,33 @@ max_concurrency = 1
 ### `backend = "responses"`
 
 - 走 OpenAI Responses 风格请求
-- `provider_source = "codex-config"` 时直接读取当前 Codex provider / auth
-- `provider_source = "manual"` 时读取 `[provider.<id>]`
+- `provider_source = "codex-config"` 时使用当前 Codex 的 provider / auth 解析结果
+- `provider_source = "manual"` 时读取 `providerProfiles` / `[provider.<id>]`
 
 ### `backend = "openai-compatible"`
 
 - 走 OpenAI-compatible 请求
-- 解析来源同上
+- provider 解析来源与上面相同
 
-## 当前已删除的旧语义
+## 9. Settings 页当前分区
+
+Web Settings 当前分为五个 section：
+
+- `Overview`
+- `Naming`
+- `AI Provider`
+- `Scheduler`
+- `Runtime`
+
+它们分别覆盖：
+
+- 当前运行摘要与标题质量概览
+- builder / tags / prompt preview / context strategy / prompt override
+- provider source / manual profile / provider parse / provider test
+- auto-apply 策略与 watch 阈值
+- 配置路径、解析结果与 resolved provider 视图
+
+## 10. 当前已删除的旧语义
 
 下面这些不再是当前配置行为：
 
@@ -192,26 +269,10 @@ max_concurrency = 1
 - `codex exec` fallback
 - `naming.default_style`
 - `brief / detailed` 风格切换
-
-## 已删除的旧兼容入口
-
-下面这些旧配置或旧语义已经不再被读取：
-
-- `rename.mode`
-- `naming.components`
-- `naming.component_separator`
-- `backend = "codex"`
-- `provider_source = "inherit-codex"`
-
-## Settings 页现状
-
-Web Settings 当前是 builder-first：
-
-- Naming policy：builder、tags、prompt preview、context strategy
-- Runtime / provider：provider source、profile、配置路径、diagnostics
-
-当前不再在设置页暴露：
-
-- `brief / detailed`
 - `manual override`
-- `backend = "codex"`
+
+## 11. 当前仍需要注意的边界
+
+- `provider_source = "manual"` 时，最终是否可用仍取决于 provider test 结果
+- `rename.auto_apply = "idle-finalize"` 只是允许自动落盘；真正是否在执行，还要结合 daemon runtime 看
+- 项目级 `.codexnamer.toml` 会覆盖用户配置，但当前 UI 保存不会写它

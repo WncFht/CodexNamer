@@ -1,8 +1,10 @@
 # 开放问题
 
-更新时间：`2026-04-09`
+更新时间：`2026-04-13`
 
-这份文档只保留**当前代码仍未完全定稿**的问题；已经被代码移除的旧方案（如 `manual override`、`backend = "codex"`、`codex exec` fallback）不再作为待决事项记录。
+这是一份**内部待决问题清单**。判断当前已经落地的行为时，请优先看 `README.md` 与 `docs/spec/**`；这里记录的是仍可能变化的方向。
+
+已经被代码移除的旧方案（如 `manual override`、`backend = "codex"`、`codex exec` fallback）不再作为待决事项记录。
 
 ## 1. AI 默认后端到底选什么
 
@@ -40,20 +42,21 @@
 当前现状：
 
 - TUI 已实现并可用
-- 支持浏览、搜索、transcript、suggest/apply、freeze、manual rename、batch dirty apply、settings 编辑
+- 支持 browser / maintenance / daemon / settings 四个 screen mode
+- 支持浏览、搜索、transcript、suggest/apply、freeze、manual rename、batch dirty apply、requeue、settings 编辑
 
 仍待确认的问题：
 
 - 是否要继续保持现在这种高密度单屏布局
 - 是否要进一步对齐 Web 的阅读路径
-- 是否要把“状态 / daemon / 请求日志”里的更多运行态信息带进 TUI
+- 是否要把更多运行态信息带进 TUI
 
 ## 4. 请求日志是否继续停留在“表格 + 分页”
 
 当前现状：
 
 - 状态页请求日志已经改成后端分页
-- UI 每页显示 10 条
+- Web 每页显示 10 条
 - 支持搜索、项目、状态、传输过滤，以及直接跳页
 
 仍待确认的问题：
@@ -67,7 +70,7 @@
 当前现状：
 
 - `rename_history` 已保留完整历史
-- 但当前没有单独的 undo 命令或 Web 操作
+- 当前没有单独的 undo 命令或 Web 操作
 
 仍待确认的问题：
 

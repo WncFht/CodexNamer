@@ -61,9 +61,9 @@
 
 如果要先看已经落地了什么，请先看：
 
-- `docs/reviews/frontend-backend-refactor-plan-2026-04-11.md`
+- `docs/internal/reviews/frontend-backend-refactor-plan-2026-04-11.md`
 - `docs/spec/web-tui-local-api-design.md`
-- `docs/spec/status-and-pipeline-review.md`
+- `docs/internal/spec/status-and-pipeline-review.md`
 
 ---
 
@@ -355,7 +355,7 @@
 
 - `packages/web/src/SessionBrowser.tsx` 仍有 `662` 行
 - 现有 session card 依然承载较多状态、时间、workspace、dirty 等元信息
-- 旧审查 `docs/reviews/frontend-design-audit-2026-04-05.md` 也已经指出 session 卡片重复和元信息密度过高
+- 旧审查 `docs/internal/reviews/frontend-design-audit-2026-04-05.md` 也已经指出 session 卡片重复和元信息密度过高
 
 问题：
 

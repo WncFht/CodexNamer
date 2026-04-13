@@ -19,6 +19,15 @@
     "webui",
     "daemon"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WncFht/CodexNamer.git"
+  },
+  "homepage": "https://github.com/WncFht/CodexNamer#readme",
+  "bugs": {
+    "url": "https://github.com/WncFht/CodexNamer/issues"
+  },
+  "author": "WncFht",
   "workspaces": [
     "packages/*"
   ],

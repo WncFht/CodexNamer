@@ -2,388 +2,131 @@
 
 [English](README.md) | [简体中文](README.zh.md)
 
-一个面向 Codex rollout 的本地优先 session 命名与自动化管理工具。
+让你本地的 Codex 会话重新变得可读、可管、可维护。
 
-它会扫描 `~/.codex/sessions/**/rollout-*.jsonl`，维护自己的 SQLite 状态库，再通过 `~/.codex/session_index.jsonl` 把最终标题写回去——不修改 Codex 源码，也不碰 Codex 内部 SQLite。
+CodexNamer 会扫描本地 Codex rollout 历史，生成更清晰的 session 标题，支持你先预览再应用，也能冻结不该频繁变化的会话；最终仍通过 `~/.codex/session_index.jsonl` 写回，不需要 patch Codex。
 
 ![Language: TypeScript](https://img.shields.io/static/v1?label=Language&message=TypeScript&color=3178c6&style=flat-square)
 ![Node 20+](https://img.shields.io/static/v1?label=Node&message=20%2B&color=43853d&style=flat-square)
 ![Local-first](https://img.shields.io/static/v1?label=Mode&message=Local-first&color=7c3aed&style=flat-square)
 ![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=2563eb&style=flat-square)
 
-## 这个项目解决什么问题
+## 它能帮你做什么
 
-Codex 的本地 rollout 数据很有价值，但当 session 数量上来以后，很容易遇到这些问题：
+- **把所有 session 放回一个清晰列表里**，按 workspace、provider、项目统一查看。
+- **自动生成更像人写的标题**，可以走 heuristic，也可以走 AI 结构化命名。
+- **先看再写回**，明确区分 `skip / suggest / apply`。
+- **冻结稳定会话**，避免标题反复抖动。
+- **保持本地优先**，使用自己的 SQLite 状态库，但仍走官方 `session_index.jsonl` 写回层。
+- **直接用正式产品化界面管理**，包括 Sessions、Settings、Maintenance、Requeue、Daemon。
 
-- rollout 文件很多，默认标题越来越难找
-- 同时有多个 workspace / provider / model
-- 想批量 rename、冻结、让旧会话按新规则重新归队
-- 想自动命名，但又不想“会话一有变化就立刻改名”
+## 推荐使用方式
 
-这个项目做的事情是：
-
-- **读取** 本地 rollout 文件
-- **理解** session 状态并生成结构化候选标题
-- **预览** `skip / suggest / apply`
-- **写回** 官方 `session_index.jsonl` rename 层
-
-## 核心特性
-
-- **不需要 patch Codex**  
-  完全独立运行，不接管 Codex 启动，也不改 Codex 源码。
-
-- **本地优先、可审计**  
-  rollout 原文、项目自身状态库、rename 历史三层分开，方便追踪问题。
-
-- **结构化 AI 命名**  
-  支持 `tag / kind / scope / summary` 组件式命名、Prompt Preview、context 策略，以及由 `builder` 决定的标题拼装。
-
-- **多入口共享一套后端**  
-  CLI、Local API、Web UI、TUI、daemon 都复用同一套核心 rename 引擎。
-
-- **自动应用语义清晰**  
-  UI 会明确区分“允许应用”和“已经真正自动写回”。
-
-- **Web 里可以启停 daemon**  
-  Local API 现在会默认自动拉起 sweep daemon，Web 里可以停止 / 重新启动，并看到下一轮定时 sweep 倒计时。
-
-- **Web UI 已收敛成正式产品样式**  
-  当前 Web 端已经切到一套暖纸感 Bokushi 风格设计系统，统一了卡片 / pill / 图表配色，并提供 `system / light / dark` 三态主题。
-
-- **运维能力完整**  
-  支持 freeze、按规则签名重新归队、重名规避、provider diagnostics、AI 请求日志、`session_index.jsonl` compact。
-
-## 架构概览
-
-```mermaid
-flowchart LR
-  A["~/.codex/sessions/**/rollout-*.jsonl"] --> B["核心扫描 / ingest"]
-  B --> C["SQLite 状态库"]
-  C --> D["Rename 评估"]
-  D --> E["CLI / API / Web / TUI"]
-  D --> F["Daemon Sweep"]
-  F --> G["session_index.jsonl 写回"]
-  E --> G
-```
-
-当前没有一张独立的持久化任务队列表。`rename_state` 里的 dirty sessions 集合就是软队列，每轮 sweep 都会基于当前状态重新算 `skip / suggest / apply`。
-
-## 功能总览
-
-| 能力 | 当前状态 | 入口 |
-| --- | --- | --- |
-| rollout 扫描与增量 ingest | 已可用 | core |
-| 结构化标题生成 | 已可用 | core / CLI / API / Web / TUI |
-| 手动 rename | 已可用 | CLI / API / TUI |
-| freeze / unfreeze | 已可用 | CLI / API / Web / TUI |
-| dirty 队列预览与批量 apply | 已可用 | CLI / API / Web / TUI |
-| 带 heartbeat 的 daemon sweep | 已可用 | daemon / API / Web |
-| provider diagnostics / prompt preview | 已可用 | CLI / API / Web / TUI |
-| `session_index.jsonl` compact | 已可用 | CLI / API / Web |
-| 按规则签名重新归队 | 已可用 | API / Web |
-| API 托管 daemon 默认自启 + Web 控制 | 已可用 | API / Web |
-
-## 快速开始
-
-### 前置要求
-
-- Node.js `20+`
-- npm `10+`
-- 本地已有 Codex 目录，通常是 `~/.codex`
-- 如果要继承 Codex 的 provider 配置，需要：
-  - `~/.codex/config.toml`
-  - `~/.codex/auth.json`
-
-### 安装
+当前主要发布渠道就是 GitHub 仓库。
 
 ```bash
-git clone <your-repo-url> codexnamer
+git clone https://github.com/WncFht/CodexNamer.git codexnamer
 cd codexnamer
 npm install
-npm run build
-```
-
-### 启动本地服务
-
-```bash
 npm run serve
 ```
 
-这是更接近产品形态的本地入口：
-
-- 单个长期运行的本地进程
-- 同一端口同时提供 API 和构建后的 Web UI
-- 默认自动拉起 API 托管的 daemon
-- 收到 `SIGINT` / `SIGTERM` 时做优雅退出
-
-默认地址：
+打开：
 
 - `http://127.0.0.1:42110`
 
-### 安装成用户级后台服务
+`npm run serve` 会自动完成所需构建、启动本地常驻进程、同时提供 Web UI 和 Local API，并在未显式关闭时自动拉起托管 daemon。
 
-现在已经提供围绕 `codexnamer serve` 的跨平台用户级 service 封装：
+## 更保守的首次启动方式
+
+如果你想先以“只预览、不自动落盘”的方式使用，可以先复制示例配置：
 
 ```bash
-# 给当前用户注册 service
-npm run cli -- service install
+mkdir -p ~/.config/codexnamer
+cp config.example.toml ~/.config/codexnamer/config.toml
+```
 
-# 启动 / 停止 / 重启 / 查看状态
-npm run cli -- service start
-npm run cli -- service stop
-npm run cli -- service restart
+这个示例文件比内置默认值更保守：它会把 `rename.auto_apply` 设成 `"disabled"`，方便你先观察结果。
+
+## 你在界面里会用到的能力
+
+### Sessions
+
+- 按 workspace 浏览会话
+- 查看 transcript、元信息、命名历史
+- 审核 AI / heuristic 给出的候选标题
+- 在需要时 apply、freeze、requeue
+
+### Settings
+
+- 调整命名 builder、标签、prompt override 和 context strategy
+- 继承 Codex provider 配置，或自己手动填写 provider
+- 做 provider 连通性检查，并查看运行时解析结果
+- 调整扫描节奏、空闲阈值和自动应用策略
+
+### Maintenance / Requeue / Daemon
+
+- 查看 dirty 队列、运行图表和 AI 请求日志
+- 在 `session_index.jsonl` 变大后执行 compact
+- 预览并执行基于规则签名的 requeue
+- 监控托管 sweep daemon，并控制它的运行状态
+
+## 作为后台服务运行
+
+如果你希望 CodexNamer 以用户级后台服务持续运行：
+
+```bash
+npm run cli -- service install --start
+```
+
+其他 service 命令：
+
+```bash
 npm run cli -- service status
-
-# 卸载注册
+npm run cli -- service restart
+npm run cli -- service stop
 npm run cli -- service uninstall
 ```
 
-平台对应关系：
+平台对应：
 
 - Linux → `systemd --user`
 - macOS → `LaunchAgent`
 - Windows → 任务计划程序（`ONLOGON`）
 
-当前范围：
-
-- 已实现 install / start / stop / restart / status / uninstall
-- service 跑的就是同一套 `serve` 常驻流程和构建后的 Web 资产
-- Linux 路径已经纳入本仓库完整校验链
-- macOS / Windows 的命令生成已经实现，但在这个 Linux 工作区里还没有做 live 验证
-
-### 启动 Web 开发入口
-
-```bash
-npm run web
-```
-
-这个入口仍然主要用于开发。启动器会自动：
-
-- 复用一个健康的本地 API
-- 或在 `42110+` 范围内启动新的 API
-- 自动拉起 API 托管的 daemon
-- 清理当前 repo 里残留的旧 launcher / API / Web dev 进程
-- 让 Vite 自动指向正确的 API
-
-默认地址：
-
-- `http://127.0.0.1:43110`
-
-当前 Web UI 的特征：
-
-- 三态主题切换：`system → light → dark`
-- Sessions / Settings / Maintenance / Daemon 已统一为同一套内容优先视觉语言
-- Maintenance 图表统一走共享语义色板
-- AI provider 区块收敛成“当前生效配置 + 连通性回执”
-
-### 启动 TUI
-
-```bash
-npm run tui
-```
-
-如果你想显式连到一个已有 API：
-
-```bash
-npm run tui -- --api-base http://127.0.0.1:42110
-```
-
-### 单独启动 Local API
-
-```bash
-npm run api -- --host 127.0.0.1 --port 42110
-curl http://127.0.0.1:42110/api/v1/health
-```
-
-现在 `npm run api` 会按当前配置的扫描间隔，默认自动拉起一个 controller-managed daemon。
-
-如果你还想让它顺便托管已经构建好的 dashboard：
-
-```bash
-npm run api -- --host 127.0.0.1 --port 42110 --web-root packages/web/dist
-```
-
-### 启动 daemon
-
-```bash
-# 持续运行
-npm run daemon
-
-# 只跑一轮
-npm run daemon -- --once
-
-# 自定义间隔
-npm run daemon -- --interval 60
-```
-
-这个 standalone daemon 仍然保留，但在常规 Web / API 使用路径下，Local API 已经会默认托管自己的 daemon。
-
-## 自动应用语义
-
-这里会明确区分“评估结果”和“真实写回”：
-
-- `skip`：跳过
-- `suggest`：候选名已准备好，适合预览
-- `apply`：满足落盘条件，可以被真正写回
-
-但 UI 里看到 `apply`，并不代表已经自动写回。
-
-真正是否会自动应用，要看运行态：
-
-- `rename.auto_apply = "disabled"`：只做 preview
-- `rename.auto_apply = "idle-finalize"` 且 daemon 正在运行：命中的 `finalize_ready` 才会自动写回
-
-在默认的 Web / API 使用路径里，这个 daemon 现在由 Local API 自动拉起。`npm run daemon` 仍然适合做独立运行或调试验证。
-
-界面会同时展示：
-
-- 当前配置的 auto-apply 策略
-- 实际执行态
-- daemon heartbeat 状态
-- 最近一轮 sweep 摘要
-
-这样就能分清“配置里开了自动应用”和“现在真的在自动应用”。
-
 ## 配置
 
-默认配置路径：
+默认用户配置路径：
 
 - `~/.config/codexnamer/config.toml`
 
-> 说明：CodexNamer 现在只使用 `codexnamer` 前缀的配置与状态路径。
+可选项目级覆盖路径：
 
-仓库里提供了一份带注释的入门配置 [`config.example.toml`](./config.example.toml)。
-第一次使用时，建议先复制到 `~/.config/codexnamer/config.toml` 再按需修改。
-这份示例默认只做预览（`rename.auto_apply = "disabled"`），并优先复用你当前的 Codex provider 配置。
+- `<当前工作目录>/.codexnamer.toml`
 
-最小示例：
+CodexNamer 可以直接继承你本地 Codex 的 provider 配置，也可以在自己的配置里手动定义 provider。
 
-```toml
-[general]
-codex_home = "~/.codex"
-state_dir = "~/.local/state/codexnamer"
-ui_language = "zh-CN"
+即使你关闭 AI 命名，heuristic 命名仍然可以工作。
 
-[ai]
-backend = "responses"
-provider_source = "codex-config"
-profile = "default"
-max_concurrency = 1
+## 其他使用方式
 
-[naming]
-preset = "conventional"
-language = "zh-CN"
-context_strategy = "summary-signals"
-context_max_chars = 8000
-composition_mode = "structured"
-builder = [
-  { type = "component", component = "tag" },
-  { type = "separator", value = " · " },
-  { type = "component", component = "kind" },
-  { type = "separator", value = " · " },
-  { type = "component", component = "summary" }
-]
+大多数用户只需要 `npm run serve`。如果你有更偏操作型的需求，也可以使用：
 
-[[naming.tags]]
-id = "settings"
-description = "配置、保存、语言、provider 相关会话。"
-prompt_hint = "setting settings config save language provider"
-```
-
-## 常用命令
-
-### CLI
-
-```bash
-npm run cli -- list --dirty
-npm run cli -- show --id <thread-id>
-npm run cli -- suggest --id <thread-id>
-npm run cli -- apply --id <thread-id>
-npm run cli -- rename --id <thread-id> --name "feat(api): add config writeback"
-npm run cli -- batch apply --dirty --preview
-npm run cli -- batch apply --dirty
-npm run cli -- compact-index --dry-run
-npm run cli -- doctor
-npm run cli -- provider test
-```
-
-### Local API
-
-```bash
-curl 'http://127.0.0.1:42110/api/v1/sessions?dirty=true&search=api'
-curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/suggest
-curl -X POST http://127.0.0.1:42110/api/v1/sessions/<thread-id>/apply
-curl http://127.0.0.1:42110/api/v1/overview
-curl http://127.0.0.1:42110/api/v1/daemon
-```
-
-## 仓库结构
-
-```text
-packages/core     核心 ingest / state / provider / naming / 写回
-packages/shared   共享 DTO 与 schema
-packages/api      本地 Fastify API
-packages/cli      CLI 入口
-packages/daemon   sweep daemon
-packages/web      React + Vite 仪表盘
-packages/tui      Ink 终端界面
-docs/             规格、ADR、设计说明、审查记录
-test/             Vitest 测试
-```
-
-## 开发
-
-```bash
-npm install
-npm run build
-npm run build:runtime
-npm run web:build
-npm test
-```
-
-常用本地入口：
-
-```bash
-npm run serve
-npm run web
-npm run tui
-npm run api
-npm run daemon
-```
+- `npm run tui` — 通过 Local API 提供的终端界面
+- `npm run cli -- ...` — 直接命令行操作
+- `npm run api -- --host 127.0.0.1 --port 42110` — 只启动 Local API
+- `npm run daemon -- --once` — 单独执行一轮 sweep，方便隔离验证
 
 ## 文档
 
-- [文档总览](docs/README.md)
-- [仓库总览](docs/spec/repo-overview.md)
-- [系统设计](docs/spec/system-design.md)
-- [配置与 AI 后端](docs/spec/config-and-ai.md)
-- [Web / TUI / Local API 设计](docs/spec/web-tui-local-api-design.md)
-- [Rename 评估与 Context 构建](docs/spec/rename-evaluation-and-context.md)
+- 用户和贡献者文档：[`docs/README.md`](docs/README.md)
+- 安全策略：[`SECURITY.md`](SECURITY.md)
+- 贡献指南：[`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## 当前状态
+## 为什么强调本地优先
 
-这个仓库已经可以用于日常本地 session 管理，但仍然属于早期版本。
+CodexNamer 会维护自己的状态，但真正的最终命名写回仍然走官方 `session_index.jsonl` 层。这意味着：
 
-已经比较稳定的部分：
-
-- 核心读写链路已经打通
-- Web UI、TUI、CLI、API、daemon 都可用
-- 命名、provider diagnostics、维护流程已有测试覆盖
-
-还会继续演进的部分：
-
-- 发布和分发方式
-- 对未来 Codex 数据结构变化的兼容性加固
-- 面向公开仓库的文档和贡献流程完善
-
-## 贡献
-
-见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 安全
-
-见 [SECURITY.md](SECURITY.md)。
-
-## 许可证
-
-MIT，见 [LICENSE](LICENSE)。
+- 你可以清楚地检查和控制这套工具
+- 不需要改 Codex 源码
+- Codex 内部状态和 CodexNamer 自己的状态边界清晰

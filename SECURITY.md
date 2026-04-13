@@ -11,10 +11,14 @@
 
 Please **do not** open a public issue with exploit details.
 
-If GitHub Security Advisories are enabled for the repository, use that channel first.
-Otherwise, contact the maintainer through a private channel before publishing details.
+Primary channel:
 
-If no private channel is available yet, open a minimal issue asking for a secure contact method and avoid disclosing the vulnerability itself.
+- GitHub Private Vulnerability Reporting / Security Advisories  
+  `https://github.com/WncFht/CodexNamer/security/advisories/new`
+
+For public releases, the repository should keep private vulnerability reporting enabled.
+
+If that private reporting page is temporarily unavailable, open a minimal public issue that only asks for a secure contact method and avoid disclosing the vulnerability itself.
 
 ## What is security-relevant here
 

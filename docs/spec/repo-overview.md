@@ -1,6 +1,6 @@
 # 仓库总览
 
-更新时间：`2026-04-09`
+更新时间：`2026-04-13`
 
 ## 1. 仓库定位
 
@@ -42,43 +42,69 @@
 - session / overview DTO
 - request log DTO
 - daemon DTO
+- Local API 输入 schema 与 query/body 校验
 
 ### `packages/api`
 
-暴露本地 Fastify API。
+暴露本地 Fastify API，并负责：
 
-入口 `packages/api/src/index.ts` 现在会在 API 进程启动后，默认自动拉起一个 controller-managed daemon。
+- route registration
+- daemon process controller
+- events log
+- 可选的静态 Web 资产托管
 
-当前主要路由：
+入口 `packages/api/src/index.ts` 与 `packages/api/src/app.ts` 当前会在 API 进程启动后，默认自动拉起一个 controller-managed daemon（除非显式传 `--no-daemon`）。
 
-- `/api/v1/health`
-- `/api/v1/events/since`
-- `/api/v1/sessions`
-- `/api/v1/sessions/:id`
-- `/api/v1/sessions/:id/transcript`
-- `/api/v1/sessions/:id/history`
-- `/api/v1/sessions/:id/suggest`
-- `/api/v1/sessions/:id/apply`
-- `/api/v1/sessions/:id/rename`
-- `/api/v1/sessions/:id/freeze`
-- `/api/v1/sessions/:id/unfreeze`
-- `/api/v1/sessions/batch/suggest`
-- `/api/v1/sessions/batch/apply`
-- `/api/v1/overview`
-- `/api/v1/auto-rename/preview`
-- `/api/v1/ai/prompt-preview`
-- `/api/v1/ai/request-logs`
-- `/api/v1/ai/request-logs/:id`
-- `/api/v1/providers`
-- `/api/v1/providers/test`
-- `/api/v1/providers/parse-codex`
-- `/api/v1/config`
-- `/api/v1/doctor`
-- `/api/v1/maintenance/compact-index`
-- `/api/v1/maintenance/requeue-renames`
-- `/api/v1/daemon`
-- `/api/v1/daemon/start`
-- `/api/v1/daemon/stop`
+当前主要路由分组：
+
+#### events / health
+
+- `GET /api/v1/health`
+- `GET /api/v1/events/since`
+
+#### sessions / workspaces
+
+- `GET /api/v1/sessions`
+- `GET /api/v1/workspaces`
+- `GET /api/v1/sessions/:id`
+- `GET /api/v1/sessions/:id/transcript`
+- `GET /api/v1/sessions/:id/history`
+- `POST /api/v1/sessions/:id/suggest`
+- `POST /api/v1/sessions/:id/apply`
+- `POST /api/v1/sessions/:id/rename`
+- `POST /api/v1/sessions/:id/freeze`
+- `POST /api/v1/sessions/:id/unfreeze`
+- `POST /api/v1/sessions/batch/suggest`
+- `POST /api/v1/sessions/batch/apply`
+
+#### runtime / overview / doctor
+
+- `GET /api/v1/overview`
+- `POST /api/v1/scan`
+- `GET /api/v1/doctor`
+- `GET /api/v1/maintenance/stats`（当前兼容别名，返回与 `doctor` 相同）
+
+#### AI / provider / config
+
+- `GET /api/v1/auto-rename/preview`
+- `GET /api/v1/ai/prompt-preview`
+- `POST /api/v1/ai/prompt-preview`
+- `GET /api/v1/ai/request-logs`
+- `GET /api/v1/ai/request-logs/:id`
+- `GET /api/v1/providers`
+- `POST /api/v1/providers/test`
+- `POST /api/v1/providers/parse-codex`
+- `GET /api/v1/config`
+- `PUT /api/v1/config`
+
+#### maintenance / requeue / daemon
+
+- `POST /api/v1/maintenance/compact-index`
+- `POST /api/v1/maintenance/requeue-preview`
+- `POST /api/v1/maintenance/requeue-renames`
+- `GET /api/v1/daemon`
+- `POST /api/v1/daemon/start`
+- `POST /api/v1/daemon/stop`
 
 当前不存在的旧路由：
 
@@ -88,7 +114,9 @@
 
 ### `packages/cli`
 
-当前命令：
+当前包含两类入口：
+
+#### 直接操作命令
 
 - `list`
 - `show`
@@ -104,13 +132,39 @@
 - `config print`
 - `provider test`
 
+#### 本地服务与用户级 service 命令
+
+- `serve`
+- `service install`
+- `service start`
+- `service stop`
+- `service restart`
+- `service status`
+- `service uninstall`
+
+说明：
+
+- CLI 内部真正注册的是 `service-install` / `service-start` 这类命令
+- 但参数归一化层已经支持用户输入 `service install` 这种更自然的形式
+- `service-host` 是内部 service 入口，不是主要用户命令
+
+### `packages/daemon`
+
+负责 standalone sweep runner。
+
+它适合：
+
+- 脱离 API 单独运行 daemon
+- 做一次性 `--once` 验证
+- 单独测试 daemon 逻辑与 runtime summary
+
 ### `packages/web`
 
 当前 Web 有五个主视图：
 
 - `Sessions`
 - `Settings`
-- `状态 / Rename Ops`
+- `Rename Ops / Maintenance`
 - `Requeue`
 - `Daemon`
 
@@ -122,12 +176,13 @@
 - suggest / apply / freeze
 - rename history
 - settings 写回
-- provider diagnostics
+- provider diagnostics / parse / test
 - prompt preview
 - overview 图表
 - requeue preview / execute
 - AI request logs
 - daemon start / stop / next scheduled sweep countdown / log tail
+- `system / light / dark` 三态主题
 
 说明：
 
@@ -136,15 +191,22 @@
 
 ### `packages/tui`
 
+当前 TUI 有四个 screen mode：
+
+- `browser`
+- `maintenance`
+- `daemon`
+- `settings`
+
 当前覆盖：
 
-- browser / settings 双主界面
-- session 列表、详情、transcript
-- 搜索
+- session 列表、详情、transcript、rename history
+- 搜索与 transcript role/query 过滤
 - suggest / apply / freeze / manual rename
-- batch dirty apply
-- prompt preview
-- settings 编辑
+- batch dirty apply 与 auto-rename preview
+- requeue basis / since 编辑与执行
+- daemon start / stop / runtime 概览
+- settings 编辑、prompt preview、provider test、import Codex provider
 
 ## 4. 当前核心数据流
 
@@ -168,7 +230,7 @@
 
 ### 自动化路径
 
-1. API 默认托管一个 daemon 子进程，或用户单独启动 standalone daemon
+1. API / `serve` 默认可托管一个 daemon 子进程，或用户单独启动 standalone daemon
 2. daemon 触发 `runAutoRenameSweep()`
 3. 先重新 `scan()`，再筛出当前 dirty sessions
 4. 对 dirty sessions 运行 `evaluateAutoRename()`
@@ -205,9 +267,11 @@ requeue 的本质也是把一批 session 重新打成 dirty，并清掉旧 candi
 | AI request logs | 已实现 | core / API / Web |
 | request logs 后端分页 | 已实现 | core / API / Web |
 | transcript 分页过滤 | 已实现 | core / API / Web / TUI |
-| 按规则签名重新归队 | 已实现 | core / API / Web |
-| API 默认自动拉起 daemon | 已实现 | API |
-| daemon 控制面板与倒计时 | 已实现 | API / Web |
+| 按规则签名重新归队 | 已实现 | core / API / Web / TUI |
+| `serve` 常驻服务入口 | 已实现 | CLI / API |
+| 用户级 service 安装 | 已实现 | CLI |
+| API 默认自动拉起 daemon | 已实现 | API / serve |
+| daemon 控制面板与倒计时 | 已实现 | API / Web / TUI |
 
 ## 6. 当前行为约束
 
@@ -215,5 +279,5 @@ requeue 的本质也是把一批 session 重新打成 dirty，并清掉旧 candi
 - `brief / detailed` 已不再是当前配置行为
 - accepted official rename source 只认 `ai` 和 `manual`
 - overview 的 rename 统计按会话去重
-- 请求日志状态页每页显示 10 条，但 API 缺省页大小仍是 40
+- 请求日志 API 缺省页大小仍是 40，但 Web 状态页固定按 10 条一页请求
 - 请求日志成功时会显式展示输出命名

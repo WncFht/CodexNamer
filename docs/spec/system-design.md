@@ -1,6 +1,6 @@
 # 系统设计
 
-更新时间：`2026-04-09`
+更新时间：`2026-04-13`
 
 ## 设计摘要
 
@@ -36,11 +36,15 @@ SQLite state DB
           |       |- append session_index
           |       `- compact
           |
-          `--> local API
-                  |- CLI
-                  |- Web
+          +--> direct operators
+          |       |- CLI
+          |       `- standalone daemon
+          |
+          `--> Local API
+                  |- Web UI
                   |- TUI
-                  `- daemon controls
+                  |- serve entry
+                  `- daemon controller
 ```
 
 ## 组件职责
@@ -54,7 +58,7 @@ SQLite state DB
 ### SQLite state DB
 
 - 存放 sessions / revisions / rename state / rename history / maintenance state / AI request logs
-- 为 Web、TUI、CLI 提供统一视图
+- 为 Web、TUI、CLI、daemon 提供统一视图
 
 ### naming + provider
 
@@ -69,11 +73,16 @@ SQLite state DB
 - 保持 latest-wins 语义
 - 提供离线 compact
 
-### local API / UI
+### Local API 与前端
 
-- CLI：单次查询、rename、batch apply、doctor、provider test
-- Web：Sessions / Settings / 状态 / Requeue / Daemon 五个主视图
-- TUI：浏览、搜索、transcript、suggest/apply、freeze、manual rename、batch dirty apply
+- Local API：Fastify 路由、事件流、daemon controller、可选静态 Web 托管
+- Web：Sessions / Settings / Maintenance / Requeue / Daemon 五个主视图
+- TUI：browser / maintenance / daemon / settings 四个 screen mode
+
+### 直接操作入口
+
+- CLI：单次查询、rename、batch apply、doctor、provider test、serve/service
+- standalone daemon：脱离 API 单独跑 sweep
 
 ## 关键设计选择
 
@@ -104,10 +113,15 @@ SQLite state DB
 - 非 accepted source 的 official name 会被视为待重写过渡态
 - overview 统计会按这个口径统一
 
-### 6. 请求日志内建到状态面板
+### 6. 请求日志内建到维护面板
 
 - 所有 AI rename 请求都会写入 `ai_request_logs`
-- 状态页通过后端分页读取，不再只拉固定 40 条到前端
+- Maintenance 页通过后端分页读取，不再只拉固定 40 条到前端
+
+### 7. API 托管 daemon + standalone daemon 并存
+
+- `npm run api` / `codexnamer serve` 默认会托管 daemon 子进程
+- 同时仍保留 `npm run daemon` 这条独立运行路径，方便隔离验证和调试
 
 ## 运行模式
 
@@ -117,7 +131,7 @@ SQLite state DB
 
 ### preview-only
 
-- daemon 或状态页会给出 `skip / suggest / apply`
+- daemon 或维护面板会给出 `skip / suggest / apply`
 - 但不会自动写回
 
 ### auto-apply
@@ -128,5 +142,5 @@ SQLite state DB
 
 补充：
 
-- `npm run api` 现在默认会自动拉起 controller-managed daemon
+- `npm run api` 与 `npm run serve` 现在默认会自动拉起 controller-managed daemon
 - Web 的 Daemon 面板展示的是 controller 状态、下一次定时 sweep 倒计时和最近日志

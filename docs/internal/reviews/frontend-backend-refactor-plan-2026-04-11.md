@@ -12,7 +12,7 @@
 - `docs/spec/system-design.md`
 - `docs/spec/web-tui-local-api-design.md`
 - `docs/spec/cli-api-ui.md`
-- `docs/spec/status-and-pipeline-review.md`
+- `docs/internal/spec/status-and-pipeline-review.md`
 
 ---
 

@@ -11,23 +11,21 @@ Thanks for your interest in improving CodexNamer.
 ## Development setup
 
 ```bash
-git clone <your-repo-url> codexnamer
+git clone https://github.com/WncFht/CodexNamer.git codexnamer
 cd codexnamer
 npm install
 ```
 
-Recommended validation commands:
+Recommended validation command:
 
 ```bash
-npm run build
-npm run build:runtime
-npm run web:build
-npm test
+npm run validate:full
 ```
 
 Useful local entry points while developing:
 
 ```bash
+npm run serve
 npm run web
 npm run tui
 npm run api
@@ -38,13 +36,13 @@ npm run daemon -- --once
 
 ```text
 packages/core     rename engine, state model, writeback, provider logic
-packages/shared   shared DTOs and schemas
-packages/api      local Fastify API
-packages/cli      CLI
-packages/daemon   daemon sweep runner
+packages/shared   shared DTOs, schemas, and constants
+packages/api      local Fastify API + daemon controller
+packages/cli      CLI + serve/service wrappers
+packages/daemon   standalone daemon sweep runner
 packages/web      React + Vite UI
 packages/tui      Ink terminal UI
-docs/             specs, ADRs, reviews
+docs/             current specs plus internal notes
 test/             Vitest tests
 ```
 
@@ -85,8 +83,8 @@ If the change affects user-visible behavior, update at least one of:
 
 Before opening a PR, please make sure:
 
-- [ ] the branch builds locally
-- [ ] the relevant tests pass
+- [ ] `npm run validate:full` passes locally
+- [ ] the relevant tests cover the changed behavior
 - [ ] docs were updated when behavior changed
 - [ ] the PR description explains the user-visible impact
 

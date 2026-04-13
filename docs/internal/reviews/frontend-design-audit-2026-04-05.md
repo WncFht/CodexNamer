@@ -11,7 +11,7 @@
 
 参考目标：
 
-- `docs/design/claude/DESIGN.md`
+- 当时采用的一份 Claude 风格设计参考原稿（该原稿未随当前仓库公开分发）
 
 截图说明：
 

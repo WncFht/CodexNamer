@@ -1,18 +1,14 @@
 # 实现路线图
 
-> 历史规划文档。更新时间：`2026-04-09`
+> 历史规划文档。更新时间：`2026-04-13`
 
-这份文档保留项目早期的阶段划分思路，但其中的具体能力项已经按当前代码做过一次清理：
-
-- `manual override` 已从当前运行逻辑中移除
-- `brief / detailed` 已不再是当前配置与 UI 的主语义
-- AI 后端当前是 `responses | openai-compatible | none`，并通过 `provider_source = codex-config | manual` 解析来源
+这份文档保留项目早期的阶段划分思路，不再逐项代表当前代码事实。
 
 当前真实能力请优先参考：
 
 - [README](../../README.md)
-- [仓库总览](./repo-overview.md)
-- [配置与 AI 后端](./config-and-ai.md)
+- [仓库总览](../../spec/repo-overview.md)
+- [配置与 AI 后端](../../spec/config-and-ai.md)
 
 ## 历史阶段划分
 
@@ -22,7 +18,7 @@
 - 数据模型
 - API / CLI / UI 规格
 - compact 语义
-- ADR
+- 关键设计决策整理
 
 ### v0.2 核心后端
 
@@ -69,6 +65,7 @@
 - CLI / API / daemon / Web / TUI 都已可运行
 - 状态页请求日志已是后端分页
 - overview 统计已按会话去重
+- `serve` 与用户级 service 流程已可用
 
 ### 仍在演进
 
