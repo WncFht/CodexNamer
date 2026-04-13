@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import { fetchSessionTranscript } from "./api.js";
 import { formatWhen, transcriptTone } from "./browser-utils.js";
-import { t, transcriptRoleLabel, type UiLanguage } from "./i18n.js";
+import type { UiLanguage } from "./i18n.js";
+import { t, transcriptRoleLabel } from "./i18n.js";
 import type { SessionDetail, SessionTranscriptPage } from "./types.js";
 
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
@@ -34,7 +35,7 @@ export function TranscriptPanel(props: {
       page: 1,
       pageSize: TRANSCRIPT_PAGE_SIZE,
       includeHidden: props.showHiddenTranscript,
-      role
+      role,
     })
       .then((payload) => {
         if (!active) {
@@ -74,7 +75,7 @@ export function TranscriptPanel(props: {
         page: pageState.page + 1,
         pageSize: pageState.pageSize,
         includeHidden: props.showHiddenTranscript,
-        role
+        role,
       });
       setItems((previous) => [...nextPage.items, ...previous]);
       setPageState(nextPage);
@@ -118,33 +119,49 @@ export function TranscriptPanel(props: {
       </div>
 
       <div className="chat-meta-strip">
-        <span>{pageState?.counts.visible ?? 0} {tt("visibleCount")}</span>
-        <span>{pageState?.counts.hidden ?? 0} {tt("hiddenCount")}</span>
-        <span>{pageState?.counts.tools ?? 0} {tt("toolEvents")}</span>
-        <span>{pageState?.totalItems ?? 0} {tt("matched")}</span>
+        <span>
+          {pageState?.counts.visible ?? 0} {tt("visibleCount")}
+        </span>
+        <span>
+          {pageState?.counts.hidden ?? 0} {tt("hiddenCount")}
+        </span>
+        <span>
+          {pageState?.counts.tools ?? 0} {tt("toolEvents")}
+        </span>
+        <span>
+          {pageState?.totalItems ?? 0} {tt("matched")}
+        </span>
       </div>
 
       <div className="chat-messages">
         {pageState?.hasMore ? (
           <div className="load-more">
             <button className="btn-sm" onClick={() => void loadEarlier()} type="button">
-              {loading ? tt("loading") : `${tt("loadEarlierMessages")} (${Math.min(hiddenOlderCount, pageState.pageSize)})`}
+              {loading
+                ? tt("loading")
+                : `${tt("loadEarlierMessages")} (${Math.min(hiddenOlderCount, pageState.pageSize)})`}
             </button>
           </div>
         ) : null}
 
         {error ? <div className="error-banner transcript-error">{error}</div> : null}
-        {!loading && items.length === 0 ? <div className="empty-note">{tt("noTranscript")}</div> : null}
+        {!loading && items.length === 0 ? (
+          <div className="empty-note">{tt("noTranscript")}</div>
+        ) : null}
 
         <div className="messages-container">
           {items.map((item) => (
             <article className="message-turn" data-role={item.role} key={item.id}>
               <div className="turn-header">
                 <div className="turn-header-left">
-                  <span className={`message-role ${transcriptTone(item.role)}`}>{transcriptRoleLabel(item.role, props.uiLanguage)}</span>
+                  <span className={`message-role ${transcriptTone(item.role)}`}>
+                    {transcriptRoleLabel(item.role, props.uiLanguage)}
+                  </span>
                   <span className="kind-pill">{item.kind}</span>
                   {item.name ? <span className="kind-pill">{item.name}</span> : null}
-                  {item.hiddenReason ? <span className="kind-pill subtle">{item.hiddenReason}</span> : null}
+                  {item.hiddenReason ? (
+                    <span className="kind-pill subtle">{item.hiddenReason}</span>
+                  ) : null}
                 </div>
                 <span className="message-time">{formatWhen(item.timestamp, props.uiLanguage)}</span>
               </div>

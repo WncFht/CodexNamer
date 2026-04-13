@@ -2,10 +2,10 @@
 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import type { ApiServer } from "./app.js";
+import { buildApiServer } from "./app.js";
 
-import { buildApiServer, type ApiServer } from "./app.js";
-
-export { buildApiServer, type ApiServer } from "./app.js";
+export { type ApiServer, buildApiServer } from "./app.js";
 
 export type ApiServerStartOptions = {
   host: string;
@@ -34,19 +34,19 @@ function parseArgs(argv: string[]): {
     host,
     port: Number.isFinite(portValue) ? portValue : 42110,
     webRoot: webRootValue ? path.resolve(webRootValue) : undefined,
-    autoStartDaemon
+    autoStartDaemon,
   };
 }
 
 export async function startApiServer(options: ApiServerStartOptions): Promise<ApiServer> {
   const app = (await buildApiServer({
     operator: options.operator,
-    staticWebRoot: options.webRoot
+    staticWebRoot: options.webRoot,
   })) as ApiServer;
 
   await app.listen({
     host: options.host,
-    port: options.port
+    port: options.port,
   });
 
   if (options.autoStartDaemon !== false) {
@@ -62,7 +62,7 @@ export async function startApiServer(options: ApiServerStartOptions): Promise<Ap
 
 export async function waitForShutdown(
   app: ApiServer,
-  signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"]
+  signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"],
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let closing = false;
@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     port: args.port,
     webRoot: args.webRoot,
     autoStartDaemon: args.autoStartDaemon,
-    operator: "api"
+    operator: "api",
   });
 }
 

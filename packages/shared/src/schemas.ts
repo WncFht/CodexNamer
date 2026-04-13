@@ -12,7 +12,7 @@ import type {
   RenameRequest,
   SessionDetailQuery,
   SessionListQuery,
-  SessionTranscriptQuery
+  SessionTranscriptQuery,
 } from "./types.js";
 
 const sessionStatusEstimateSchema = z.enum([
@@ -23,7 +23,7 @@ const sessionStatusEstimateSchema = z.enum([
   "applied",
   "idle",
   "archived_hint",
-  "missing"
+  "missing",
 ]);
 
 const transcriptRoleSchema = z.enum(["all", "user", "assistant", "tool", "system"]);
@@ -69,60 +69,69 @@ const looseConfigDocumentSchema = z.object({}).catchall(z.unknown()) as z.ZodTyp
 export const sessionIndexEntrySchema = z.object({
   id: z.string().min(1),
   thread_name: z.string().min(1),
-  updated_at: z.string().min(1)
+  updated_at: z.string().min(1),
 });
 
 export const sessionIndexEntryWireSchema = sessionIndexEntrySchema.transform((value) => ({
   id: value.id,
   threadName: value.thread_name,
-  updatedAt: value.updated_at
+  updatedAt: value.updated_at,
 }));
 
 export const sessionListQuerySchema: z.ZodType<SessionListQuery> = z.object({
   dirty: optionalBooleanLikeSchema,
   frozen: optionalBooleanLikeSchema,
-  status: z.preprocess((value) => (value === "" ? undefined : value), sessionStatusEstimateSchema.optional()),
+  status: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    sessionStatusEstimateSchema.optional(),
+  ),
   project: optionalTrimmedStringSchema,
   provider: optionalTrimmedStringSchema,
   workspace: optionalTrimmedStringSchema,
   search: optionalTrimmedStringSchema,
-  sort: z.preprocess((value) => (value === "" ? undefined : value), sessionSortFieldSchema.optional()),
+  sort: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    sessionSortFieldSchema.optional(),
+  ),
   order: z.preprocess((value) => (value === "" ? undefined : value), sortOrderSchema.optional()),
-  limit: optionalPositiveIntegerSchema
+  limit: optionalPositiveIntegerSchema,
 });
 
 export const sessionDetailQuerySchema: z.ZodType<SessionDetailQuery> = z.object({
-  includeTranscript: optionalBooleanLikeSchema
+  includeTranscript: optionalBooleanLikeSchema,
 });
 
 export const sessionTranscriptQuerySchema: z.ZodType<SessionTranscriptQuery> = z.object({
   page: optionalPositiveIntegerSchema,
   pageSize: optionalPositiveIntegerSchema,
   includeHidden: optionalBooleanLikeSchema,
-  role: z.preprocess((value) => (value === "" ? undefined : value), transcriptRoleSchema.optional()),
-  query: optionalTrimmedStringSchema
+  role: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    transcriptRoleSchema.optional(),
+  ),
+  query: optionalTrimmedStringSchema,
 });
 
 export const renameRequestSchema: z.ZodType<RenameRequest> = z.object({
-  name: z.string().trim().min(1)
+  name: z.string().trim().min(1),
 });
 
 export const batchApplyRequestSchema: z.ZodType<BatchApplyRequest> = z.object({
   filter: z
     .object({
-      dirty: z.boolean().optional()
+      dirty: z.boolean().optional(),
     })
     .optional(),
-  previewOnly: z.boolean().optional()
+  previewOnly: z.boolean().optional(),
 });
 
 export const providerTestRequestSchema: z.ZodType<ProviderTestRequest> = z.object({
-  userConfig: looseConfigDocumentSchema.optional()
+  userConfig: looseConfigDocumentSchema.optional(),
 });
 
 export const promptPreviewRequestSchema: z.ZodType<PromptPreviewRequest> = z.object({
   threadId: optionalTrimmedStringSchema,
-  userConfig: looseConfigDocumentSchema.optional()
+  userConfig: looseConfigDocumentSchema.optional(),
 });
 
 export const aiRequestLogQuerySchema: z.ZodType<AiRequestLogQuery> = z.object({
@@ -131,26 +140,34 @@ export const aiRequestLogQuerySchema: z.ZodType<AiRequestLogQuery> = z.object({
   pageSize: optionalPositiveIntegerSchema,
   search: optionalTrimmedStringSchema,
   project: optionalTrimmedStringSchema,
-  status: z.preprocess((value) => (value === "" ? undefined : value), aiRequestStatusSchema.optional()),
-  transport: z.preprocess((value) => (value === "" ? undefined : value), aiRequestTransportSchema.optional())
+  status: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    aiRequestStatusSchema.optional(),
+  ),
+  transport: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    aiRequestTransportSchema.optional(),
+  ),
 });
 
 export const configUpdateRequestSchema: z.ZodType<ConfigUpdateRequest> = z
   .union([
-    z.object({
-      userConfig: looseConfigDocumentSchema.optional()
-    }).strict(),
-    looseConfigDocumentSchema.transform((userConfig) => ({ userConfig }))
+    z
+      .object({
+        userConfig: looseConfigDocumentSchema.optional(),
+      })
+      .strict(),
+    looseConfigDocumentSchema.transform((userConfig) => ({ userConfig })),
   ])
   .transform((value) => ({
-    userConfig: value.userConfig ?? {}
+    userConfig: value.userConfig ?? {},
   }));
 
 export const renameReplayRequestSchema: z.ZodType<RenameReplayRequest> = z.object({
   since: z.string().trim().min(1),
-  basis: replayBasisSchema.default("session-updated-at")
+  basis: replayBasisSchema.default("session-updated-at"),
 });
 
 export const daemonStartRequestSchema: z.ZodType<DaemonStartRequest> = z.object({
-  intervalSeconds: optionalPositiveIntegerSchema
+  intervalSeconds: optionalPositiveIntegerSchema,
 });

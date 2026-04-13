@@ -1,10 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-
+import { CodexNamer } from "@codexnamer/core";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
-
-import { CodexNamer } from "@codexnamer/core";
 
 import { DaemonProcessController } from "./daemon-controller.js";
 import { ApiEventLog } from "./event-log.js";
@@ -27,7 +25,7 @@ export async function buildApiServer(options?: {
   staticWebRoot?: string;
 }): Promise<ApiServer> {
   const app = Fastify({
-    logger: false
+    logger: false,
   });
 
   const ownedManager = options?.manager
@@ -36,7 +34,7 @@ export async function buildApiServer(options?: {
   const manager = options?.manager ?? ownedManager!;
   const eventLog = new ApiEventLog();
   const daemonController = new DaemonProcessController({
-    defaultIntervalSeconds: () => manager.config.watch.scanIntervalSeconds
+    defaultIntervalSeconds: () => manager.config.watch.scanIntervalSeconds,
   });
   app.decorate("daemonController", daemonController);
 
@@ -64,12 +62,14 @@ export async function buildApiServer(options?: {
     const staticWebRoot = path.resolve(options.staticWebRoot);
     const indexHtmlPath = path.join(staticWebRoot, "index.html");
     if (!existsSync(indexHtmlPath)) {
-      throw new Error(`Web build not found at ${indexHtmlPath}. Run the web build first or pass a valid --web-root.`);
+      throw new Error(
+        `Web build not found at ${indexHtmlPath}. Run the web build first or pass a valid --web-root.`,
+      );
     }
 
     await app.register(fastifyStatic, {
       root: staticWebRoot,
-      prefix: "/"
+      prefix: "/",
     });
 
     app.setNotFoundHandler((request, reply) => {
@@ -86,12 +86,12 @@ export async function buildApiServer(options?: {
       void reply.status(404).send({
         error: "Not Found",
         message: `Route ${request.method}:${request.url} not found`,
-        statusCode: 404
+        statusCode: 404,
       });
     });
   }
 
   return Object.assign(app, {
-    daemonController
+    daemonController,
   }) as unknown as ApiServer;
 }

@@ -7,7 +7,7 @@ describe("overview rename aggregation", () => {
     const workspace = await createTempWorkspace();
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
 
     try {
@@ -16,14 +16,14 @@ describe("overview rename aggregation", () => {
         threadId: "overview-dedup-1",
         userMessage: "第一个会话",
         lastAgentMessage: "第一个会话已经完成",
-        updatedAt: "2026-04-05T12:00:00.000Z"
+        updatedAt: "2026-04-05T12:00:00.000Z",
       });
       await writeRolloutFixture({
         codexHome: workspace.codexHome,
         threadId: "overview-dedup-2",
         userMessage: "第二个会话",
         lastAgentMessage: "第二个会话已经完成",
-        updatedAt: "2026-04-05T13:00:00.000Z"
+        updatedAt: "2026-04-05T13:00:00.000Z",
       });
 
       await manager.scan();
@@ -36,7 +36,7 @@ describe("overview rename aggregation", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:00.000Z",
-        autoApply: false
+        autoApply: false,
       });
       manager.db.recordRename({
         threadId: "overview-dedup-1",
@@ -47,7 +47,7 @@ describe("overview rename aggregation", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-05T12:00:00.000Z",
-        autoApply: false
+        autoApply: false,
       });
       manager.db.recordRename({
         threadId: "overview-dedup-2",
@@ -58,7 +58,7 @@ describe("overview rename aggregation", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-05T13:00:00.000Z",
-        autoApply: true
+        autoApply: true,
       });
 
       const overview = await manager.overview();

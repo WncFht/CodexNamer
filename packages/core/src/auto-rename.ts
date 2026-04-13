@@ -2,27 +2,24 @@ import type {
   EffectiveConfig,
   RenameStateRecord,
   SessionDetail,
-  SessionStatusEstimate
+  SessionStatusEstimate,
 } from "@codexnamer/shared";
 
 export interface AutoRenameEvaluation {
   threadId: string;
   statusEstimate: SessionStatusEstimate;
   action: "skip" | "suggest" | "apply";
-  reason:
-    | SessionStatusEstimate
-    | "frozen"
-    | "max_auto_renames_reached"
-    | "rename_cooldown";
+  reason: SessionStatusEstimate | "frozen" | "max_auto_renames_reached" | "rename_cooldown";
 }
 
 export function estimateSessionStatus(
   detail: Pick<SessionDetail, "updatedAt" | "firstUserMessage" | "lastAgentMessage" | "dirty">,
   config: EffectiveConfig,
-  now: Date
+  now: Date,
 ): SessionStatusEstimate {
   const lastUpdated = detail.updatedAt ? new Date(detail.updatedAt).getTime() : 0;
-  const ageSeconds = lastUpdated > 0 ? (now.getTime() - lastUpdated) / 1000 : Number.POSITIVE_INFINITY;
+  const ageSeconds =
+    lastUpdated > 0 ? (now.getTime() - lastUpdated) / 1000 : Number.POSITIVE_INFINITY;
 
   if (!detail.firstUserMessage && !detail.lastAgentMessage) {
     return "discovered";
@@ -45,7 +42,7 @@ export function evaluateAutoRename(
   options?: {
     now?: Date;
     renameState?: RenameStateRecord;
-  }
+  },
 ): AutoRenameEvaluation {
   const now = options?.now ?? new Date();
   const renameState = options?.renameState;
@@ -56,7 +53,7 @@ export function evaluateAutoRename(
       threadId: detail.threadId,
       statusEstimate,
       action: "skip",
-      reason: "frozen"
+      reason: "frozen",
     };
   }
 
@@ -65,7 +62,7 @@ export function evaluateAutoRename(
       threadId: detail.threadId,
       statusEstimate,
       action: "skip",
-      reason: "max_auto_renames_reached"
+      reason: "max_auto_renames_reached",
     };
   }
 
@@ -77,7 +74,7 @@ export function evaluateAutoRename(
         threadId: detail.threadId,
         statusEstimate,
         action: "skip",
-        reason: "rename_cooldown"
+        reason: "rename_cooldown",
       };
     }
   }
@@ -87,7 +84,7 @@ export function evaluateAutoRename(
       threadId: detail.threadId,
       statusEstimate,
       action: "suggest",
-      reason: "candidate_ready"
+      reason: "candidate_ready",
     };
   }
 
@@ -96,7 +93,7 @@ export function evaluateAutoRename(
       threadId: detail.threadId,
       statusEstimate,
       action: "apply",
-      reason: "finalize_ready"
+      reason: "finalize_ready",
     };
   }
 
@@ -104,6 +101,6 @@ export function evaluateAutoRename(
     threadId: detail.threadId,
     statusEstimate,
     action: "skip",
-    reason: statusEstimate
+    reason: statusEstimate,
   };
 }

@@ -5,7 +5,7 @@ import type {
   EffectiveConfig,
   MaterializedSession,
   ProviderWireApi,
-  RenameSuggestion
+  RenameSuggestion,
 } from "@codexnamer/shared";
 
 export type FetchLike = typeof fetch;
@@ -70,7 +70,7 @@ export class RenameInferenceError extends Error {
       | "empty-response"
       | "invalid-json"
       | "missing-fields"
-      | "unsupported-backend"
+      | "unsupported-backend",
   ) {
     super(message);
     this.name = "RenameInferenceError";

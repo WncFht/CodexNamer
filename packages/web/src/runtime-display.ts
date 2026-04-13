@@ -1,11 +1,15 @@
 import type { DaemonControlStatus, OverviewResponse } from "./types.js";
 
-export type RuntimeExecutionDisplay = OverviewResponse["runtime"]["actualExecution"] | "sweep-running";
-export type RuntimeDaemonStatusDisplay = OverviewResponse["runtime"]["daemonStatus"] | "controller-running";
+export type RuntimeExecutionDisplay =
+  | OverviewResponse["runtime"]["actualExecution"]
+  | "sweep-running";
+export type RuntimeDaemonStatusDisplay =
+  | OverviewResponse["runtime"]["daemonStatus"]
+  | "controller-running";
 
 export function deriveRuntimeDisplay(
   overview: OverviewResponse | null,
-  daemon: DaemonControlStatus | null
+  daemon: DaemonControlStatus | null,
 ): {
   execution: RuntimeExecutionDisplay;
   daemonStatus: RuntimeDaemonStatusDisplay;
@@ -22,14 +26,14 @@ export function deriveRuntimeDisplay(
     return {
       execution: baseExecution,
       daemonStatus: baseDaemonStatus,
-      sweepRunning: false
+      sweepRunning: false,
     };
   }
 
   return {
     execution: "sweep-running",
     daemonStatus: "controller-running",
-    sweepRunning: true
+    sweepRunning: true,
   };
 }
 
@@ -41,7 +45,7 @@ export function runtimeProgressExplanation(language: "en-US" | "zh-CN"): string 
 }
 
 export function runtimeExecutionTone(
-  execution: RuntimeExecutionDisplay
+  execution: RuntimeExecutionDisplay,
 ): "success" | "warning" | "manual" {
   if (execution === "auto-apply") {
     return "success";
@@ -54,7 +58,7 @@ export function runtimeExecutionTone(
 
 export function runtimeExecutionLabel(
   execution: RuntimeExecutionDisplay,
-  language: "en-US" | "zh-CN"
+  language: "en-US" | "zh-CN",
 ): string {
   if (language === "zh-CN") {
     if (execution === "auto-apply") {
@@ -76,7 +80,7 @@ export function runtimeExecutionLabel(
 }
 
 export function runtimeDaemonStatusTone(
-  status: RuntimeDaemonStatusDisplay
+  status: RuntimeDaemonStatusDisplay,
 ): "success" | "warning" | "manual" {
   if (status === "running" || status === "controller-running") {
     return "success";
@@ -89,7 +93,7 @@ export function runtimeDaemonStatusTone(
 
 export function runtimeDaemonStatusLabel(
   status: RuntimeDaemonStatusDisplay,
-  language: "en-US" | "zh-CN"
+  language: "en-US" | "zh-CN",
 ): string {
   if (language === "zh-CN") {
     if (status === "controller-running") {

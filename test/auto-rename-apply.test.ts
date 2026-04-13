@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { RenameInferenceError } from "@codexnamer/core";
+import { describe, expect, it } from "vitest";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 
@@ -11,8 +10,8 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize"
-      }
+        autoApply: "idle-finalize",
+      },
     });
 
     try {
@@ -33,8 +32,8 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize"
-      }
+        autoApply: "idle-finalize",
+      },
     });
 
     try {
@@ -43,7 +42,7 @@ describe("auto rename apply", () => {
         threadId,
         userMessage: "只预览自动重命名，不记录 daemon 心跳",
         lastAgentMessage: "已经补上 preview 队列接口",
-        updatedAt: "2026-04-04T12:00:00.000Z"
+        updatedAt: "2026-04-04T12:00:00.000Z",
       });
 
       const preview = await manager.previewAutoRename();
@@ -64,15 +63,15 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize"
+        autoApply: "idle-finalize",
       },
       watch: {
         scanIntervalSeconds: 300,
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 900,
-        maxAutoRenamesPerSession: 2
-      }
+        maxAutoRenamesPerSession: 2,
+      },
     });
 
     try {
@@ -81,7 +80,7 @@ describe("auto rename apply", () => {
         threadId,
         userMessage: "修复 settings 页并把 daemon auto apply 接上",
         lastAgentMessage: "已经把 Web 配置表单和 daemon 执行链对齐",
-        updatedAt: "2026-04-04T12:00:00.000Z"
+        updatedAt: "2026-04-04T12:00:00.000Z",
       });
 
       const sweep = await manager.runAutoRenameSweep();
@@ -114,15 +113,15 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "disabled"
+        autoApply: "disabled",
       },
       watch: {
         scanIntervalSeconds: 300,
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 900,
-        maxAutoRenamesPerSession: 2
-      }
+        maxAutoRenamesPerSession: 2,
+      },
     });
 
     try {
@@ -131,7 +130,7 @@ describe("auto rename apply", () => {
         threadId,
         userMessage: "只做 auto rename preview，不自动落盘",
         lastAgentMessage: "已经把 preview 队列和 runtime 面板接好了",
-        updatedAt: "2026-04-04T12:00:00.000Z"
+        updatedAt: "2026-04-04T12:00:00.000Z",
       });
 
       const sweep = await manager.runAutoRenameSweep();
@@ -162,25 +161,27 @@ describe("auto rename apply", () => {
         profile: "default",
         timeoutSeconds: 45,
         temperature: 0.2,
-        maxConcurrency: 2
-      }
+        maxConcurrency: 2,
+      },
     });
 
     let active = 0;
     let maxActive = 0;
 
-    (manager as unknown as {
-      inferenceService: {
-        suggest: (session: { threadId: string }) => Promise<{
-          threadId: string;
-          name: string;
-          source: "ai";
-          kind: string;
-          summary: string;
-          generatedAt: string;
-        }>;
-      };
-    }).inferenceService = {
+    (
+      manager as unknown as {
+        inferenceService: {
+          suggest: (session: { threadId: string }) => Promise<{
+            threadId: string;
+            name: string;
+            source: "ai";
+            kind: string;
+            summary: string;
+            generatedAt: string;
+          }>;
+        };
+      }
+    ).inferenceService = {
       suggest: async (session) => {
         active += 1;
         maxActive = Math.max(maxActive, active);
@@ -192,9 +193,9 @@ describe("auto rename apply", () => {
           source: "ai",
           kind: "fix",
           summary: "rename queue",
-          generatedAt: new Date().toISOString()
+          generatedAt: new Date().toISOString(),
         };
-      }
+      },
     };
 
     try {
@@ -204,27 +205,27 @@ describe("auto rename apply", () => {
           threadId: "019d-concurrency-1",
           userMessage: "会话一",
           lastAgentMessage: "助手一",
-          updatedAt: "2026-04-04T12:00:00.000Z"
+          updatedAt: "2026-04-04T12:00:00.000Z",
         }),
         writeRolloutFixture({
           codexHome: workspace.codexHome,
           threadId: "019d-concurrency-2",
           userMessage: "会话二",
           lastAgentMessage: "助手二",
-          updatedAt: "2026-04-04T12:00:00.000Z"
+          updatedAt: "2026-04-04T12:00:00.000Z",
         }),
         writeRolloutFixture({
           codexHome: workspace.codexHome,
           threadId: "019d-concurrency-3",
           userMessage: "会话三",
           lastAgentMessage: "助手三",
-          updatedAt: "2026-04-04T12:00:00.000Z"
-        })
+          updatedAt: "2026-04-04T12:00:00.000Z",
+        }),
       ]);
 
       const sweep = await manager.runAutoRenameSweep({
         includeCandidateNames: true,
-        autoApply: false
+        autoApply: false,
       });
 
       expect(sweep.previews).toHaveLength(3);
@@ -240,25 +241,30 @@ describe("auto rename apply", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       rename: {
-        autoApply: "idle-finalize"
-      }
+        autoApply: "idle-finalize",
+      },
     });
 
-    (manager as unknown as {
-      inferenceService: {
-        suggest: (session: { threadId: string }) => Promise<{
-          threadId: string;
-          name: string;
-          source: "ai";
-          kind: string;
-          summary: string;
-          generatedAt: string;
-        }>;
-      };
-    }).inferenceService = {
+    (
+      manager as unknown as {
+        inferenceService: {
+          suggest: (session: { threadId: string }) => Promise<{
+            threadId: string;
+            name: string;
+            source: "ai";
+            kind: string;
+            summary: string;
+            generatedAt: string;
+          }>;
+        };
+      }
+    ).inferenceService = {
       suggest: async (session) => {
         if (session.threadId === "019d-sweep-timeout") {
-          throw new RenameInferenceError("The operation was aborted due to timeout", "request-failed");
+          throw new RenameInferenceError(
+            "The operation was aborted due to timeout",
+            "request-failed",
+          );
         }
         return {
           threadId: session.threadId,
@@ -266,9 +272,9 @@ describe("auto rename apply", () => {
           source: "ai",
           kind: "fix",
           summary: "rename queue",
-          generatedAt: new Date().toISOString()
+          generatedAt: new Date().toISOString(),
         };
-      }
+      },
     };
 
     try {
@@ -278,24 +284,26 @@ describe("auto rename apply", () => {
           threadId: "019d-sweep-timeout",
           userMessage: "会话一会超时",
           lastAgentMessage: "这里会触发 provider timeout",
-          updatedAt: "2026-04-04T12:00:00.000Z"
+          updatedAt: "2026-04-04T12:00:00.000Z",
         }),
         writeRolloutFixture({
           codexHome: workspace.codexHome,
           threadId: "019d-sweep-ok",
           userMessage: "会话二应继续正常 apply",
           lastAgentMessage: "这里应该继续自动写回",
-          updatedAt: "2026-04-04T12:00:00.000Z"
-        })
+          updatedAt: "2026-04-04T12:00:00.000Z",
+        }),
       ]);
 
       const sweep = await manager.runAutoRenameSweep();
       expect(sweep.previews).toHaveLength(2);
       expect(sweep.previews.find((item) => item.threadId === "019d-sweep-timeout")).toMatchObject({
         status: "skip",
-        reason: "request-failed"
+        reason: "request-failed",
       });
-      expect(sweep.previews.find((item) => item.threadId === "019d-sweep-ok")?.status).toBe("apply");
+      expect(sweep.previews.find((item) => item.threadId === "019d-sweep-ok")?.status).toBe(
+        "apply",
+      );
       expect(sweep.applied).toHaveLength(1);
       expect(sweep.applied[0]?.threadId).toBe("019d-sweep-ok");
       expect(sweep.applied[0]?.written).toBe(true);

@@ -9,5 +9,5 @@ export const DEFAULT_WATCH = {
   candidateIdleSeconds: 120,
   finalizeIdleSeconds: 600,
   renameCooldownSeconds: 900,
-  maxAutoRenamesPerSession: 2
+  maxAutoRenamesPerSession: 2,
 } as const;

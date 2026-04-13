@@ -12,7 +12,7 @@ function createOverview(runtime: Partial<OverviewResponse["runtime"]>): Overview
       clean: 0,
       frozen: 0,
       named: 0,
-      withCandidate: 0
+      withCandidate: 0,
     },
     runtime: {
       configuredAutoApply: "idle-finalize",
@@ -20,7 +20,7 @@ function createOverview(runtime: Partial<OverviewResponse["runtime"]>): Overview
       daemonAutoApply: false,
       daemonStatus: "stale",
       explain: "stale",
-      ...runtime
+      ...runtime,
     },
     workload: {
       totalTokens: 0,
@@ -33,7 +33,7 @@ function createOverview(runtime: Partial<OverviewResponse["runtime"]>): Overview
       averageTokensPerSession: 0,
       averageTokensPerDirtySession: 0,
       averageTitleLength: 0,
-      topWorkspacesByTokens: []
+      topWorkspacesByTokens: [],
     },
     pipeline: {
       discovered: 0,
@@ -43,7 +43,7 @@ function createOverview(runtime: Partial<OverviewResponse["runtime"]>): Overview
       applied: 0,
       idle: 0,
       archivedHint: 0,
-      missing: 0
+      missing: 0,
     },
     renameHistory: {
       total: 0,
@@ -53,15 +53,15 @@ function createOverview(runtime: Partial<OverviewResponse["runtime"]>): Overview
       previewOnly: 0,
       aiApplied: 0,
       manualApplied: 0,
-      autoApplied: 0
+      autoApplied: 0,
     },
     replay: {
-      recentRuns: []
+      recentRuns: [],
     },
     activity: {
       windowDays: 14,
-      buckets: []
-    }
+      buckets: [],
+    },
   };
 }
 
@@ -73,10 +73,10 @@ function createDaemon(status: Partial<DaemonControlStatus>): DaemonControlStatus
       cwd: "/tmp",
       executable: "node",
       scriptPath: "/tmp/daemon.js",
-      args: []
+      args: [],
     },
     recentLogs: [],
-    ...status
+    ...status,
   };
 }
 
@@ -86,12 +86,12 @@ describe("runtime display overlay", () => {
       createOverview({
         configuredAutoApply: "idle-finalize",
         actualExecution: "preview-only",
-        daemonStatus: "stale"
+        daemonStatus: "stale",
       }),
       createDaemon({
         running: true,
-        pid: 123
-      })
+        pid: 123,
+      }),
     );
 
     expect(result.sweepRunning).toBe(true);
@@ -105,12 +105,12 @@ describe("runtime display overlay", () => {
         configuredAutoApply: "idle-finalize",
         actualExecution: "auto-apply",
         daemonStatus: "running",
-        daemonAutoApply: true
+        daemonAutoApply: true,
       }),
       createDaemon({
         running: true,
-        pid: 123
-      })
+        pid: 123,
+      }),
     );
 
     expect(result.sweepRunning).toBe(false);

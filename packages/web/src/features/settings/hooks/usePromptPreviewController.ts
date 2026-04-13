@@ -10,10 +10,17 @@ export function usePromptPreviewController(params: {
   hasPromptPreview: boolean;
   onRefreshPromptPreview: (
     userConfig?: ConfigDocument,
-    options?: { urgent?: boolean }
+    options?: { urgent?: boolean },
   ) => void | Promise<void>;
 }) {
-  const { draftConfig, draftKey, selectedThreadId, dirty, hasPromptPreview, onRefreshPromptPreview } = params;
+  const {
+    draftConfig,
+    draftKey,
+    selectedThreadId,
+    dirty,
+    hasPromptPreview,
+    onRefreshPromptPreview,
+  } = params;
   const refreshPromptPreviewRef = useRef(onRefreshPromptPreview);
   const lastRequestedKeyRef = useRef("");
   const lastRequestedThreadIdRef = useRef<string | undefined>(undefined);
@@ -35,7 +42,10 @@ export function usePromptPreviewController(params: {
   }, [dirty, draftKey, hasPromptPreview, selectedThreadId]);
 
   useEffect(() => {
-    if (lastRequestedKeyRef.current === draftKey && lastRequestedThreadIdRef.current === selectedThreadId) {
+    if (
+      lastRequestedKeyRef.current === draftKey &&
+      lastRequestedThreadIdRef.current === selectedThreadId
+    ) {
       return;
     }
     setPreviewDirty(dirty || !hasPromptPreview);
@@ -47,14 +57,14 @@ export function usePromptPreviewController(params: {
       lastRequestedThreadIdRef.current = selectedThreadId;
       setPreviewDirty(false);
       await refreshPromptPreviewRef.current(draftConfig, {
-        urgent: options?.urgent ?? true
+        urgent: options?.urgent ?? true,
       });
     },
-    [draftConfig, draftKey, selectedThreadId]
+    [draftConfig, draftKey, selectedThreadId],
   );
 
   return {
     previewDirty,
-    refreshPreview
+    refreshPreview,
   };
 }

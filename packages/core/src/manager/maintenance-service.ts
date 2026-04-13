@@ -3,30 +3,31 @@ import type {
   RenameReplayPreviewResult,
   RenameReplayResult,
   RenameSuggestion,
-  SessionDetail
+  SessionDetail,
 } from "@codexnamer/shared";
 
 import { evaluateAutoRename } from "../auto-rename.js";
+import { compactSessionIndex } from "../session-index.js";
 import {
   applyOfficialNamingPolicy,
   collectReservedOfficialNameKeys,
   getBlockedOfficialNameThreadIds,
-  summarizeRuleStatus
+  summarizeRuleStatus,
 } from "./naming-policy.js";
-import { compactSessionIndex } from "../session-index.js";
-import { type DaemonSweepSnapshot, type RenameReplaySnapshot, summarizeSweepErrorReason } from "./runtime-state.js";
+import { apply } from "./rename-command-service.js";
+import type { DaemonSweepSnapshot, RenameReplaySnapshot } from "./runtime-state.js";
+import { summarizeSweepErrorReason } from "./runtime-state.js";
 import type { ManagerServiceContext } from "./shared.js";
 import { mapWithConcurrency } from "./shared.js";
-import { apply } from "./rename-command-service.js";
 
 export async function compactIndex(
   context: ManagerServiceContext,
-  options?: { dryRun?: boolean }
+  options?: { dryRun?: boolean },
 ): Promise<Awaited<ReturnType<typeof compactSessionIndex>>> {
   const result = await compactSessionIndex({
     filePath: context.sessionIndexPath,
     dryRun: options?.dryRun,
-    backupDir: context.backupDir
+    backupDir: context.backupDir,
   });
   context.invalidateSessionIndexCache();
   return result;
@@ -55,7 +56,7 @@ export async function previewRequeueRenamesSince(
   params: {
     since: string;
     basis: "session-updated-at" | "last-applied-at";
-  }
+  },
 ): Promise<RenameReplayPreviewResult> {
   await context.scan();
 
@@ -67,7 +68,7 @@ export async function previewRequeueRenamesSince(
   const currentRuleSignature = context.currentRuleSignature;
   const candidates = context.db.listRenameReplayCandidatesSince({
     since: sinceDate.toISOString(),
-    basis: params.basis
+    basis: params.basis,
   });
   const queueCounts = new Map<string, number>();
   const skipCounts = new Map<string, number>();
@@ -75,7 +76,7 @@ export async function previewRequeueRenamesSince(
     const ruleStatus = summarizeRuleStatus({
       lastAppliedSource: candidate.lastAppliedSource,
       lastAppliedRuleSignature: candidate.lastAppliedRuleSignature,
-      currentRuleSignature
+      currentRuleSignature,
     });
     let action: "queue" | "skip" = "queue";
     let reason: RenameReplayPreviewResult["items"][number]["reason"] = "rule_mismatch";
@@ -108,7 +109,7 @@ export async function previewRequeueRenamesSince(
       officialName: candidate.officialName,
       ruleStatus,
       action,
-      reason
+      reason,
     };
   });
 
@@ -121,7 +122,7 @@ export async function previewRequeueRenamesSince(
     skipped: items.filter((item) => item.action === "skip").length,
     queueCounts: Object.fromEntries(queueCounts.entries()),
     skipCounts: Object.fromEntries(skipCounts.entries()),
-    items
+    items,
   };
 }
 
@@ -130,10 +131,12 @@ export async function requeueRenamesSince(
   params: {
     since: string;
     basis: "session-updated-at" | "last-applied-at";
-  }
+  },
 ): Promise<RenameReplayResult> {
   const preview = await previewRequeueRenamesSince(context, params);
-  const threadIds = preview.items.filter((item) => item.action === "queue").map((item) => item.threadId);
+  const threadIds = preview.items
+    .filter((item) => item.action === "queue")
+    .map((item) => item.threadId);
   const result = context.db.queueRenameReplayThreadIds(threadIds);
 
   const requestedAt = new Date().toISOString();
@@ -148,10 +151,10 @@ export async function requeueRenamesSince(
         queued: result.queued,
         clearedCandidates: result.clearedCandidates,
         skipped: preview.skipped,
-        skipCounts: preview.skipCounts
+        skipCounts: preview.skipCounts,
       },
-      ...(previousState?.recentRuns ?? [])
-    ].slice(0, 8)
+      ...(previousState?.recentRuns ?? []),
+    ].slice(0, 8),
   } satisfies RenameReplaySnapshot);
 
   return {
@@ -161,7 +164,7 @@ export async function requeueRenamesSince(
     clearedCandidates: result.clearedCandidates,
     matchedThreadIds: result.matchedThreadIds,
     skipped: preview.skipped,
-    skipCounts: preview.skipCounts
+    skipCounts: preview.skipCounts,
   };
 }
 
@@ -174,7 +177,7 @@ export async function runAutoRenameSweep(
     intervalSeconds?: number;
     processId?: number;
     recordRuntime?: boolean;
-  }
+  },
 ): Promise<{
   previews: AutoRenamePreview[];
   applied: Array<{ threadId: string; written: boolean; name: string; reason?: string }>;
@@ -183,7 +186,7 @@ export async function runAutoRenameSweep(
   const now = new Date();
   const blockedOfficialThreadIds = getBlockedOfficialNameThreadIds(context.db, context.config);
   const reservedNameKeys = collectReservedOfficialNameKeys(context.db, context.config, {
-    blockedOfficialThreadIds
+    blockedOfficialThreadIds,
   });
   const previews: AutoRenamePreview[] = [];
   const applied: Array<{ threadId: string; written: boolean; name: string; reason?: string }> = [];
@@ -193,14 +196,15 @@ export async function runAutoRenameSweep(
       ? Math.trunc(options.limit)
       : dirtySessions.length;
   const pending = Math.max(0, dirtySessions.length - limit);
-  const autoApplyEnabled = (options?.autoApply ?? true) && context.config.rename.autoApply === "idle-finalize";
+  const autoApplyEnabled =
+    (options?.autoApply ?? true) && context.config.rename.autoApply === "idle-finalize";
   const maxConcurrency = Math.max(1, Math.trunc(context.config.ai.maxConcurrency || 1));
   let reservationChain = Promise.resolve();
   const reservationScheduler = async <T>(callback: () => T | Promise<T>): Promise<T> => {
     const scheduled = reservationChain.then(callback);
     reservationChain = scheduled.then(
       () => undefined,
-      () => undefined
+      () => undefined,
     );
     return scheduled;
   };
@@ -222,17 +226,18 @@ export async function runAutoRenameSweep(
     const renameState = context.db.getRenameState(normalizedDetail.threadId);
     const evaluation = evaluateAutoRename(normalizedDetail, context.config, {
       now,
-      renameState
+      renameState,
     });
     workItems.push({
       detail: normalizedDetail,
-      evaluation
+      evaluation,
     });
   }
 
   const sweepItems = await mapWithConcurrency(workItems, maxConcurrency, async (item) => {
     const shouldResolveSuggestion =
-      options?.includeCandidateNames === true || (autoApplyEnabled && item.evaluation.action === "apply");
+      options?.includeCandidateNames === true ||
+      (autoApplyEnabled && item.evaluation.action === "apply");
     let suggestion: RenameSuggestion | undefined;
     let failureReason: string | undefined;
     if (shouldResolveSuggestion && item.evaluation.action !== "skip") {
@@ -241,7 +246,7 @@ export async function runAutoRenameSweep(
           saveCandidate: autoApplyEnabled || options?.includeCandidateNames === true,
           reservedNameKeys,
           blockedOfficialThreadIds,
-          reservationScheduler
+          reservationScheduler,
         });
       } catch (error) {
         failureReason = summarizeSweepErrorReason(error);
@@ -251,7 +256,7 @@ export async function runAutoRenameSweep(
     return {
       ...item,
       suggestion,
-      failureReason
+      failureReason,
     };
   });
 
@@ -262,7 +267,7 @@ export async function runAutoRenameSweep(
       threadId: item.detail.threadId,
       candidateName: options?.includeCandidateNames ? item.suggestion?.name : undefined,
       status: previewStatus,
-      reason: previewReason
+      reason: previewReason,
     });
 
     if (autoApplyEnabled && item.evaluation.action === "apply" && !item.failureReason) {
@@ -270,20 +275,20 @@ export async function runAutoRenameSweep(
         const result = await apply(context, item.detail.threadId, {
           autoApply: true,
           skipScan: true,
-          detail: item.detail
+          detail: item.detail,
         });
         applied.push({
           threadId: item.detail.threadId,
           written: result.written,
           name: result.name,
-          reason: result.written ? undefined : "unchanged"
+          reason: result.written ? undefined : "unchanged",
         });
       } catch (error) {
         applied.push({
           threadId: item.detail.threadId,
           written: false,
           name: item.suggestion?.name ?? item.detail.officialName ?? item.detail.threadId,
-          reason: summarizeSweepErrorReason(error)
+          reason: summarizeSweepErrorReason(error),
         });
       }
     }
@@ -297,22 +302,34 @@ export async function runAutoRenameSweep(
     apply: previews.filter((item) => item.status === "apply").length,
     skip: previews.filter((item) => item.status === "skip").length,
     failedSuggestions: previews.filter((item) =>
-      ["request-failed", "missing-auth", "provider-misconfigured", "empty-response", "invalid-json", "missing-fields", "unsupported-backend", "error"].includes(item.reason)
+      [
+        "request-failed",
+        "missing-auth",
+        "provider-misconfigured",
+        "empty-response",
+        "invalid-json",
+        "missing-fields",
+        "unsupported-backend",
+        "error",
+      ].includes(item.reason),
     ).length,
     autoApplied: applied.filter((item) => item.written).length,
     unchanged: applied.filter((item) => !item.written).length,
     scan: {
       scannedRollouts: scanReport.scannedRollouts,
-      updatedSessions: scanReport.updatedSessions
+      updatedSessions: scanReport.updatedSessions,
     },
-    execution: autoApplyEnabled ? "auto-apply" : "preview-only"
+    execution: autoApplyEnabled ? "auto-apply" : "preview-only",
   } satisfies DaemonSweepSnapshot["summary"];
 
   if (options?.recordRuntime !== false) {
     const previousState = context.db.getMaintenanceState<DaemonSweepSnapshot>("daemon_runtime");
     context.db.setMaintenanceState("daemon_runtime", {
       lastSweepAt: now.toISOString(),
-      intervalSeconds: Math.max(1, Math.trunc(options?.intervalSeconds ?? context.config.watch.scanIntervalSeconds)),
+      intervalSeconds: Math.max(
+        1,
+        Math.trunc(options?.intervalSeconds ?? context.config.watch.scanIntervalSeconds),
+      ),
       processId:
         typeof options?.processId === "number" && Number.isFinite(options.processId)
           ? Math.trunc(options.processId)
@@ -330,16 +347,16 @@ export async function runAutoRenameSweep(
           failedSuggestions: summary.failedSuggestions,
           autoApplied: summary.autoApplied,
           unchanged: summary.unchanged,
-          execution: summary.execution
+          execution: summary.execution,
         },
-        ...((previousState?.recentSweeps ?? []).filter((item) => item.at !== now.toISOString()))
-      ].slice(0, 32)
+        ...(previousState?.recentSweeps ?? []).filter((item) => item.at !== now.toISOString()),
+      ].slice(0, 32),
     } satisfies DaemonSweepSnapshot);
   }
 
   return {
     previews,
-    applied
+    applied,
   };
 }
 
@@ -348,13 +365,13 @@ export async function previewAutoRename(
   options?: {
     includeCandidateNames?: boolean;
     limit?: number;
-  }
+  },
 ): Promise<AutoRenamePreview[]> {
   const result = await runAutoRenameSweep(context, {
     includeCandidateNames: options?.includeCandidateNames,
     limit: options?.limit,
     autoApply: false,
-    recordRuntime: false
+    recordRuntime: false,
   });
   return result.previews;
 }

@@ -13,9 +13,11 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   }
 
   const textarea = document.createElement("textarea");
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const selection = document.getSelection();
-  const selectedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+  const selectedRange =
+    selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
 
   textarea.value = text;
   textarea.setAttribute("readonly", "true");

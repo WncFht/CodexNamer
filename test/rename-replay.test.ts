@@ -8,7 +8,7 @@ describe("rename replay queue", () => {
     const threadId = "019d-replay-latest";
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
 
     try {
@@ -17,14 +17,14 @@ describe("rename replay queue", () => {
         threadId,
         userMessage: "把设置页的 context 策略做细一点",
         lastAgentMessage: "已经加上新的 transcript 过滤模式",
-        updatedAt: "2026-04-04T12:00:00.000Z"
+        updatedAt: "2026-04-04T12:00:00.000Z",
       });
 
       await manager.apply(threadId);
 
       const preview = await manager.previewRequeueRenamesSince({
         since: "2026-04-04T00:00:00.000Z",
-        basis: "session-updated-at"
+        basis: "session-updated-at",
       });
 
       expect(preview.currentRuleSignature).toBeTruthy();
@@ -36,13 +36,13 @@ describe("rename replay queue", () => {
           threadId,
           ruleStatus: "latest",
           action: "skip",
-          reason: "already_latest_rule"
-        })
+          reason: "already_latest_rule",
+        }),
       ]);
 
       const replay = await manager.requeueRenamesSince({
         since: "2026-04-04T00:00:00.000Z",
-        basis: "session-updated-at"
+        basis: "session-updated-at",
       });
 
       expect(replay.queued).toBe(0);
@@ -62,7 +62,7 @@ describe("rename replay queue", () => {
     const threadId = "019d-replay-rule-mismatch";
     const initialManager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
 
     try {
@@ -71,7 +71,7 @@ describe("rename replay queue", () => {
         threadId,
         userMessage: "把命名规则改成更强调 workspace",
         lastAgentMessage: "已经整理成新的命名 builder",
-        updatedAt: "2026-04-04T13:00:00.000Z"
+        updatedAt: "2026-04-04T13:00:00.000Z",
       });
 
       await initialManager.apply(threadId);
@@ -83,14 +83,14 @@ describe("rename replay queue", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       naming: {
-        customPrompt: "Always prefix a workspace-heavy Chinese tag."
-      }
+        customPrompt: "Always prefix a workspace-heavy Chinese tag.",
+      },
     });
 
     try {
       const preview = await changedRuleManager.previewRequeueRenamesSince({
         since: "2026-04-04T00:00:00.000Z",
-        basis: "session-updated-at"
+        basis: "session-updated-at",
       });
 
       const detail = await changedRuleManager.getSessionDetail(threadId);
@@ -103,13 +103,13 @@ describe("rename replay queue", () => {
           threadId,
           ruleStatus: "outdated",
           action: "queue",
-          reason: "rule_mismatch"
-        })
+          reason: "rule_mismatch",
+        }),
       ]);
 
       const replay = await changedRuleManager.requeueRenamesSince({
         since: "2026-04-04T00:00:00.000Z",
-        basis: "session-updated-at"
+        basis: "session-updated-at",
       });
 
       expect(replay.queued).toBe(1);

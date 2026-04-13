@@ -6,7 +6,7 @@ import type {
   ScanReport,
   SessionDetail,
   SessionIndexSnapshot,
-  SessionSummary
+  SessionSummary,
 } from "@codexnamer/shared";
 
 import type { StateDatabase } from "../database.js";
@@ -39,8 +39,14 @@ export type ManagerServiceContext = {
   resolvePreviewConfig: (userConfig?: ConfigDocument) => EffectiveConfig;
   buildSyntheticPromptSession: (config?: EffectiveConfig) => MaterializedSession;
   requireSuccessfulProviderTest: (config?: EffectiveConfig) => Promise<void>;
-  materializeSessionForSuggestion: (detail: SessionDetail, config?: EffectiveConfig) => Promise<MaterializedSession>;
-  resolveSuggestionForDetail: (detail: SessionDetail, options?: ResolveSuggestionOptions) => Promise<RenameSuggestion>;
+  materializeSessionForSuggestion: (
+    detail: SessionDetail,
+    config?: EffectiveConfig,
+  ) => Promise<MaterializedSession>;
+  resolveSuggestionForDetail: (
+    detail: SessionDetail,
+    options?: ResolveSuggestionOptions,
+  ) => Promise<RenameSuggestion>;
   scan: () => Promise<ScanReport>;
   listSessions: (options?: { dirty?: boolean }) => Promise<SessionSummary[]>;
 };
@@ -52,7 +58,7 @@ export function redactSecret(value?: string): string | undefined {
 export async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
-  worker: (item: T, index: number) => Promise<R>
+  worker: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
   const maxConcurrency = Math.max(1, Math.trunc(concurrency));
   const results = new Array<R>(items.length);
@@ -69,6 +75,8 @@ export async function mapWithConcurrency<T, R>(
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(maxConcurrency, items.length) }, () => runWorker()));
+  await Promise.all(
+    Array.from({ length: Math.min(maxConcurrency, items.length) }, () => runWorker()),
+  );
   return results;
 }

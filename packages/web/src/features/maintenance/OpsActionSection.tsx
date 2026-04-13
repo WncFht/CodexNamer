@@ -24,44 +24,70 @@ export function OpsActionSection(props: {
           <p className="panel-kicker">{props.inline("动作", "Actions")}</p>
           <h3>{props.inline("常用操作", "Common actions")}</h3>
           <p className="settings-copy">
-            {props.inline("刷新预览、查看日志、诊断和重新入队入口。", "Refresh preview, open logs, diagnostics, and replay tools.")}
+            {props.inline(
+              "刷新预览、查看日志、诊断和重新入队入口。",
+              "Refresh preview, open logs, diagnostics, and replay tools.",
+            )}
           </p>
         </div>
       </div>
 
       <div className="ops-attention-grid">
         <article className="ops-attention-card" data-tone={queueTotal > 0 ? "warning" : "success"}>
-          <span className="metric-label">{props.inline("即时命名积压", "Live rename backlog")}</span>
+          <span className="metric-label">
+            {props.inline("即时命名积压", "Live rename backlog")}
+          </span>
           <strong>{formatUiNumber(queueTotal, props.uiLanguage)}</strong>
           <p>
-            {formatUiNumber(props.previewApplyCount, props.uiLanguage)} {props.inline("待应用", "apply")} / {" "}
-            {formatUiNumber(props.previewSuggestCount, props.uiLanguage)} {props.inline("待建议", "suggest")}
+            {formatUiNumber(props.previewApplyCount, props.uiLanguage)}{" "}
+            {props.inline("待应用", "apply")} /{" "}
+            {formatUiNumber(props.previewSuggestCount, props.uiLanguage)}{" "}
+            {props.inline("待建议", "suggest")}
           </p>
         </article>
-        <article className="ops-attention-card" data-tone={props.ruleBacklogCount > 0 ? "warning" : "success"}>
+        <article
+          className="ops-attention-card"
+          data-tone={props.ruleBacklogCount > 0 ? "warning" : "success"}
+        >
           <span className="metric-label">{props.inline("规则补扫积压", "Replay backlog")}</span>
           <strong>{formatUiNumber(props.ruleBacklogCount, props.uiLanguage)}</strong>
           <p>
             {props.ruleBacklogCount > 0
-              ? props.inline("有会话还没跟上最新规则，适合去重新入队页确认。", "Some sessions are still on older rules. Open replay to confirm them.")
+              ? props.inline(
+                  "有会话还没跟上最新规则，适合去重新入队页确认。",
+                  "Some sessions are still on older rules. Open replay to confirm them.",
+                )
               : props.inline("规则签名已经基本对齐。", "Rule signatures are already aligned.")}
           </p>
         </article>
         <article
           className="ops-attention-card"
-          data-tone={props.failedAiRequestCount > 0 || props.activeAiRequestCount > 0 ? "warning" : "success"}
+          data-tone={
+            props.failedAiRequestCount > 0 || props.activeAiRequestCount > 0 ? "warning" : "success"
+          }
         >
           <span className="metric-label">{props.inline("模型请求状态", "AI request health")}</span>
-          <strong>{formatUiNumber(props.failedAiRequestCount + props.activeAiRequestCount, props.uiLanguage)}</strong>
+          <strong>
+            {formatUiNumber(
+              props.failedAiRequestCount + props.activeAiRequestCount,
+              props.uiLanguage,
+            )}
+          </strong>
           <p>
-            {formatUiNumber(props.activeAiRequestCount, props.uiLanguage)} {props.inline("活跃", "active")} / {" "}
-            {formatUiNumber(props.failedAiRequestCount, props.uiLanguage)} {props.inline("失败", "failed")}
+            {formatUiNumber(props.activeAiRequestCount, props.uiLanguage)}{" "}
+            {props.inline("活跃", "active")} /{" "}
+            {formatUiNumber(props.failedAiRequestCount, props.uiLanguage)}{" "}
+            {props.inline("失败", "failed")}
           </p>
         </article>
       </div>
 
       <div className="ops-action-button-row">
-        <button className="btn-sm primary" onClick={() => void props.onRefreshPreview()} type="button">
+        <button
+          className="btn-sm primary"
+          onClick={() => void props.onRefreshPreview()}
+          type="button"
+        >
           {props.previewRefreshing
             ? props.inline("刷新 Preview 中...", "Refreshing preview...")
             : props.inline("刷新命名 Preview", "Refresh naming preview")}

@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { buildSessionRevision } from "@codexnamer/core";
+import { describe, expect, it } from "vitest";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 
@@ -13,7 +12,7 @@ describe("auto rename preview guards", () => {
       threadId,
       userMessage: "实现 provider test 命令",
       lastAgentMessage: "已经补上 provider test 和 config print",
-      updatedAt: "2026-04-04T12:00:00.000Z"
+      updatedAt: "2026-04-04T12:00:00.000Z",
     });
 
     const manager = await createManagerForTest({
@@ -24,8 +23,8 @@ describe("auto rename preview guards", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 3600,
-        maxAutoRenamesPerSession: 2
-      }
+        maxAutoRenamesPerSession: 2,
+      },
     });
 
     try {
@@ -36,9 +35,9 @@ describe("auto rename preview guards", () => {
         session!,
         {
           sizeBytes: 123,
-          mtime: "2026-04-04T12:00:00.000Z"
+          mtime: "2026-04-04T12:00:00.000Z",
         },
-        undefined
+        undefined,
       );
 
       manager.db.recordRename({
@@ -50,34 +49,34 @@ describe("auto rename preview guards", () => {
         appliedAt: new Date().toISOString(),
         appliedRevision: revision.currentRevision,
         autoApply: true,
-        operator: "test"
+        operator: "test",
       });
 
       manager.db.upsertSession({
         session: {
           ...session!,
           lastUserMessage: "实现 provider test 命令并补充自动 rename 冷却逻辑",
-          updatedAt: "2026-04-04T12:00:00.000Z"
+          updatedAt: "2026-04-04T12:00:00.000Z",
         },
         revision: buildSessionRevision(
           {
             ...session!,
             lastUserMessage: "实现 provider test 命令并补充自动 rename 冷却逻辑",
-            updatedAt: "2026-04-04T12:00:00.000Z"
+            updatedAt: "2026-04-04T12:00:00.000Z",
           },
           {
             sizeBytes: 256,
-            mtime: "2026-04-04T12:00:00.000Z"
+            mtime: "2026-04-04T12:00:00.000Z",
           },
-          revision
+          revision,
         ),
         cursor: {
           rolloutPath,
           lastOffset: 256,
           lastSize: 256,
           lastMtime: "2026-04-04T12:00:00.000Z",
-          lastScanAt: "2026-04-04T12:00:00.000Z"
-        }
+          lastScanAt: "2026-04-04T12:00:00.000Z",
+        },
       });
 
       const previews = await manager.previewAutoRename();
@@ -95,7 +94,7 @@ describe("auto rename preview guards", () => {
       threadId,
       userMessage: "实现 freeze 命令",
       lastAgentMessage: "已经补上 freeze 和 manual override",
-      updatedAt: "2026-04-04T12:00:00.000Z"
+      updatedAt: "2026-04-04T12:00:00.000Z",
     });
 
     const manager = await createManagerForTest({
@@ -106,8 +105,8 @@ describe("auto rename preview guards", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 0,
-        maxAutoRenamesPerSession: 1
-      }
+        maxAutoRenamesPerSession: 1,
+      },
     });
 
     try {
@@ -118,9 +117,9 @@ describe("auto rename preview guards", () => {
         session!,
         {
           sizeBytes: 123,
-          mtime: "2026-04-04T12:00:00.000Z"
+          mtime: "2026-04-04T12:00:00.000Z",
         },
-        undefined
+        undefined,
       );
 
       manager.db.recordRename({
@@ -132,39 +131,39 @@ describe("auto rename preview guards", () => {
         appliedAt: "2026-04-04T10:00:00.000Z",
         appliedRevision: revision.currentRevision,
         autoApply: true,
-        operator: "test"
+        operator: "test",
       });
 
       manager.db.upsertSession({
         session: {
           ...session!,
           lastUserMessage: "实现 freeze 命令并补充后续 pipeline 审查",
-          updatedAt: "2026-04-04T12:00:00.000Z"
+          updatedAt: "2026-04-04T12:00:00.000Z",
         },
         revision: buildSessionRevision(
           {
             ...session!,
             lastUserMessage: "实现 freeze 命令并补充后续 pipeline 审查",
-            updatedAt: "2026-04-04T12:00:00.000Z"
+            updatedAt: "2026-04-04T12:00:00.000Z",
           },
           {
             sizeBytes: 256,
-            mtime: "2026-04-04T12:00:00.000Z"
+            mtime: "2026-04-04T12:00:00.000Z",
           },
-          revision
+          revision,
         ),
         cursor: {
           rolloutPath,
           lastOffset: 256,
           lastSize: 256,
           lastMtime: "2026-04-04T12:00:00.000Z",
-          lastScanAt: "2026-04-04T12:00:00.000Z"
-        }
+          lastScanAt: "2026-04-04T12:00:00.000Z",
+        },
       });
 
       const previews = await manager.previewAutoRename();
       expect(previews.find((item) => item.threadId === threadId)?.reason).toBe(
-        "max_auto_renames_reached"
+        "max_auto_renames_reached",
       );
     } finally {
       await manager.close();

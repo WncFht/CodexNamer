@@ -4,10 +4,7 @@ import { formatWhen } from "./browser-utils.js";
 import { DaemonQueueCard } from "./features/daemon/DaemonQueueCard.js";
 import { DaemonStatusCard } from "./features/daemon/DaemonStatusCard.js";
 import { DaemonTechnicalDetails } from "./features/daemon/DaemonTechnicalDetails.js";
-import {
-  deriveRuntimeDisplay,
-  runtimeDaemonStatusTone
-} from "./runtime-display.js";
+import { deriveRuntimeDisplay, runtimeDaemonStatusTone } from "./runtime-display.js";
 import type { AutoRenamePreviewResponse, DaemonControlStatus, OverviewResponse } from "./types.js";
 
 function deriveNextSweepAt(status: DaemonControlStatus | null, nowMs: number): string | undefined {
@@ -30,7 +27,11 @@ function deriveNextSweepAt(status: DaemonControlStatus | null, nowMs: number): s
   return new Date(startedAtMs + nextTickIndex * intervalMs).toISOString();
 }
 
-function formatCountdown(targetAt: string | undefined, nowMs: number, language: "en-US" | "zh-CN"): string {
+function formatCountdown(
+  targetAt: string | undefined,
+  nowMs: number,
+  language: "en-US" | "zh-CN",
+): string {
   if (!targetAt) {
     return "--";
   }
@@ -60,7 +61,10 @@ function formatCountdown(targetAt: string | undefined, nowMs: number, language: 
   return language === "zh-CN" ? `${seconds}秒` : `${seconds}s`;
 }
 
-function daemonStatusLabel(status: DaemonControlStatus | null, language: "en-US" | "zh-CN"): string {
+function daemonStatusLabel(
+  status: DaemonControlStatus | null,
+  language: "en-US" | "zh-CN",
+): string {
   if (language === "zh-CN") {
     return status?.running ? "已启动" : "未启动";
   }
@@ -79,20 +83,22 @@ export function DaemonPanel(props: {
 }) {
   const inline = React.useCallback(
     (zh: string, en: string) => (props.uiLanguage === "zh-CN" ? zh : en),
-    [props.uiLanguage]
+    [props.uiLanguage],
   );
-  const previewApplyCount = props.preview?.items.filter((item) => item.status === "apply").length ?? 0;
-  const previewSuggestCount = props.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
+  const previewApplyCount =
+    props.preview?.items.filter((item) => item.status === "apply").length ?? 0;
+  const previewSuggestCount =
+    props.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
   const lastSweep = props.overview?.runtime.lastSweepSummary;
   const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
   const [countdownNow, setCountdownNow] = React.useState(() => Date.now());
   const nextSweepAt = React.useMemo(
     () => deriveNextSweepAt(props.daemon, countdownNow),
-    [countdownNow, props.daemon]
+    [countdownNow, props.daemon],
   );
   const countdownLabel = React.useMemo(
     () => formatCountdown(nextSweepAt, countdownNow, props.uiLanguage),
-    [countdownNow, nextSweepAt, props.uiLanguage]
+    [countdownNow, nextSweepAt, props.uiLanguage],
   );
 
   React.useEffect(() => {
@@ -118,7 +124,7 @@ export function DaemonPanel(props: {
           <p>
             {inline(
               "查看 daemon 状态、下一轮 sweep 和当前积压。",
-              "View daemon status, the next sweep, and current backlog."
+              "View daemon status, the next sweep, and current backlog.",
             )}
           </p>
         </div>
@@ -134,7 +140,9 @@ export function DaemonPanel(props: {
               onClick={() => void props.onStop()}
               type="button"
             >
-              {props.actioning === "stop" ? inline("停止中...", "Stopping...") : inline("停止后台", "Stop background worker")}
+              {props.actioning === "stop"
+                ? inline("停止中...", "Stopping...")
+                : inline("停止后台", "Stop background worker")}
             </button>
           ) : (
             <button
@@ -143,7 +151,9 @@ export function DaemonPanel(props: {
               onClick={() => void props.onStart()}
               type="button"
             >
-              {props.actioning === "start" ? inline("启动中...", "Starting...") : inline("启动后台", "Start background worker")}
+              {props.actioning === "start"
+                ? inline("启动中...", "Starting...")
+                : inline("启动后台", "Start background worker")}
             </button>
           )}
         </div>
@@ -151,26 +161,44 @@ export function DaemonPanel(props: {
 
       <div className="daemon-summary-strip">
         <article className="settings-summary-metric daemon-summary-metric">
-          <span className="settings-summary-metric-label">{inline("后台状态", "Background status")}</span>
+          <span className="settings-summary-metric-label">
+            {inline("后台状态", "Background status")}
+          </span>
           <strong>{daemonStatusLabel(props.daemon, props.uiLanguage)}</strong>
-          <p>{inline("运行态心跳", "Runtime heartbeat")}: {formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}</p>
+          <p>
+            {inline("运行态心跳", "Runtime heartbeat")}:{" "}
+            {formatWhen(props.overview?.runtime.lastSweepAt, props.uiLanguage)}
+          </p>
         </article>
         <article className="settings-summary-metric daemon-summary-metric">
-          <span className="settings-summary-metric-label">{inline("下一轮 sweep", "Next sweep")}</span>
+          <span className="settings-summary-metric-label">
+            {inline("下一轮 sweep", "Next sweep")}
+          </span>
           <strong>{countdownLabel}</strong>
           <p>{formatWhen(nextSweepAt, props.uiLanguage)}</p>
         </article>
         <article className="settings-summary-metric daemon-summary-metric">
-          <span className="settings-summary-metric-label">{inline("当前积压", "Current backlog")}</span>
+          <span className="settings-summary-metric-label">
+            {inline("当前积压", "Current backlog")}
+          </span>
           <strong>{previewApplyCount + previewSuggestCount}</strong>
           <p>
-            {previewApplyCount} {inline("待应用", "apply")} / {previewSuggestCount} {inline("待建议", "suggest")}
+            {previewApplyCount} {inline("待应用", "apply")} / {previewSuggestCount}{" "}
+            {inline("待建议", "suggest")}
           </p>
         </article>
         <article className="settings-summary-metric daemon-summary-metric">
-          <span className="settings-summary-metric-label">{inline("自动应用策略", "Auto-apply policy")}</span>
-          <strong>{props.overview?.runtime.daemonAutoApply ? inline("生效中", "active") : inline("未生效", "inactive")}</strong>
-          <p className={`daemon-summary-copy ${runtimeDaemonStatusTone(runtimeDisplay.daemonStatus)}`}>
+          <span className="settings-summary-metric-label">
+            {inline("自动应用策略", "Auto-apply policy")}
+          </span>
+          <strong>
+            {props.overview?.runtime.daemonAutoApply
+              ? inline("生效中", "active")
+              : inline("未生效", "inactive")}
+          </strong>
+          <p
+            className={`daemon-summary-copy ${runtimeDaemonStatusTone(runtimeDisplay.daemonStatus)}`}
+          >
             {props.overview?.runtime.configuredAutoApply ?? "--"}
           </p>
         </article>
@@ -195,7 +223,11 @@ export function DaemonPanel(props: {
           runtimeDisplay={runtimeDisplay}
           uiLanguage={props.uiLanguage}
         />
-        <DaemonTechnicalDetails daemon={props.daemon} inline={inline} uiLanguage={props.uiLanguage} />
+        <DaemonTechnicalDetails
+          daemon={props.daemon}
+          inline={inline}
+          uiLanguage={props.uiLanguage}
+        />
       </div>
     </section>
   );

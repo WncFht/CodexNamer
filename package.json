@@ -38,8 +38,9 @@
     "cli": "npm run build:runtime && node packages/cli/dist/index.js",
     "daemon": "npm run build:runtime && node packages/daemon/dist/index.js",
     "api": "npm run build:runtime && node packages/api/dist/index.js",
-    "lint": "eslint . --cache --max-warnings=0",
-    "lint:fix": "eslint . --cache --fix",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "validate:full": "npm run lint && npm run build && npm run build:runtime && npm run web:build && npm test",
     "check": "npm run validate:full",
     "hooks:install": "node scripts/install-hooks.mjs",
@@ -55,16 +56,12 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
+    "@biomejs/biome": "^2.4.11",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.0",
-    "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "globals": "^17.4.0",
     "lefthook": "^2.1.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.58.1",
     "vitest": "^3.2.4"
   }
 }

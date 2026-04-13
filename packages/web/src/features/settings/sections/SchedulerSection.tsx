@@ -1,9 +1,6 @@
-import {
-  type DraftFieldUpdater,
-  type RenameAutoApply,
-  type SettingsDraft
-} from "../../../settings-model.js";
-import { SelectField, SettingsSectionFrame, type TextTools } from "../shared.js";
+import type { DraftFieldUpdater, RenameAutoApply, SettingsDraft } from "../../../settings-model.js";
+import type { TextTools } from "../shared.js";
+import { SelectField, SettingsSectionFrame } from "../shared.js";
 
 export function SchedulerSection(props: {
   draft: SettingsDraft;
@@ -16,7 +13,7 @@ export function SchedulerSection(props: {
       title={props.text.inline("调度与自动应用阈值", "Scheduler and auto-apply thresholds")}
       copy={props.text.inline(
         "设置扫描频率、空闲阈值和自动应用条件。",
-        "Set scan cadence, idle thresholds, and auto-apply conditions."
+        "Set scan cadence, idle thresholds, and auto-apply conditions.",
       )}
     >
       <div className="settings-stage-grid">
@@ -34,7 +31,7 @@ export function SchedulerSection(props: {
             }}
             options={[
               { value: "disabled", label: "disabled" },
-              { value: "idle-finalize", label: "idle-finalize" }
+              { value: "idle-finalize", label: "idle-finalize" },
             ]}
             value={props.draft.renameAutoApply as RenameAutoApply}
           />

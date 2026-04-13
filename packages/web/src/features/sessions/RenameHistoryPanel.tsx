@@ -82,14 +82,18 @@ export function RenameHistoryPanel(props: {
                 <span>{props.tt("officialTitle")}</span>
                 <span>{formatWhen(props.detail.lastAppliedAt, props.uiLanguage)}</span>
               </div>
-              <strong className="naming-value">{props.detail.officialName ?? props.tt("noOfficialTitle")}</strong>
+              <strong className="naming-value">
+                {props.detail.officialName ?? props.tt("noOfficialTitle")}
+              </strong>
             </article>
             <article className="naming-row">
               <div className="naming-row-header">
                 <span>{props.tt("candidateName")}</span>
                 <span>{formatWhen(props.detail.updatedAt, props.uiLanguage)}</span>
               </div>
-              <strong className="naming-value">{props.detail.candidateName ?? props.tt("noSuggestedTitle")}</strong>
+              <strong className="naming-value">
+                {props.detail.candidateName ?? props.tt("noSuggestedTitle")}
+              </strong>
             </article>
           </div>
         </section>
@@ -105,9 +109,14 @@ export function RenameHistoryPanel(props: {
             </span>
           </div>
           <div className="naming-drawer-history">
-            {props.renameHistory.length === 0 ? <div className="history-empty compact">{props.tt("noRenameHistory")}</div> : null}
+            {props.renameHistory.length === 0 ? (
+              <div className="history-empty compact">{props.tt("noRenameHistory")}</div>
+            ) : null}
             {props.renameHistory.map((entry, index) => (
-              <article className="naming-entry" key={`${entry.appliedAt}-${entry.newName}-${entry.status}-${index}`}>
+              <article
+                className="naming-entry"
+                key={`${entry.appliedAt}-${entry.newName}-${entry.status}-${index}`}
+              >
                 <div className="naming-entry-main">
                   <strong>{entry.newName}</strong>
                   <div className="naming-entry-meta">
@@ -116,7 +125,9 @@ export function RenameHistoryPanel(props: {
                     {entry.reason ? <span>{entry.reason}</span> : null}
                   </div>
                 </div>
-                <span className="naming-entry-time">{formatWhen(entry.appliedAt, props.uiLanguage)}</span>
+                <span className="naming-entry-time">
+                  {formatWhen(entry.appliedAt, props.uiLanguage)}
+                </span>
               </article>
             ))}
           </div>

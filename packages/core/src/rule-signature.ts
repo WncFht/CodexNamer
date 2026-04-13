@@ -16,12 +16,12 @@ function normalizeBuilder(builder: NamingBuilderItem[]): Array<Record<string, un
       ? sortRecord({
           type: item.type,
           component: item.component,
-          format: item.format
+          format: item.format,
         })
       : sortRecord({
           type: item.type,
-          value: item.value
-        })
+          value: item.value,
+        }),
   );
 }
 
@@ -32,8 +32,8 @@ function normalizeTags(tags: NamingTagDefinition[]): Array<Record<string, unknow
         id: tag.id,
         label: tag.label,
         description: tag.description,
-        promptHint: tag.promptHint
-      })
+        promptHint: tag.promptHint,
+      }),
     )
     .sort((left, right) => String(left.id ?? "").localeCompare(String(right.id ?? "")));
 }
@@ -51,7 +51,7 @@ export function buildRenameRuleSignatureBasis(config: EffectiveConfig): Record<s
       compositionMode: config.naming.compositionMode,
       builder: normalizeBuilder(config.naming.builder),
       tags: normalizeTags(config.naming.tags),
-      customPrompt: config.naming.customPrompt ?? null
+      customPrompt: config.naming.customPrompt ?? null,
     }),
     ai: sortRecord({
       backend: config.ai.backend,
@@ -63,8 +63,8 @@ export function buildRenameRuleSignatureBasis(config: EffectiveConfig): Record<s
       providerRef: provider.providerRef,
       baseUrl: provider.baseUrl,
       model: provider.model,
-      requestType: provider.requestType
-    })
+      requestType: provider.requestType,
+    }),
   });
 }
 

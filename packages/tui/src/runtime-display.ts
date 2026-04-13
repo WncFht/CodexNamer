@@ -1,11 +1,15 @@
 import type { DaemonControlStatus, OverviewResponse } from "./types.js";
 
-export type RuntimeExecutionDisplay = OverviewResponse["runtime"]["actualExecution"] | "sweep-running";
-export type RuntimeDaemonStatusDisplay = OverviewResponse["runtime"]["daemonStatus"] | "controller-running";
+export type RuntimeExecutionDisplay =
+  | OverviewResponse["runtime"]["actualExecution"]
+  | "sweep-running";
+export type RuntimeDaemonStatusDisplay =
+  | OverviewResponse["runtime"]["daemonStatus"]
+  | "controller-running";
 
 export function deriveRuntimeDisplay(
   overview: OverviewResponse | null,
-  daemon: DaemonControlStatus | null
+  daemon: DaemonControlStatus | null,
 ): {
   execution: RuntimeExecutionDisplay;
   daemonStatus: RuntimeDaemonStatusDisplay;
@@ -22,20 +26,20 @@ export function deriveRuntimeDisplay(
     return {
       execution: baseExecution,
       daemonStatus: baseDaemonStatus,
-      sweepRunning: false
+      sweepRunning: false,
     };
   }
 
   return {
     execution: "sweep-running",
     daemonStatus: "controller-running",
-    sweepRunning: true
+    sweepRunning: true,
   };
 }
 
 export function runtimeExecutionLabel(
   execution: RuntimeExecutionDisplay,
-  language: "en-US" | "zh-CN"
+  language: "en-US" | "zh-CN",
 ): string {
   if (language === "zh-CN") {
     if (execution === "auto-apply") {
@@ -58,7 +62,7 @@ export function runtimeExecutionLabel(
 
 export function runtimeDaemonStatusLabel(
   status: RuntimeDaemonStatusDisplay,
-  language: "en-US" | "zh-CN"
+  language: "en-US" | "zh-CN",
 ): string {
   if (language === "zh-CN") {
     if (status === "controller-running") {

@@ -3,12 +3,12 @@ export {
   mergeConfigDocuments,
   normalizeConfigDocumentInput,
   redactConfigDocument,
-  serializeConfigDocument
+  serializeConfigDocument,
 } from "./config/document.js";
 export {
   buildConfigForTests,
   loadConfigView,
   loadEffectiveConfig,
   resolveConfigPaths,
-  writeUserConfig
+  writeUserConfig,
 } from "./config/files.js";

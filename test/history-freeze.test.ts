@@ -22,13 +22,13 @@ describe("history and state commands", () => {
       codexHome: workspace.codexHome,
       threadId,
       userMessage: "实现 rename history",
-      lastAgentMessage: "完成 rename history"
+      lastAgentMessage: "完成 rename history",
     });
     await fs.writeFile(path.join(workspace.codexHome, "session_index.jsonl"), "", "utf8");
 
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
     managers.push(manager);
 
@@ -52,13 +52,13 @@ describe("history and state commands", () => {
       codexHome: workspace.codexHome,
       threadId,
       userMessage: "重复触发同一个 rename",
-      lastAgentMessage: "同名不应该在 history 里反复堆积"
+      lastAgentMessage: "同名不应该在 history 里反复堆积",
     });
     await fs.writeFile(path.join(workspace.codexHome, "session_index.jsonl"), "", "utf8");
 
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
     managers.push(manager);
 
@@ -66,7 +66,7 @@ describe("history and state commands", () => {
     manager.db.saveCandidate(threadId, {
       name: "manual title",
       source: "ai",
-      generatedAt: "2026-04-04T12:00:00.000Z"
+      generatedAt: "2026-04-04T12:00:00.000Z",
     });
 
     await manager.apply(threadId);
@@ -86,13 +86,13 @@ describe("history and state commands", () => {
       codexHome: workspace.codexHome,
       threadId,
       userMessage: "给这个会话建议一个标题",
-      lastAgentMessage: "我先给出一个候选标题"
+      lastAgentMessage: "我先给出一个候选标题",
     });
     await fs.writeFile(path.join(workspace.codexHome, "session_index.jsonl"), "", "utf8");
 
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
     managers.push(manager);
 
@@ -102,7 +102,7 @@ describe("history and state commands", () => {
     expect(history[0]).toMatchObject({
       newName: suggestion.name,
       status: "preview_only",
-      source: suggestion.source
+      source: suggestion.source,
     });
   });
 });

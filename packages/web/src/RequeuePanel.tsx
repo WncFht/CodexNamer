@@ -2,12 +2,13 @@ import * as React from "react";
 
 import { previewRequeueRenamesSince } from "./api.js";
 import { formatWhen } from "./browser-utils.js";
-import { formatUiNumber, t, type UiLanguage } from "./i18n.js";
+import type { UiLanguage } from "./i18n.js";
+import { formatUiNumber, t } from "./i18n.js";
 import type { OverviewResponse, RenameReplayPreviewResult } from "./types.js";
 
 function replayBasisLabel(
   basis: "session-updated-at" | "last-applied-at",
-  language: UiLanguage
+  language: UiLanguage,
 ): string {
   if (language === "zh-CN") {
     return basis === "last-applied-at" ? "按上次正式命名时间" : "按会话更新时间";
@@ -17,7 +18,7 @@ function replayBasisLabel(
 
 function ruleStatusLabel(
   status: "latest" | "outdated" | "manual" | "unknown",
-  language: UiLanguage
+  language: UiLanguage,
 ): string {
   if (language === "zh-CN") {
     switch (status) {
@@ -44,7 +45,10 @@ function ruleStatusLabel(
   }
 }
 
-function replayReasonLabel(reason: RenameReplayPreviewResult["items"][number]["reason"], language: UiLanguage): string {
+function replayReasonLabel(
+  reason: RenameReplayPreviewResult["items"][number]["reason"],
+  language: UiLanguage,
+): string {
   if (language === "zh-CN") {
     switch (reason) {
       case "rule_mismatch":
@@ -91,13 +95,13 @@ function shortRuleSignature(value: string | undefined): string {
 function toDateTimeLocalValue(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
-    date.getMinutes()
+    date.getMinutes(),
   )}`;
 }
 
 function actionTone(
   action: RenameReplayPreviewResult["items"][number]["action"],
-  reason: RenameReplayPreviewResult["items"][number]["reason"]
+  reason: RenameReplayPreviewResult["items"][number]["reason"],
 ): "success" | "warning" | "manual" {
   if (action === "queue") {
     return "success";
@@ -123,7 +127,9 @@ export function RequeuePanel(props: {
   const inline = React.useCallback((zh: string, en: string) => (isChinese ? zh : en), [isChinese]);
   const tt = React.useCallback((key: Parameters<typeof t>[1]) => t(uiLanguage, key), [uiLanguage]);
   const [replaySince, setReplaySince] = React.useState("");
-  const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">("session-updated-at");
+  const [replayBasis, setReplayBasis] = React.useState<"session-updated-at" | "last-applied-at">(
+    "session-updated-at",
+  );
   const [preview, setPreview] = React.useState<RenameReplayPreviewResult | null>(null);
   const [previewing, setPreviewing] = React.useState(false);
   const [requeueing, setRequeueing] = React.useState(false);
@@ -148,7 +154,7 @@ export function RequeuePanel(props: {
     try {
       const result = await previewRequeueRenamesSince({
         since: new Date(replaySince).toISOString(),
-        basis: replayBasis
+        basis: replayBasis,
       });
       setPreview(result);
       setPreviewPage(1);
@@ -168,7 +174,7 @@ export function RequeuePanel(props: {
     try {
       await onRequeue({
         since: new Date(replaySince).toISOString(),
-        basis: replayBasis
+        basis: replayBasis,
       });
       await Promise.resolve(onRefresh());
       await handlePreview();
@@ -180,14 +186,12 @@ export function RequeuePanel(props: {
   }, [handlePreview, onRefresh, onRequeue, replayBasis, replaySince, requeueing]);
 
   const queueCountEntries = React.useMemo(
-    () =>
-      Object.entries(preview?.queueCounts ?? {}).sort((left, right) => right[1] - left[1]),
-    [preview?.queueCounts]
+    () => Object.entries(preview?.queueCounts ?? {}).sort((left, right) => right[1] - left[1]),
+    [preview?.queueCounts],
   );
   const skipCountEntries = React.useMemo(
-    () =>
-      Object.entries(preview?.skipCounts ?? {}).sort((left, right) => right[1] - left[1]),
-    [preview?.skipCounts]
+    () => Object.entries(preview?.skipCounts ?? {}).sort((left, right) => right[1] - left[1]),
+    [preview?.skipCounts],
   );
   const totalPreviewItems = preview?.items.length ?? 0;
   const totalPreviewPages = Math.max(1, Math.ceil(totalPreviewItems / REQUEUE_PAGE_SIZE));
@@ -244,7 +248,10 @@ export function RequeuePanel(props: {
             <p className="panel-kicker">{inline("补扫旧标题", "Replay older titles")}</p>
             <h3>{inline("按新规则补跑旧标题", "Replay older titles with the latest rule")}</h3>
             <p className="settings-copy">
-              {inline("按当前规则预览并重新入队旧标题。", "Preview and requeue older titles with the current rule.")}
+              {inline(
+                "按当前规则预览并重新入队旧标题。",
+                "Preview and requeue older titles with the current rule.",
+              )}
             </p>
           </div>
           <div className="header-actions">
@@ -262,13 +269,15 @@ export function RequeuePanel(props: {
 
         <div className="ops-log-summary-row">
           <span className="ops-log-summary-chip">
-            {inline("当前规则签名", "Current rule signature")}: {shortRuleSignature(currentRuleSignature)}
+            {inline("当前规则签名", "Current rule signature")}:{" "}
+            {shortRuleSignature(currentRuleSignature)}
           </span>
           <span className="ops-log-summary-chip">
             {inline("待补扫", "Needs replay")}: {formatUiNumber(coverage?.outdated, uiLanguage)}
           </span>
           <span className="ops-log-summary-chip">
-            {inline("未知签名", "Unknown signature")}: {formatUiNumber(coverage?.unknown, uiLanguage)}
+            {inline("未知签名", "Unknown signature")}:{" "}
+            {formatUiNumber(coverage?.unknown, uiLanguage)}
           </span>
           <span className="ops-log-summary-chip">
             {inline("最近执行", "Last run")}: {formatWhen(overview?.replay.lastRunAt, uiLanguage)}
@@ -282,7 +291,10 @@ export function RequeuePanel(props: {
             <p className="panel-kicker">{inline("范围", "Range")}</p>
             <h3>{inline("选择补扫范围", "Choose replay range")}</h3>
             <p className="settings-copy">
-              {inline("常用时间范围在这里，更多筛选在高级选项。", "Common time ranges appear here, with more filters in advanced options.")}
+              {inline(
+                "常用时间范围在这里，更多筛选在高级选项。",
+                "Common time ranges appear here, with more filters in advanced options.",
+              )}
             </p>
           </div>
         </div>
@@ -315,8 +327,15 @@ export function RequeuePanel(props: {
             />
           </label>
           <div className="requeue-actions">
-            <button className="btn-sm" disabled={!replaySince || previewing} onClick={() => void handlePreview()} type="button">
-              {previewing ? inline("预览中...", "Previewing...") : inline("预览匹配项", "Preview matches")}
+            <button
+              className="btn-sm"
+              disabled={!replaySince || previewing}
+              onClick={() => void handlePreview()}
+              type="button"
+            >
+              {previewing
+                ? inline("预览中...", "Previewing...")
+                : inline("预览匹配项", "Preview matches")}
             </button>
             {hasPreview ? (
               <button
@@ -325,7 +344,9 @@ export function RequeuePanel(props: {
                 onClick={() => void handleRequeue()}
                 type="button"
               >
-                {requeueing ? inline("重新入队中...", "Requeueing...") : inline("确认重新入队", "Confirm replay")}
+                {requeueing
+                  ? inline("重新入队中...", "Requeueing...")
+                  : inline("确认重新入队", "Confirm replay")}
               </button>
             ) : null}
           </div>
@@ -342,8 +363,12 @@ export function RequeuePanel(props: {
                 }
                 value={replayBasis}
               >
-                <option value="session-updated-at">{inline("按会话更新时间", "Session updated at")}</option>
-                <option value="last-applied-at">{inline("按上次正式命名时间", "Last applied at")}</option>
+                <option value="session-updated-at">
+                  {inline("按会话更新时间", "Session updated at")}
+                </option>
+                <option value="last-applied-at">
+                  {inline("按上次正式命名时间", "Last applied at")}
+                </option>
               </select>
             </label>
           </div>
@@ -353,8 +378,15 @@ export function RequeuePanel(props: {
 
         {!hasPreview ? (
           <div className="ops-queue-empty requeue-placeholder">
-            <strong>{inline("选择时间范围后查看预览", "Choose a time range to view the preview")}</strong>
-            <span>{inline("预览结果会显示匹配、入队和跳过明细。", "The preview shows matched, queued, and skipped results.")}</span>
+            <strong>
+              {inline("选择时间范围后查看预览", "Choose a time range to view the preview")}
+            </strong>
+            <span>
+              {inline(
+                "预览结果会显示匹配、入队和跳过明细。",
+                "The preview shows matched, queued, and skipped results.",
+              )}
+            </span>
           </div>
         ) : (
           <>
@@ -383,12 +415,17 @@ export function RequeuePanel(props: {
                 </div>
                 <div className="ops-skip-chip-list">
                   {queueCountEntries.length === 0 ? (
-                    <span className="ops-log-summary-chip">{inline("当前没有入队项", "Nothing will queue")}</span>
+                    <span className="ops-log-summary-chip">
+                      {inline("当前没有入队项", "Nothing will queue")}
+                    </span>
                   ) : null}
                   {queueCountEntries.map(([reason, count]) => (
                     <span className="ops-log-summary-chip" key={reason}>
-                      {replayReasonLabel(reason as RenameReplayPreviewResult["items"][number]["reason"], uiLanguage)}:{" "}
-                      {formatUiNumber(count, uiLanguage)}
+                      {replayReasonLabel(
+                        reason as RenameReplayPreviewResult["items"][number]["reason"],
+                        uiLanguage,
+                      )}
+                      : {formatUiNumber(count, uiLanguage)}
                     </span>
                   ))}
                 </div>
@@ -403,12 +440,17 @@ export function RequeuePanel(props: {
                 </div>
                 <div className="ops-skip-chip-list">
                   {skipCountEntries.length === 0 ? (
-                    <span className="ops-log-summary-chip">{inline("当前没有跳过项", "No skipped items")}</span>
+                    <span className="ops-log-summary-chip">
+                      {inline("当前没有跳过项", "No skipped items")}
+                    </span>
                   ) : null}
                   {skipCountEntries.map(([reason, count]) => (
                     <span className="ops-log-summary-chip" key={reason}>
-                      {replayReasonLabel(reason as RenameReplayPreviewResult["items"][number]["reason"], uiLanguage)}:{" "}
-                      {formatUiNumber(count, uiLanguage)}
+                      {replayReasonLabel(
+                        reason as RenameReplayPreviewResult["items"][number]["reason"],
+                        uiLanguage,
+                      )}
+                      : {formatUiNumber(count, uiLanguage)}
                     </span>
                   ))}
                 </div>
@@ -429,7 +471,10 @@ export function RequeuePanel(props: {
                   {(preview?.items.length ?? 0) === 0 ? (
                     <tr>
                       <td className="ops-log-empty" colSpan={4}>
-                        {inline("这个范围内没有匹配到旧标题。", "No older titles matched this range.")}
+                        {inline(
+                          "这个范围内没有匹配到旧标题。",
+                          "No older titles matched this range.",
+                        )}
                       </td>
                     </tr>
                   ) : null}
@@ -440,10 +485,15 @@ export function RequeuePanel(props: {
                       key={`${item.threadId}-${item.reason}`}
                     >
                       <td className="ops-log-col-time">
-                        <div className="ops-log-primary ops-log-nowrap" title={item.updatedAt ?? ""}>
+                        <div
+                          className="ops-log-primary ops-log-nowrap"
+                          title={item.updatedAt ?? ""}
+                        >
                           {formatWhen(item.updatedAt, uiLanguage)}
                         </div>
-                        <div className="ops-log-secondary ops-log-nowrap">{replayBasisLabel(replayBasis, uiLanguage)}</div>
+                        <div className="ops-log-secondary ops-log-nowrap">
+                          {replayBasisLabel(replayBasis, uiLanguage)}
+                        </div>
                       </td>
                       <td className="ops-log-col-info">
                         <div className="ops-log-primary" title={item.officialName ?? ""}>
@@ -455,14 +505,18 @@ export function RequeuePanel(props: {
                       </td>
                       <td>
                         <span className={`chip ${actionTone(item.action, item.reason)}`}>
-                          {item.action === "queue" ? inline("入队", "queue") : inline("跳过", "skip")}
+                          {item.action === "queue"
+                            ? inline("入队", "queue")
+                            : inline("跳过", "skip")}
                         </span>
                         <div className="ops-log-secondary ops-log-nowrap">
                           {ruleStatusLabel(item.ruleStatus, uiLanguage)}
                         </div>
                       </td>
                       <td className="ops-log-col-info">
-                        <div className="ops-log-primary">{replayReasonLabel(item.reason, uiLanguage)}</div>
+                        <div className="ops-log-primary">
+                          {replayReasonLabel(item.reason, uiLanguage)}
+                        </div>
                         <div className="ops-log-secondary ops-log-nowrap">
                           {shortRuleSignature(currentRuleSignature)}
                         </div>
@@ -478,11 +532,19 @@ export function RequeuePanel(props: {
                 <span className="ops-log-pagination-copy">
                   {inline("每页 10 条", "10 rows per page")} · {inline("当前显示", "Showing")}{" "}
                   {formatUiNumber((previewPage - 1) * REQUEUE_PAGE_SIZE + 1, uiLanguage)}-
-                  {formatUiNumber((previewPage - 1) * REQUEUE_PAGE_SIZE + visiblePreviewItems.length, uiLanguage)} /{" "}
-                  {formatUiNumber(totalPreviewItems, uiLanguage)}
+                  {formatUiNumber(
+                    (previewPage - 1) * REQUEUE_PAGE_SIZE + visiblePreviewItems.length,
+                    uiLanguage,
+                  )}{" "}
+                  / {formatUiNumber(totalPreviewItems, uiLanguage)}
                 </span>
                 <div className="ops-log-pagination-actions">
-                  <button className="btn-sm" disabled={previewPage <= 1} onClick={() => setPreviewPage(1)} type="button">
+                  <button
+                    className="btn-sm"
+                    disabled={previewPage <= 1}
+                    onClick={() => setPreviewPage(1)}
+                    type="button"
+                  >
                     {inline("首页", "First")}
                   </button>
                   <button
@@ -539,14 +601,18 @@ export function RequeuePanel(props: {
           <div>
             <p className="panel-kicker">{inline("历史", "History")}</p>
             <h3>{inline("最近执行记录", "Recent replay runs")}</h3>
-            <p className="settings-copy">{inline("查看最近的重新入队记录。", "View recent replay runs.")}</p>
+            <p className="settings-copy">
+              {inline("查看最近的重新入队记录。", "View recent replay runs.")}
+            </p>
           </div>
         </div>
         <details className="settings-disclosure ops-disclosure">
           <summary>{inline("展开最近执行记录", "Show recent replay runs")}</summary>
           <div className="history-stack">
             {recentRuns.length === 0 ? (
-              <div className="ops-queue-empty">{inline("还没有重新入队记录。", "No requeue runs recorded yet.")}</div>
+              <div className="ops-queue-empty">
+                {inline("还没有重新入队记录。", "No requeue runs recorded yet.")}
+              </div>
             ) : null}
             {recentRuns.map((run) => (
               <article className="history-row" key={`${run.requestedAt}-${run.since}-${run.basis}`}>
@@ -564,7 +630,8 @@ export function RequeuePanel(props: {
                     {formatUiNumber(run.skipped, uiLanguage)} {inline("跳过", "skipped")}
                   </span>
                   <span>
-                    {formatUiNumber(run.clearedCandidates, uiLanguage)} {inline("清空 candidate", "candidates cleared")}
+                    {formatUiNumber(run.clearedCandidates, uiLanguage)}{" "}
+                    {inline("清空 candidate", "candidates cleared")}
                   </span>
                   <span>{formatWhen(run.requestedAt, uiLanguage)}</span>
                 </div>

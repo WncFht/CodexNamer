@@ -115,7 +115,7 @@ function resolveServeWebRoot(explicitWebRoot?: string): string | undefined {
 
 function runCommand(command: string, args: string[]): CommandResult {
   const result = spawnSync(command, args, {
-    encoding: "utf8"
+    encoding: "utf8",
   });
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
@@ -127,7 +127,7 @@ function runCommand(command: string, args: string[]): CommandResult {
     stdout,
     stderr,
     ok: !result.error && exitCode === 0,
-    error: result.error?.message
+    error: result.error?.message,
   };
 }
 
@@ -148,7 +148,9 @@ function plistEscape(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
-export function resolveManagedServicePlatform(platform: NodeJS.Platform = process.platform): ManagedServicePlatform {
+export function resolveManagedServicePlatform(
+  platform: NodeJS.Platform = process.platform,
+): ManagedServicePlatform {
   switch (platform) {
     case "linux":
       return "linux";
@@ -177,7 +179,7 @@ export function resolveManagedServicePaths(params: {
     stdoutLogPath: path.join(logsDir, "service.stdout.log"),
     stderrLogPath: path.join(logsDir, "service.stderr.log"),
     linuxUnitPath: path.join(homeDir, ".config", "systemd", "user", LINUX_UNIT_NAME),
-    macPlistPath: path.join(homeDir, "Library", "LaunchAgents", `${MAC_LABEL}.plist`)
+    macPlistPath: path.join(homeDir, "Library", "LaunchAgents", `${MAC_LABEL}.plist`),
   };
 }
 
@@ -188,42 +190,45 @@ export function buildManagedServiceDescriptor(params: {
   cliEntryPath: string;
   nodePath: string;
 }): ManagedServiceDescriptor {
-  const shellLauncherText = [
-    "#!/usr/bin/env sh",
-    "set -eu",
-    `mkdir -p ${quoteForPosixShell(params.paths.logsDir)}`,
-    `cd ${quoteForPosixShell(params.runtime.cwd)}`,
-    `exec ${quoteForPosixShell(params.nodePath)} ${quoteForPosixShell(params.cliEntryPath)} service-host --config ${quoteForPosixShell(params.paths.serviceConfigPath)}`
-  ].join("\n") + "\n";
+  const shellLauncherText =
+    [
+      "#!/usr/bin/env sh",
+      "set -eu",
+      `mkdir -p ${quoteForPosixShell(params.paths.logsDir)}`,
+      `cd ${quoteForPosixShell(params.runtime.cwd)}`,
+      `exec ${quoteForPosixShell(params.nodePath)} ${quoteForPosixShell(params.cliEntryPath)} service-host --config ${quoteForPosixShell(params.paths.serviceConfigPath)}`,
+    ].join("\n") + "\n";
 
-  const powerShellLauncherText = [
-    "$ErrorActionPreference = 'Stop'",
-    `New-Item -ItemType Directory -Force -Path ${quoteForPowerShell(params.paths.logsDir)} | Out-Null`,
-    `Set-Location -LiteralPath ${quoteForPowerShell(params.runtime.cwd)}`,
-    `& ${quoteForPowerShell(params.nodePath)} ${quoteForPowerShell(params.cliEntryPath)} service-host --config ${quoteForPowerShell(params.paths.serviceConfigPath)} 1>> ${quoteForPowerShell(params.paths.stdoutLogPath)} 2>> ${quoteForPowerShell(params.paths.stderrLogPath)}`,
-    "exit $LASTEXITCODE"
-  ].join("\r\n") + "\r\n";
+  const powerShellLauncherText =
+    [
+      "$ErrorActionPreference = 'Stop'",
+      `New-Item -ItemType Directory -Force -Path ${quoteForPowerShell(params.paths.logsDir)} | Out-Null`,
+      `Set-Location -LiteralPath ${quoteForPowerShell(params.runtime.cwd)}`,
+      `& ${quoteForPowerShell(params.nodePath)} ${quoteForPowerShell(params.cliEntryPath)} service-host --config ${quoteForPowerShell(params.paths.serviceConfigPath)} 1>> ${quoteForPowerShell(params.paths.stdoutLogPath)} 2>> ${quoteForPowerShell(params.paths.stderrLogPath)}`,
+      "exit $LASTEXITCODE",
+    ].join("\r\n") + "\r\n";
 
   if (params.platform === "linux") {
     return {
       descriptorPath: params.paths.linuxUnitPath,
-      descriptorText: [
-        "[Unit]",
-        "Description=CodexNamer local service",
-        "After=default.target",
-        "",
-        "[Service]",
-        "Type=simple",
-        `WorkingDirectory=${params.runtime.cwd}`,
-        `ExecStart=/bin/sh ${params.paths.shellLauncherPath}`,
-        "Restart=on-failure",
-        "RestartSec=5",
-        "",
-        "[Install]",
-        "WantedBy=default.target"
-      ].join("\n") + "\n",
+      descriptorText:
+        [
+          "[Unit]",
+          "Description=CodexNamer local service",
+          "After=default.target",
+          "",
+          "[Service]",
+          "Type=simple",
+          `WorkingDirectory=${params.runtime.cwd}`,
+          `ExecStart=/bin/sh ${params.paths.shellLauncherPath}`,
+          "Restart=on-failure",
+          "RestartSec=5",
+          "",
+          "[Install]",
+          "WantedBy=default.target",
+        ].join("\n") + "\n",
       shellLauncherText,
-      powerShellLauncherText
+      powerShellLauncherText,
     };
   }
 
@@ -233,32 +238,33 @@ export function buildManagedServiceDescriptor(params: {
       .join("\n");
     return {
       descriptorPath: params.paths.macPlistPath,
-      descriptorText: [
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">",
-        "<plist version=\"1.0\">",
-        "<dict>",
-        "  <key>Label</key>",
-        `  <string>${plistEscape(MAC_LABEL)}</string>`,
-        "  <key>ProgramArguments</key>",
-        "  <array>",
-        programArgs,
-        "  </array>",
-        "  <key>RunAtLoad</key>",
-        "  <true/>",
-        "  <key>KeepAlive</key>",
-        "  <true/>",
-        "  <key>WorkingDirectory</key>",
-        `  <string>${plistEscape(params.runtime.cwd)}</string>`,
-        "  <key>StandardOutPath</key>",
-        `  <string>${plistEscape(params.paths.stdoutLogPath)}</string>`,
-        "  <key>StandardErrorPath</key>",
-        `  <string>${plistEscape(params.paths.stderrLogPath)}</string>`,
-        "</dict>",
-        "</plist>"
-      ].join("\n") + "\n",
+      descriptorText:
+        [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+          '<plist version="1.0">',
+          "<dict>",
+          "  <key>Label</key>",
+          `  <string>${plistEscape(MAC_LABEL)}</string>`,
+          "  <key>ProgramArguments</key>",
+          "  <array>",
+          programArgs,
+          "  </array>",
+          "  <key>RunAtLoad</key>",
+          "  <true/>",
+          "  <key>KeepAlive</key>",
+          "  <true/>",
+          "  <key>WorkingDirectory</key>",
+          `  <string>${plistEscape(params.runtime.cwd)}</string>`,
+          "  <key>StandardOutPath</key>",
+          `  <string>${plistEscape(params.paths.stdoutLogPath)}</string>`,
+          "  <key>StandardErrorPath</key>",
+          `  <string>${plistEscape(params.paths.stderrLogPath)}</string>`,
+          "</dict>",
+          "</plist>",
+        ].join("\n") + "\n",
       shellLauncherText,
-      powerShellLauncherText
+      powerShellLauncherText,
     };
   }
 
@@ -266,7 +272,7 @@ export function buildManagedServiceDescriptor(params: {
     descriptorPath: WINDOWS_TASK_NAME,
     descriptorText: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${params.paths.powerShellLauncherPath}"`,
     shellLauncherText,
-    powerShellLauncherText
+    powerShellLauncherText,
   };
 }
 
@@ -278,13 +284,13 @@ async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
 }> {
   const effective = await loadEffectiveConfig({
     cwd: options?.cwd,
-    configPath: options?.configPath
+    configPath: options?.configPath,
   });
   const platform = resolveManagedServicePlatform();
   const webRoot = resolveServeWebRoot(options?.webRoot);
   if (!webRoot) {
     throw new Error(
-      "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html."
+      "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html.",
     );
   }
 
@@ -298,24 +304,24 @@ async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
     port: resolvePort(options?.port, 42110),
     webRoot,
     autoStartDaemon: options?.daemon !== false,
-    url: `http://${options?.host ?? "127.0.0.1"}:${resolvePort(options?.port, 42110)}`
+    url: `http://${options?.host ?? "127.0.0.1"}:${resolvePort(options?.port, 42110)}`,
   };
   const paths = resolveManagedServicePaths({
-    stateDir: runtime.stateDir
+    stateDir: runtime.stateDir,
   });
   const descriptor = buildManagedServiceDescriptor({
     platform,
     runtime,
     paths,
     cliEntryPath: resolveCliEntryPath(),
-    nodePath: process.execPath
+    nodePath: process.execPath,
   });
 
   return {
     platform,
     runtime,
     paths,
-    descriptor
+    descriptor,
   };
 }
 
@@ -326,10 +332,18 @@ async function writeInstallArtifacts(context: {
 }): Promise<void> {
   await fs.mkdir(context.paths.serviceDir, { recursive: true });
   await fs.mkdir(context.paths.logsDir, { recursive: true });
-  await fs.writeFile(context.paths.serviceConfigPath, JSON.stringify(context.runtime, null, 2) + "\n", "utf8");
+  await fs.writeFile(
+    context.paths.serviceConfigPath,
+    JSON.stringify(context.runtime, null, 2) + "\n",
+    "utf8",
+  );
   await fs.writeFile(context.paths.shellLauncherPath, context.descriptor.shellLauncherText, "utf8");
   await fs.chmod(context.paths.shellLauncherPath, 0o755);
-  await fs.writeFile(context.paths.powerShellLauncherPath, context.descriptor.powerShellLauncherText, "utf8");
+  await fs.writeFile(
+    context.paths.powerShellLauncherPath,
+    context.descriptor.powerShellLauncherText,
+    "utf8",
+  );
 
   if (context.runtime.platform === "linux") {
     await fs.mkdir(path.dirname(context.paths.linuxUnitPath), { recursive: true });
@@ -355,7 +369,7 @@ async function getServiceConfigCandidates(options?: ServiceCommandOptions): Prom
   try {
     const config = await loadEffectiveConfig({
       cwd: options?.cwd,
-      configPath: options?.configPath
+      configPath: options?.configPath,
     });
     addStateDir(config.general.stateDir);
   } catch {
@@ -365,7 +379,7 @@ async function getServiceConfigCandidates(options?: ServiceCommandOptions): Prom
   try {
     const config = await loadEffectiveConfig({
       cwd: os.homedir(),
-      configPath: options?.configPath
+      configPath: options?.configPath,
     });
     addStateDir(config.general.stateDir);
   } catch {
@@ -377,7 +391,9 @@ async function getServiceConfigCandidates(options?: ServiceCommandOptions): Prom
   return [...candidates];
 }
 
-async function loadInstalledService(options?: ServiceCommandOptions): Promise<InstalledService | undefined> {
+async function loadInstalledService(
+  options?: ServiceCommandOptions,
+): Promise<InstalledService | undefined> {
   const candidates = await getServiceConfigCandidates(options);
   for (const candidate of candidates) {
     if (!existsSync(candidate)) {
@@ -385,11 +401,11 @@ async function loadInstalledService(options?: ServiceCommandOptions): Promise<In
     }
     const runtime = JSON.parse(await fs.readFile(candidate, "utf8")) as ManagedServiceRuntimeConfig;
     const paths = resolveManagedServicePaths({
-      stateDir: runtime.stateDir
+      stateDir: runtime.stateDir,
     });
     return {
       runtime,
-      paths
+      paths,
     };
   }
   return undefined;
@@ -422,28 +438,33 @@ async function probeServiceHealth(runtime: ManagedServiceRuntimeConfig): Promise
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1500);
     const response = await fetch(new URL("/api/v1/health", runtime.url), {
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
     return {
       healthy: response.ok,
-      statusCode: response.status
+      statusCode: response.status,
     };
   } catch (error) {
     return {
       healthy: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
 
-export async function installManagedService(options?: ServiceCommandOptions): Promise<Record<string, unknown>> {
+export async function installManagedService(
+  options?: ServiceCommandOptions,
+): Promise<Record<string, unknown>> {
   const context = await buildInstallContext(options);
   await writeInstallArtifacts(context);
 
   if (context.platform === "linux") {
     assertCommandOk(runCommand("systemctl", ["--user", "daemon-reload"]), "systemd daemon-reload");
-    assertCommandOk(runCommand("systemctl", ["--user", "enable", LINUX_UNIT_NAME]), "systemd enable");
+    assertCommandOk(
+      runCommand("systemctl", ["--user", "enable", LINUX_UNIT_NAME]),
+      "systemd enable",
+    );
   } else if (context.platform === "windows") {
     const taskCommand = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${context.paths.powerShellLauncherPath}"`;
     assertCommandOk(
@@ -457,9 +478,9 @@ export async function installManagedService(options?: ServiceCommandOptions): Pr
         "LIMITED",
         "/TR",
         taskCommand,
-        "/F"
+        "/F",
       ]),
-      "Task Scheduler create"
+      "Task Scheduler create",
     );
   }
 
@@ -475,7 +496,7 @@ export async function installManagedService(options?: ServiceCommandOptions): Pr
     shellLauncherPath: context.paths.shellLauncherPath,
     powerShellLauncherPath: context.paths.powerShellLauncherPath,
     descriptorPath: context.descriptor.descriptorPath,
-    autoStartDaemon: context.runtime.autoStartDaemon
+    autoStartDaemon: context.runtime.autoStartDaemon,
   };
 }
 
@@ -488,26 +509,39 @@ export async function startManagedService(): Promise<Record<string, unknown>> {
   if (installed.runtime.platform === "linux") {
     assertCommandOk(runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]), "systemd start");
   } else if (installed.runtime.platform === "macos") {
-    const bootoutResult = runCommand("launchctl", ["bootout", `${currentLaunchctlDomain()}/${MAC_LABEL}`]);
-    if (!bootoutResult.ok && !/Could not find service/i.test(`${bootoutResult.stdout}\n${bootoutResult.stderr}`)) {
+    const bootoutResult = runCommand("launchctl", [
+      "bootout",
+      `${currentLaunchctlDomain()}/${MAC_LABEL}`,
+    ]);
+    if (
+      !bootoutResult.ok &&
+      !/Could not find service/i.test(`${bootoutResult.stdout}\n${bootoutResult.stderr}`)
+    ) {
       // ignore only missing-service cases
     }
     assertCommandOk(
-      runCommand("launchctl", ["bootstrap", currentLaunchctlDomain(), installed.paths.macPlistPath]),
-      "launchctl bootstrap"
+      runCommand("launchctl", [
+        "bootstrap",
+        currentLaunchctlDomain(),
+        installed.paths.macPlistPath,
+      ]),
+      "launchctl bootstrap",
     );
     assertCommandOk(
       runCommand("launchctl", ["kickstart", "-k", `${currentLaunchctlDomain()}/${MAC_LABEL}`]),
-      "launchctl kickstart"
+      "launchctl kickstart",
     );
   } else {
-    assertCommandOk(runCommand("schtasks", ["/Run", "/TN", WINDOWS_TASK_NAME]), "Task Scheduler run");
+    assertCommandOk(
+      runCommand("schtasks", ["/Run", "/TN", WINDOWS_TASK_NAME]),
+      "Task Scheduler run",
+    );
   }
 
   return {
     started: true,
     platform: installed.runtime.platform,
-    url: installed.runtime.url
+    url: installed.runtime.url,
   };
 }
 
@@ -522,16 +556,19 @@ export async function stopManagedService(): Promise<Record<string, unknown>> {
   } else if (installed.runtime.platform === "macos") {
     assertCommandOk(
       runCommand("launchctl", ["bootout", `${currentLaunchctlDomain()}/${MAC_LABEL}`]),
-      "launchctl bootout"
+      "launchctl bootout",
     );
   } else {
-    assertCommandOk(runCommand("schtasks", ["/End", "/TN", WINDOWS_TASK_NAME]), "Task Scheduler end");
+    assertCommandOk(
+      runCommand("schtasks", ["/End", "/TN", WINDOWS_TASK_NAME]),
+      "Task Scheduler end",
+    );
   }
 
   return {
     stopped: true,
     platform: installed.runtime.platform,
-    url: installed.runtime.url
+    url: installed.runtime.url,
   };
 }
 
@@ -550,7 +587,7 @@ export async function restartManagedService(): Promise<Record<string, unknown>> 
   return {
     restarted: true,
     platform: installed.runtime.platform,
-    url: installed.runtime.url
+    url: installed.runtime.url,
   };
 }
 
@@ -559,7 +596,7 @@ export async function uninstallManagedService(): Promise<Record<string, unknown>
   if (!installed) {
     return {
       removed: false,
-      reason: "not-installed"
+      reason: "not-installed",
     };
   }
 
@@ -579,7 +616,7 @@ export async function uninstallManagedService(): Promise<Record<string, unknown>
 
   return {
     removed: true,
-    platform: installed.runtime.platform
+    platform: installed.runtime.platform,
   };
 }
 
@@ -593,13 +630,13 @@ export async function getManagedServiceStatus(): Promise<Record<string, unknown>
           ? LINUX_UNIT_NAME
           : process.platform === "darwin"
             ? MAC_LABEL
-            : WINDOWS_TASK_NAME
+            : WINDOWS_TASK_NAME,
     };
   }
 
   const [commandStatus, health] = await Promise.all([
     Promise.resolve(queryPlatformStatus(installed.runtime)),
-    probeServiceHealth(installed.runtime)
+    probeServiceHealth(installed.runtime),
   ]);
 
   return {
@@ -615,11 +652,11 @@ export async function getManagedServiceStatus(): Promise<Record<string, unknown>
     configPath: installed.paths.serviceConfigPath,
     logs: {
       stdout: installed.paths.stdoutLogPath,
-      stderr: installed.paths.stderrLogPath
+      stderr: installed.paths.stderrLogPath,
     },
     runtime: installed.runtime,
     commandStatus,
-    health
+    health,
   };
 }
 
@@ -631,7 +668,7 @@ export async function runManagedServiceHost(configPath: string): Promise<void> {
     port: runtime.port,
     webRoot: runtime.webRoot,
     autoStartDaemon: runtime.autoStartDaemon,
-    operator: "service-host"
+    operator: "service-host",
   });
   await waitForShutdown(app);
 }

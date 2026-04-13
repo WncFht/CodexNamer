@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchSessionDetail, fetchSessions } from "../api.js";
-import { ALL_WORKSPACES_ID, type TabId } from "../control-deck-model.js";
+import type { TabId } from "../control-deck-model.js";
+import { ALL_WORKSPACES_ID } from "../control-deck-model.js";
 import type { SessionDetail, SessionSummary, SessionsResponse } from "../types.js";
 
 type UseSessionResourceStoreOptions = {
@@ -22,7 +23,7 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
     selectedId,
     onSelectSession,
     onSelectWorkspace,
-    onFailure
+    onFailure,
   } = options;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<SessionsResponse["workspaces"]>([]);
@@ -33,12 +34,12 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
   const latestUiStateRef = useRef({
     search,
     selectedWorkspaceId,
-    selectedId
+    selectedId,
   });
   const latestCallbacksRef = useRef({
     onSelectSession,
     onSelectWorkspace,
-    onFailure
+    onFailure,
   });
   const sessionsRequestIdRef = useRef(0);
   const detailRequestIdRef = useRef(0);
@@ -46,25 +47,30 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
   latestUiStateRef.current = {
     search,
     selectedWorkspaceId,
-    selectedId
+    selectedId,
   };
   latestCallbacksRef.current = {
     onSelectSession,
     onSelectWorkspace,
-    onFailure
+    onFailure,
   };
 
   const selectedSummary = useMemo(
     () => sessions.find((item) => item.threadId === selectedId),
-    [selectedId, sessions]
+    [selectedId, sessions],
   );
 
-  const patchSelectedSession = (threadId: string, patch: Partial<SessionSummary & SessionDetail>) => {
+  const patchSelectedSession = (
+    threadId: string,
+    patch: Partial<SessionSummary & SessionDetail>,
+  ) => {
     setSessions((previous) =>
-      previous.map((item) => (item.threadId === threadId ? ({ ...item, ...patch } as SessionSummary) : item))
+      previous.map((item) =>
+        item.threadId === threadId ? ({ ...item, ...patch } as SessionSummary) : item,
+      ),
     );
     setDetail((previous) =>
-      previous?.threadId === threadId ? ({ ...previous, ...patch } as SessionDetail) : previous
+      previous?.threadId === threadId ? ({ ...previous, ...patch } as SessionDetail) : previous,
     );
   };
 
@@ -72,7 +78,7 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
     const {
       selectedWorkspaceId: nextWorkspaceId,
       selectedId: nextSelectedId,
-      search: nextSearch
+      search: nextSearch,
     } = latestUiStateRef.current;
 
     setLoadingSessions(true);
@@ -80,7 +86,7 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
     try {
       const payload = await fetchSessions({
         search: nextSearch.trim() || undefined,
-        workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId
+        workspace: nextWorkspaceId === ALL_WORKSPACES_ID ? undefined : nextWorkspaceId,
       });
       if (requestId !== sessionsRequestIdRef.current) {
         return;
@@ -99,7 +105,10 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
 
       if (!nextSelectedId && payload.items[0]) {
         latestCallbacksRef.current.onSelectSession(payload.items[0].threadId);
-      } else if (nextSelectedId && !payload.items.some((item) => item.threadId === nextSelectedId)) {
+      } else if (
+        nextSelectedId &&
+        !payload.items.some((item) => item.threadId === nextSelectedId)
+      ) {
         latestCallbacksRef.current.onSelectSession(payload.items[0]?.threadId);
       }
     } catch (error) {
@@ -171,6 +180,6 @@ export function useSessionResourceStore(options: UseSessionResourceStoreOptions)
     patchSelectedSession,
     refreshSessions,
     refreshDetail,
-    setLastSyncAt
+    setLastSyncAt,
   };
 }

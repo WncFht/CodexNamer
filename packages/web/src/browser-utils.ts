@@ -1,6 +1,6 @@
-import type { SessionDetail, SessionSummary } from "./types.js";
 import type { UiLanguage } from "./i18n.js";
 import { formatUiWhen, timeGroupLabel } from "./i18n.js";
+import type { SessionDetail, SessionSummary } from "./types.js";
 
 export function formatWhen(value: string | undefined | null, language: UiLanguage): string {
   return formatUiWhen(value, language);
@@ -31,7 +31,13 @@ export function transcriptTone(role: string): string {
 
 type TimeGroupLabel = "Today" | "Yesterday" | "This Week" | "This Month" | "Earlier";
 
-const TIME_GROUP_ORDER: TimeGroupLabel[] = ["Today", "Yesterday", "This Week", "This Month", "Earlier"];
+const TIME_GROUP_ORDER: TimeGroupLabel[] = [
+  "Today",
+  "Yesterday",
+  "This Week",
+  "This Month",
+  "Earlier",
+];
 
 function getTimeGroup(value?: string): TimeGroupLabel {
   if (!value) {
@@ -65,7 +71,7 @@ function getTimeGroup(value?: string): TimeGroupLabel {
 
 export function groupSessionsByTime(
   sessions: SessionSummary[],
-  language: UiLanguage
+  language: UiLanguage,
 ): Array<{ label: string; items: SessionSummary[] }> {
   const groups = new Map<TimeGroupLabel, SessionSummary[]>();
   for (const label of TIME_GROUP_ORDER) {
@@ -78,7 +84,7 @@ export function groupSessionsByTime(
 
   return TIME_GROUP_ORDER.map((label) => ({
     label: timeGroupLabel(label, language),
-    items: groups.get(label) ?? []
+    items: groups.get(label) ?? [],
   })).filter((group) => group.items.length > 0);
 }
 
@@ -104,5 +110,7 @@ export function sessionListSubtitle(session: SessionSummary | SessionDetail): st
   if (!firstUserMessage) {
     return "";
   }
-  return firstUserMessage.localeCompare(generatedTitle, undefined, { sensitivity: "base" }) === 0 ? "" : firstUserMessage;
+  return firstUserMessage.localeCompare(generatedTitle, undefined, { sensitivity: "base" }) === 0
+    ? ""
+    : firstUserMessage;
 }

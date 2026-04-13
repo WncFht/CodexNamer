@@ -1,7 +1,8 @@
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 type UiMode = "web" | "tui";
@@ -41,7 +42,7 @@ function parseArgs(argv: string[]): {
   return {
     mode: modeArg,
     passthrough: rest,
-    explicitApiBase: apiBase
+    explicitApiBase: apiBase,
   };
 }
 
@@ -54,7 +55,7 @@ async function isApiHealthy(baseUrl: string): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_500);
     const response = await fetch(new URL("/api/v1/health", baseUrl), {
-      signal: controller.signal
+      signal: controller.signal,
     });
     clearTimeout(timeout);
     return response.ok;
@@ -69,7 +70,7 @@ async function readApiCwd(baseUrl: string): Promise<string | undefined> {
     const timeout = setTimeout(() => controller.abort(), 1_500);
     const response = await fetch(new URL("/api/v1/config", baseUrl), {
       signal: controller.signal,
-      cache: "no-store"
+      cache: "no-store",
     });
     clearTimeout(timeout);
     if (!response.ok) {
@@ -124,13 +125,17 @@ function npmCommand(): string {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
-function spawnChild(command: string, args: string[], options?: { env?: NodeJS.ProcessEnv }): ChildProcess {
+function spawnChild(
+  command: string,
+  args: string[],
+  options?: { env?: NodeJS.ProcessEnv },
+): ChildProcess {
   return spawn(command, args, {
     stdio: "inherit",
     env: {
       ...process.env,
-      ...(options?.env ?? {})
-    }
+      ...(options?.env ?? {}),
+    },
   });
 }
 
@@ -144,21 +149,25 @@ function matchesCommandPath(value: string, targetPath: string): boolean {
 }
 
 function isLauncherCommand(cmdline: string[], mode: UiMode): boolean {
-  return cmdline.some((value) => matchesCommandPath(value, "scripts/launch-ui.ts")) && cmdline.includes(mode);
+  return (
+    cmdline.some((value) => matchesCommandPath(value, "scripts/launch-ui.ts")) &&
+    cmdline.includes(mode)
+  );
 }
 
 function isApiCommand(cmdline: string[]): boolean {
   return cmdline.some(
     (value) =>
       matchesCommandPath(value, "packages/api/src/index.ts") ||
-      matchesCommandPath(value, "packages/api/dist/index.js")
+      matchesCommandPath(value, "packages/api/dist/index.js"),
   );
 }
 
 function isWebDevCommand(cmdline: string[]): boolean {
   const normalized = cmdline.map((value) => normalizeProcessArg(value));
   const referencesVite = normalized.some(
-    (value) => value === "vite" || value.endsWith("/vite/bin/vite.js") || value.endsWith("/.bin/vite")
+    (value) =>
+      value === "vite" || value.endsWith("/vite/bin/vite.js") || value.endsWith("/.bin/vite"),
   );
   return referencesVite && !normalized.includes("build") && !normalized.includes("preview");
 }
@@ -179,7 +188,7 @@ function isRepoOwnedProcess(processCwd: string | undefined, repoCwd: string): bo
 export function classifyManagedProcess(
   snapshot: Pick<ProcessSnapshot, "cwd" | "cmdline">,
   repoCwd: string,
-  mode: UiMode
+  mode: UiMode,
 ): ManagedProcessKind | undefined {
   if (!isRepoOwnedProcess(snapshot.cwd, repoCwd)) {
     return undefined;
@@ -205,7 +214,7 @@ async function listProcPids(): Promise<number[]> {
 
   try {
     const entries = await fs.readdir("/proc", {
-      withFileTypes: true
+      withFileTypes: true,
     });
     return entries
       .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
@@ -220,7 +229,7 @@ async function readProcessSnapshot(pid: number): Promise<ProcessSnapshot | undef
   try {
     const [cmdlineRaw, cwd] = await Promise.all([
       fs.readFile(`/proc/${pid}/cmdline`, "utf8"),
-      fs.readlink(`/proc/${pid}/cwd`).catch(() => undefined)
+      fs.readlink(`/proc/${pid}/cwd`).catch(() => undefined),
     ]);
     const cmdline = cmdlineRaw
       .split("\0")
@@ -229,7 +238,7 @@ async function readProcessSnapshot(pid: number): Promise<ProcessSnapshot | undef
     return {
       pid,
       cwd,
-      cmdline
+      cmdline,
     };
   } catch {
     return undefined;
@@ -263,7 +272,7 @@ async function findManagedProcesses(
   repoCwd: string,
   options?: {
     protectedPids?: Set<number>;
-  }
+  },
 ): Promise<ManagedProcessSnapshot[]> {
   const pids = await listProcPids();
   const matches: ManagedProcessSnapshot[] = [];
@@ -285,7 +294,7 @@ async function findManagedProcesses(
 
     matches.push({
       ...snapshot,
-      kind
+      kind,
     });
   }
 
@@ -335,7 +344,9 @@ async function terminateProcesses(processes: ManagedProcessSnapshot[]): Promise<
     if (!isProcessAlive(processInfo.pid)) {
       continue;
     }
-    console.error(`[codexnamer] Force killing stale ${processInfo.kind} process pid=${processInfo.pid}`);
+    console.error(
+      `[codexnamer] Force killing stale ${processInfo.kind} process pid=${processInfo.pid}`,
+    );
     try {
       process.kill(processInfo.pid, "SIGKILL");
     } catch {
@@ -352,9 +363,11 @@ async function cleanupStaleManagedProcesses(mode: UiMode, explicitApiBase?: stri
   const repoCwd = process.cwd();
   const protectedPids = await collectProtectedProcessIds(process.pid);
   const matches = await findManagedProcesses(mode, repoCwd, {
-    protectedPids
+    protectedPids,
   });
-  const filtered = matches.filter((processInfo) => !(explicitApiBase && processInfo.kind === "api"));
+  const filtered = matches.filter(
+    (processInfo) => !(explicitApiBase && processInfo.kind === "api"),
+  );
 
   if (filtered.length === 0) {
     return;
@@ -364,7 +377,15 @@ async function cleanupStaleManagedProcesses(mode: UiMode, explicitApiBase?: stri
 }
 
 async function startApi(host: string, port: number): Promise<ChildProcess> {
-  const child = spawnChild(npmCommand(), ["run", "api", "--", "--host", host, "--port", String(port)]);
+  const child = spawnChild(npmCommand(), [
+    "run",
+    "api",
+    "--",
+    "--host",
+    host,
+    "--port",
+    String(port),
+  ]);
 
   const startDeadline = Date.now() + 20_000;
   const baseUrl = `http://${host}:${port}`;
@@ -393,7 +414,7 @@ async function ensureApi(baseUrlOverride?: string): Promise<{
     if (await isApiHealthy(baseUrlOverride)) {
       return {
         baseUrl: baseUrlOverride,
-        reused: true
+        reused: true,
       };
     }
     throw new Error(`Configured API base is not healthy: ${baseUrlOverride}`);
@@ -407,11 +428,11 @@ async function ensureApi(baseUrlOverride?: string): Promise<{
       if (apiCwd && apiCwd === path.resolve(expectedCwd)) {
         return {
           baseUrl,
-          reused: true
+          reused: true,
         };
       }
       console.error(
-        `[codexnamer] Skipping healthy API at ${baseUrl} because it is bound to ${apiCwd ?? "<unknown cwd>"}.`
+        `[codexnamer] Skipping healthy API at ${baseUrl} because it is bound to ${apiCwd ?? "<unknown cwd>"}.`,
       );
     }
 
@@ -421,27 +442,30 @@ async function ensureApi(baseUrlOverride?: string): Promise<{
         return {
           baseUrl,
           child,
-          reused: false
+          reused: false,
         };
       } catch {
         if (await isApiHealthy(baseUrl)) {
           return {
             baseUrl,
-            reused: true
+            reused: true,
           };
         }
       }
     }
   }
 
-  throw new Error(`Unable to find a usable API port in ${DEFAULT_API_PORT}-${DEFAULT_API_PORT + PORT_SCAN_WINDOW}.`);
+  throw new Error(
+    `Unable to find a usable API port in ${DEFAULT_API_PORT}-${DEFAULT_API_PORT + PORT_SCAN_WINDOW}.`,
+  );
 }
 
 function withApiBaseArgs(mode: UiMode, passthrough: string[], apiBase: string): string[] {
   if (mode === "tui") {
     const hasExplicitApiBase = passthrough.some(
       (value, index) =>
-        value.startsWith("--api-base=") || (value === "--api-base" && typeof passthrough[index + 1] === "string")
+        value.startsWith("--api-base=") ||
+        (value === "--api-base" && typeof passthrough[index + 1] === "string"),
     );
     return hasExplicitApiBase ? passthrough : [...passthrough, "--api-base", apiBase];
   }
@@ -474,12 +498,12 @@ async function main(): Promise<void> {
         mode === "web"
           ? {
               CODEXNAMER_API_BASE: api.baseUrl,
-              CODEXNAMER_WEB_PORT: process.env.CODEXNAMER_WEB_PORT ?? String(DEFAULT_WEB_PORT)
+              CODEXNAMER_WEB_PORT: process.env.CODEXNAMER_WEB_PORT ?? String(DEFAULT_WEB_PORT),
             }
           : {
-              CODEXNAMER_API_BASE: api.baseUrl
-            }
-    }
+              CODEXNAMER_API_BASE: api.baseUrl,
+            },
+    },
   );
 
   if (api.reused) {
@@ -488,7 +512,9 @@ async function main(): Promise<void> {
     console.error(`[codexnamer] Started API at ${api.baseUrl} for repo ${repoCwd}`);
   }
   if (mode === "web") {
-    console.error(`[codexnamer] Launching web dev server on http://127.0.0.1:${webPort}/ via API ${api.baseUrl}`);
+    console.error(
+      `[codexnamer] Launching web dev server on http://127.0.0.1:${webPort}/ via API ${api.baseUrl}`,
+    );
   }
 
   const terminate = (signal: NodeJS.Signals) => {

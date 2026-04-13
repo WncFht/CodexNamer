@@ -25,8 +25,12 @@ export function resolveProfile(config: EffectiveConfig): ResolvedProvider | unde
       : undefined;
 
   const explicitApiKey = explicit.apiKey?.trim() || undefined;
-  const explicitApiKeyRef = explicit.apiKeyRef ? process.env[explicit.apiKeyRef]?.trim() : undefined;
-  const inheritedEnvApiKey = inherited?.apiKeyEnv ? process.env[inherited.apiKeyEnv]?.trim() : undefined;
+  const explicitApiKeyRef = explicit.apiKeyRef
+    ? process.env[explicit.apiKeyRef]?.trim()
+    : undefined;
+  const inheritedEnvApiKey = inherited?.apiKeyEnv
+    ? process.env[inherited.apiKeyEnv]?.trim()
+    : undefined;
   const inheritedAuthApiKey = config.inheritedCodex.auth?.openaiApiKey?.trim() || undefined;
   const envOpenAiApiKey = process.env.OPENAI_API_KEY?.trim() || undefined;
   const inheritedAccessToken = config.inheritedCodex.auth?.accessToken?.trim() || undefined;
@@ -69,18 +73,20 @@ export function resolveProfile(config: EffectiveConfig): ResolvedProvider | unde
     headers: useManualConfig ? { ...(explicit.headers ?? {}) } : { ...(inherited?.headers ?? {}) },
     providerRef: useManualConfig ? explicit.providerRef : inheritedProviderRef,
     requestType: useManualConfig
-      ? explicit.requestType ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)
-      : inherited?.wireApi ?? (config.ai.backend === "none" ? "responses" : config.ai.backend),
+      ? (explicit.requestType ?? (config.ai.backend === "none" ? "responses" : config.ai.backend))
+      : (inherited?.wireApi ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)),
     requiresOpenaiAuth: inherited?.requiresOpenaiAuth ?? false,
     requestedBackend: useManualConfig
-      ? explicit.requestType ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)
-      : inherited?.wireApi ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)
+      ? (explicit.requestType ?? (config.ai.backend === "none" ? "responses" : config.ai.backend))
+      : (inherited?.wireApi ?? (config.ai.backend === "none" ? "responses" : config.ai.backend)),
   };
 }
 
-export function resolveRenameProvider(config: EffectiveConfig): Omit<ResolvedProvider, "credentialValue"> & {
-  credentialValue?: string;
-} | undefined {
+export function resolveRenameProvider(config: EffectiveConfig):
+  | (Omit<ResolvedProvider, "credentialValue"> & {
+      credentialValue?: string;
+    })
+  | undefined {
   const provider = resolveProfile(config);
   return provider ? { ...provider } : undefined;
 }
@@ -93,7 +99,7 @@ export function inspectRenameProvider(config: EffectiveConfig): ProviderDiagnost
       requestedBackend: "none",
       hasCredential: false,
       preferredTransport: "none",
-      canDirectHttp: false
+      canDirectHttp: false,
     };
   }
 
@@ -104,7 +110,7 @@ export function inspectRenameProvider(config: EffectiveConfig): ProviderDiagnost
       requestedBackend: configuredBackend,
       hasCredential: false,
       preferredTransport: "http",
-      canDirectHttp: false
+      canDirectHttp: false,
     };
   }
 
@@ -122,6 +128,6 @@ export function inspectRenameProvider(config: EffectiveConfig): ProviderDiagnost
     credentialSource: provider.credentialSource,
     hasCredential: Boolean(provider.credentialValue),
     preferredTransport: canDirectHttp ? "http" : "none",
-    canDirectHttp
+    canDirectHttp,
   };
 }

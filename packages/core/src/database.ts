@@ -1,7 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import Database from "better-sqlite3";
 import type {
   AiBackend,
   AiRequestLogDetail,
@@ -13,36 +11,30 @@ import type {
   OverviewReport,
   RenameHistoryKind,
   RenameHistoryRecord,
-  RenameSuggestion,
   RenameSource,
   RenameStateRecord,
+  RenameSuggestion,
   SessionDetail,
   SessionIndexEntry,
   SessionRevision,
-  SessionSummary,
   SessionStatusEstimate,
-  WorkspaceSummary
+  SessionSummary,
+  WorkspaceSummary,
 } from "@codexnamer/shared";
+import Database from "better-sqlite3";
 
 import {
   finishAiRequestLog as finishAiRequestLogEntry,
   getAiRequestLogDetail as getAiRequestLogDetailView,
   getAiRequestLogReport as getAiRequestLogReportView,
-  startAiRequestLog as startAiRequestLogEntry
+  startAiRequestLog as startAiRequestLogEntry,
 } from "./database/ai-request-logs.js";
-import { getOverviewReport as buildOverviewReport } from "./database/overview-query-service.js";
 import {
-  getCursor as getCursorEntry,
-  getDirtySessions as getDirtySessionsQuery,
-  getRevision as getRevisionEntry,
-  getSessionByRolloutPath as getSessionByRolloutPathEntry,
-  getSessionDetail as getSessionDetailEntry,
-  listSessions as listSessionsQuery,
-  listWorkspaceSummaries as listWorkspaceSummariesQuery,
-  updateOfficialNames as updateOfficialNamesEntry,
-  updateStatusEstimate as updateStatusEstimateEntry,
-  upsertSession as upsertSessionEntry
-} from "./database/session-repository.js";
+  getMaintenanceState as getMaintenanceStateEntry,
+  setMaintenanceState as setMaintenanceStateEntry,
+  vacuum as vacuumEntry,
+} from "./database/maintenance-state-repository.js";
+import { getOverviewReport as buildOverviewReport } from "./database/overview-query-service.js";
 import {
   clearAllCandidates as clearAllCandidatesEntry,
   clearCandidate as clearCandidateEntry,
@@ -53,13 +45,20 @@ import {
   queueRenameReplayThreadIds as queueRenameReplayThreadIdsEntry,
   recordRename as recordRenameEntry,
   saveCandidate as saveCandidateEntry,
-  setFrozen as setFrozenEntry
+  setFrozen as setFrozenEntry,
 } from "./database/rename-repository.js";
 import {
-  getMaintenanceState as getMaintenanceStateEntry,
-  setMaintenanceState as setMaintenanceStateEntry,
-  vacuum as vacuumEntry
-} from "./database/maintenance-state-repository.js";
+  getCursor as getCursorEntry,
+  getDirtySessions as getDirtySessionsQuery,
+  getRevision as getRevisionEntry,
+  getSessionByRolloutPath as getSessionByRolloutPathEntry,
+  getSessionDetail as getSessionDetailEntry,
+  listSessions as listSessionsQuery,
+  listWorkspaceSummaries as listWorkspaceSummariesQuery,
+  updateOfficialNames as updateOfficialNamesEntry,
+  updateStatusEstimate as updateStatusEstimateEntry,
+  upsertSession as upsertSessionEntry,
+} from "./database/session-repository.js";
 
 export class StateDatabase {
   private readonly db: Database.Database;
@@ -202,18 +201,18 @@ export class StateDatabase {
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {
-    const exists = (this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<Record<string, unknown>>).some(
-      (row) => row.name === column
-    );
+    const exists = (
+      this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<Record<string, unknown>>
+    ).some((row) => row.name === column);
     if (!exists) {
       this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
   }
 
   private dropColumnIfExists(table: string, column: string): void {
-    const exists = (this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<Record<string, unknown>>).some(
-      (row) => row.name === column
-    );
+    const exists = (
+      this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<Record<string, unknown>>
+    ).some((row) => row.name === column);
     if (exists) {
       this.db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
     }
@@ -227,14 +226,22 @@ export class StateDatabase {
     return getRevisionEntry(this.db, threadId);
   }
 
-  getCursor(rolloutPath: string): { lastOffset: number; lastSize: number; lastMtime?: string } | undefined {
+  getCursor(
+    rolloutPath: string,
+  ): { lastOffset: number; lastSize: number; lastMtime?: string } | undefined {
     return getCursorEntry(this.db, rolloutPath);
   }
 
   upsertSession(params: {
     session: MaterializedSession;
     revision: SessionRevision;
-    cursor: { rolloutPath: string; lastOffset: number; lastSize: number; lastMtime?: string; lastScanAt?: string };
+    cursor: {
+      rolloutPath: string;
+      lastOffset: number;
+      lastSize: number;
+      lastMtime?: string;
+      lastScanAt?: string;
+    };
   }): void {
     upsertSessionEntry(this.db, params);
   }
@@ -247,7 +254,10 @@ export class StateDatabase {
     return getRenameStateEntry(this.db, threadId);
   }
 
-  saveCandidate(threadId: string, suggestion: { name: string; source: RenameSource; generatedAt: string; ruleSignature?: string }): void {
+  saveCandidate(
+    threadId: string,
+    suggestion: { name: string; source: RenameSource; generatedAt: string; ruleSignature?: string },
+  ): void {
     saveCandidateEntry(this.db, threadId, suggestion);
   }
 
@@ -378,7 +388,11 @@ export class StateDatabase {
     return listRenameReplayCandidatesSinceQuery(this.db, params);
   }
 
-  queueRenameReplayThreadIds(threadIds: string[]): { queued: number; clearedCandidates: number; matchedThreadIds: string[] } {
+  queueRenameReplayThreadIds(threadIds: string[]): {
+    queued: number;
+    clearedCandidates: number;
+    matchedThreadIds: string[];
+  } {
     return queueRenameReplayThreadIdsEntry(this.db, threadIds);
   }
 

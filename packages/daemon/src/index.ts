@@ -2,22 +2,18 @@
 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-
-import chokidar, { type FSWatcher } from "chokidar";
-
 import { CodexNamer } from "@codexnamer/core";
+import chokidar, { type FSWatcher } from "chokidar";
 
 function parseArgs(argv: string[]): { once: boolean; intervalSeconds: number } {
   const once = argv.includes("--once");
   const intervalIndex = argv.indexOf("--interval");
   const intervalSeconds =
-    intervalIndex >= 0 && argv[intervalIndex + 1]
-      ? Number(argv[intervalIndex + 1])
-      : 300;
+    intervalIndex >= 0 && argv[intervalIndex + 1] ? Number(argv[intervalIndex + 1]) : 300;
 
   return {
     once,
-    intervalSeconds: Number.isFinite(intervalSeconds) ? intervalSeconds : 300
+    intervalSeconds: Number.isFinite(intervalSeconds) ? intervalSeconds : 300,
   };
 }
 
@@ -31,13 +27,13 @@ export class SessionSweepDaemon {
 
   constructor(
     private readonly manager: CodexNamer,
-    private readonly intervalSeconds: number
+    private readonly intervalSeconds: number,
   ) {}
 
   async runOnce(): Promise<void> {
     const sweep = await this.manager.runAutoRenameSweep({
       intervalSeconds: this.intervalSeconds,
-      processId: process.pid
+      processId: process.pid,
     });
     const previews = sweep.previews;
     const summary = {
@@ -48,9 +44,12 @@ export class SessionSweepDaemon {
       skip: previews.filter((item) => item.status === "skip").length,
       autoApplied: sweep.applied.filter((item) => item.written).length,
       unchanged: sweep.applied.filter((item) => !item.written).length,
-      execution: this.manager.config.rename.autoApply === "idle-finalize" ? "auto-apply" : "preview-only"
+      execution:
+        this.manager.config.rename.autoApply === "idle-finalize" ? "auto-apply" : "preview-only",
     };
-    console.log(JSON.stringify({ type: "daemon_sweep", summary, previews, applied: sweep.applied }, null, 2));
+    console.log(
+      JSON.stringify({ type: "daemon_sweep", summary, previews, applied: sweep.applied }, null, 2),
+    );
   }
 
   private async runManagedSweep(errorLabel: string): Promise<void> {
@@ -108,11 +107,11 @@ export class SessionSweepDaemon {
     this.watcher = chokidar.watch(
       [
         path.join(codexHome, "sessions", "**", "*.jsonl"),
-        path.join(codexHome, "session_index.jsonl")
+        path.join(codexHome, "session_index.jsonl"),
       ],
       {
-        ignoreInitial: true
-      }
+        ignoreInitial: true,
+      },
     );
 
     this.watcher.on("add", () => this.scheduleSoon());

@@ -1,4 +1,3 @@
-import React from "react";
 import { render } from "ink";
 
 import { App } from "./App.js";
@@ -22,5 +21,5 @@ render(
   <App
     apiBase={parseApiBase(process.argv.slice(2))}
     interactive={Boolean(process.stdin.isTTY && process.stdin.setRawMode)}
-  />
+  />,
 );

@@ -1,26 +1,28 @@
 import { useEffect, useState } from "react";
-
+import type {
+  DraftFieldUpdater,
+  DraftStateUpdater,
+  NamingBuilderItem,
+  NamingComponent,
+  NamingCompositionMode,
+  NamingTimestampPreset,
+  RenameContextStrategy,
+  SettingsDraft,
+  SettingsTagDraft,
+} from "../../../settings-model.js";
 import {
   blankTagDraft,
   DEFAULT_TIMESTAMP_PRESET,
+  moveItem,
   QUICK_SEPARATOR_OPTIONS,
   renderNamingStructurePreview,
   renderTagLabel,
-  tagToneClass,
   TIMESTAMP_PRESET_OPTIONS,
-  type DraftFieldUpdater,
-  type DraftStateUpdater,
-  type NamingBuilderItem,
-  type NamingComponent,
-  type NamingCompositionMode,
-  type NamingTimestampPreset,
-  type RenameContextStrategy,
-  type SettingsDraft,
-  type SettingsTagDraft,
-  moveItem
+  tagToneClass,
 } from "../../../settings-model.js";
 import type { ConfigDocument, PromptPreviewResponse } from "../../../types.js";
-import { SelectField, SettingsSectionFrame, type ChoiceOption, type TextTools } from "../shared.js";
+import type { ChoiceOption, TextTools } from "../shared.js";
+import { SelectField, SettingsSectionFrame } from "../shared.js";
 
 function TagPresetDialog(props: {
   open: boolean;
@@ -71,7 +73,7 @@ function TagPresetDialog(props: {
             <p>
               {props.text.inline(
                 "Tag 用于给常见场景设置可复用的命名规则。",
-                "Tags define reusable naming rules for common scenarios."
+                "Tags define reusable naming rules for common scenarios.",
               )}
             </p>
           </div>
@@ -83,7 +85,7 @@ function TagPresetDialog(props: {
                 onChange={(event) => {
                   setForm((current) => ({
                     ...current,
-                    id: event.target.value
+                    id: event.target.value,
                   }));
                 }}
                 value={form.id}
@@ -95,7 +97,7 @@ function TagPresetDialog(props: {
                 onChange={(event) => {
                   setForm((current) => ({
                     ...current,
-                    label: event.target.value
+                    label: event.target.value,
                   }));
                 }}
                 value={form.label ?? ""}
@@ -107,7 +109,7 @@ function TagPresetDialog(props: {
                 onChange={(event) => {
                   setForm((current) => ({
                     ...current,
-                    description: event.target.value
+                    description: event.target.value,
                   }));
                 }}
                 rows={3}
@@ -120,7 +122,7 @@ function TagPresetDialog(props: {
                 onChange={(event) => {
                   setForm((current) => ({
                     ...current,
-                    promptHint: event.target.value
+                    promptHint: event.target.value,
                   }));
                 }}
                 rows={4}
@@ -135,7 +137,9 @@ function TagPresetDialog(props: {
             <button className="btn-refresh danger" onClick={props.onDelete} type="button">
               {props.text.inline("删除", "Delete")}
             </button>
-          ) : <span />}
+          ) : (
+            <span />
+          )}
           <div className="settings-modal-actions">
             <button className="btn-refresh" onClick={props.onClose} type="button">
               {props.text.inline("取消", "Cancel")}
@@ -148,7 +152,7 @@ function TagPresetDialog(props: {
                   id: form.id.trim(),
                   label: form.label?.trim() ?? "",
                   description: form.description?.trim() ?? "",
-                  promptHint: form.promptHint?.trim() ?? ""
+                  promptHint: form.promptHint?.trim() ?? "",
                 });
               }}
               type="button"
@@ -172,7 +176,7 @@ export function NamingSection(props: {
   onOpenRequeue: () => void;
   onRefreshPromptPreview: (
     userConfig?: ConfigDocument,
-    options?: { urgent?: boolean }
+    options?: { urgent?: boolean },
   ) => void | Promise<void>;
   updateDraftState: DraftStateUpdater;
   updateDraftField: DraftFieldUpdater;
@@ -208,38 +212,50 @@ export function NamingSection(props: {
     {
       value: "timestamp",
       label: props.text.inline("时间戳", "Timestamp"),
-      copy: props.text.inline("按选定格式输出日期或时间。", "Render date or time using the selected format.")
+      copy: props.text.inline(
+        "按选定格式输出日期或时间。",
+        "Render date or time using the selected format.",
+      ),
     },
     {
       value: "workspace",
       label: props.text.inline("工作区", "Workspace"),
-      copy: props.text.inline("工作区标签，通常来自 cwd / project。", "Workspace label, usually derived from cwd / project.")
+      copy: props.text.inline(
+        "工作区标签，通常来自 cwd / project。",
+        "Workspace label, usually derived from cwd / project.",
+      ),
     },
     {
       value: "project",
       label: props.text.inline("项目", "Project"),
-      copy: props.text.inline("项目目录名，适合做更短的路径信号。", "Project directory name for a shorter path signal.")
+      copy: props.text.inline(
+        "项目目录名，适合做更短的路径信号。",
+        "Project directory name for a shorter path signal.",
+      ),
     },
     {
       value: "tag",
       label: props.text.inline("Tag", "Tag"),
-      copy: props.text.inline("由 AI 选择的命名预设标签。", "AI-selected naming preset tag.")
+      copy: props.text.inline("由 AI 选择的命名预设标签。", "AI-selected naming preset tag."),
     },
     {
       value: "kind",
       label: props.text.inline("Kind", "Kind"),
-      copy: props.text.inline("任务动作，例如 fix / design / review。", "Task action such as fix / design / review.")
+      copy: props.text.inline(
+        "任务动作，例如 fix / design / review。",
+        "Task action such as fix / design / review.",
+      ),
     },
     {
       value: "scope",
       label: props.text.inline("Scope", "Scope"),
-      copy: props.text.inline("主子系统或主话题。", "Primary subsystem or scope.")
+      copy: props.text.inline("主子系统或主话题。", "Primary subsystem or scope."),
     },
     {
       value: "summary",
       label: props.text.inline("Summary", "Summary"),
-      copy: props.text.inline("标题正文与具体动作焦点。", "Main title body and concrete focus.")
-    }
+      copy: props.text.inline("标题正文与具体动作焦点。", "Main title body and concrete focus."),
+    },
   ];
   const updateNamingBuilder = (nextBuilder: NamingBuilderItem[]) => {
     props.updateDraftField("namingBuilder", nextBuilder);
@@ -250,8 +266,8 @@ export function NamingSection(props: {
       {
         type: "component",
         component,
-        ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {})
-      }
+        ...(component === "timestamp" ? { format: DEFAULT_TIMESTAMP_PRESET } : {}),
+      },
     ]);
   };
   const addSeparator = (separator: string) => {
@@ -262,16 +278,22 @@ export function NamingSection(props: {
       ...props.draft.namingBuilder,
       {
         type: "separator",
-        value: separator
-      }
+        value: separator,
+      },
     ]);
     setCustomSeparator("");
   };
   const updateBuilderItem = (index: number, item: NamingBuilderItem) => {
-    updateNamingBuilder(props.draft.namingBuilder.map((current, currentIndex) => (currentIndex === index ? item : current)));
+    updateNamingBuilder(
+      props.draft.namingBuilder.map((current, currentIndex) =>
+        currentIndex === index ? item : current,
+      ),
+    );
   };
   const removeBuilderItem = (index: number) => {
-    updateNamingBuilder(props.draft.namingBuilder.filter((_, currentIndex) => currentIndex !== index));
+    updateNamingBuilder(
+      props.draft.namingBuilder.filter((_, currentIndex) => currentIndex !== index),
+    );
   };
   const moveBuilderItem = (index: number, delta: number) => {
     updateNamingBuilder(moveItem(props.draft.namingBuilder, index, index + delta));
@@ -280,41 +302,59 @@ export function NamingSection(props: {
     {
       value: "summary-signals",
       label: props.text.inline("首尾摘要", "Summary signals"),
-      description: props.text.inline("首条用户 + 末条用户 + 末条助手。", "First user + last user + last assistant.")
+      description: props.text.inline(
+        "首条用户 + 末条用户 + 末条助手。",
+        "First user + last user + last assistant.",
+      ),
     },
     {
       value: "last-user-last-assistant",
       label: props.text.inline("最后一轮", "Last turn pair"),
-      description: props.text.inline("只读最后一条用户和最后一条助手。", "Only the last user and the last assistant.")
+      description: props.text.inline(
+        "只读最后一条用户和最后一条助手。",
+        "Only the last user and the last assistant.",
+      ),
     },
     {
       value: "user-assistant-transcript",
       label: props.text.inline("用户+助手全文", "User + assistant transcript"),
-      description: props.text.inline("读可见 user / assistant message。", "Read visible user / assistant messages.")
+      description: props.text.inline(
+        "读可见 user / assistant message。",
+        "Read visible user / assistant messages.",
+      ),
     },
     {
       value: "user-only-transcript",
       label: props.text.inline("仅用户全文", "User-only transcript"),
-      description: props.text.inline("只读用户消息，适合保留原始目标。", "Read only user messages to keep the original goal.")
+      description: props.text.inline(
+        "只读用户消息，适合保留原始目标。",
+        "Read only user messages to keep the original goal.",
+      ),
     },
     {
       value: "assistant-only-transcript",
       label: props.text.inline("仅助手全文", "Assistant-only transcript"),
-      description: props.text.inline("只读助手消息，适合按产出总结。", "Read only assistant messages to summarize output.")
+      description: props.text.inline(
+        "只读助手消息，适合按产出总结。",
+        "Read only assistant messages to summarize output.",
+      ),
     },
     {
       value: "user-transcript-last-assistant",
       label: props.text.inline("用户全文 + 最后助手", "User transcript + last assistant"),
-      description: props.text.inline("读用户过程，再补最后一条助手总结。", "Read user history, then append the last assistant summary.")
+      description: props.text.inline(
+        "读用户过程，再补最后一条助手总结。",
+        "Read user history, then append the last assistant summary.",
+      ),
     },
     {
       value: "paired-user-turns",
       label: props.text.inline("配对用户轮次", "Paired user turns"),
       description: props.text.inline(
         "每个用户轮次只挂前一段里最后一条有效助手结论。",
-        "For each user turn, attach only the last substantive assistant from the preceding assistant cluster."
-      )
-    }
+        "For each user turn, attach only the last substantive assistant from the preceding assistant cluster.",
+      ),
+    },
   ];
 
   return (
@@ -323,7 +363,7 @@ export function NamingSection(props: {
       title={props.text.inline("命名规则与标题结构", "Naming rules and title structure")}
       copy={props.text.inline(
         "设置上下文、标题结构和 Prompt。",
-        "Set context, title structure, and prompt."
+        "Set context, title structure, and prompt.",
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -342,7 +382,7 @@ export function NamingSection(props: {
               }}
               options={[
                 { value: "en-US", label: "English" },
-                { value: "zh-CN", label: "中文" }
+                { value: "zh-CN", label: "中文" },
               ]}
               value={props.draft.uiLanguage}
             />
@@ -388,11 +428,13 @@ export function NamingSection(props: {
             />
           </div>
           <div className="settings-inline-note">
-            <strong>{props.text.inline("上下文策略与输出语言", "Context strategy and output language")}</strong>
+            <strong>
+              {props.text.inline("上下文策略与输出语言", "Context strategy and output language")}
+            </strong>
             <p>
               {props.text.inline(
                 "选择上下文策略，并单独设置标题输出语言。",
-                "Choose a context strategy and set the title output language separately."
+                "Choose a context strategy and set the title output language separately.",
               )}
             </p>
           </div>
@@ -401,12 +443,19 @@ export function NamingSection(props: {
         <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
-              <p className="panel-kicker">{props.text.inline("Naming builder", "Naming builder")}</p>
-              <h4>{props.text.inline("结构化组件与最终标题预览", "Structured components and final title preview")}</h4>
+              <p className="panel-kicker">
+                {props.text.inline("Naming builder", "Naming builder")}
+              </p>
+              <h4>
+                {props.text.inline(
+                  "结构化组件与最终标题预览",
+                  "Structured components and final title preview",
+                )}
+              </h4>
               <p className="settings-copy">
                 {props.text.inline(
                   "按顺序编辑标题组件并查看预览。",
-                  "Edit title components in order and review the preview."
+                  "Edit title components in order and review the preview.",
                 )}
               </p>
             </div>
@@ -422,13 +471,19 @@ export function NamingSection(props: {
                 {
                   value: "structured",
                   label: props.text.inline("结构化", "Structured"),
-                  description: props.text.inline("推荐。由组件和 AI 字段共同决定。", "Recommended. Driven by components plus AI fields.")
+                  description: props.text.inline(
+                    "推荐。由组件和 AI 字段共同决定。",
+                    "Recommended. Driven by components plus AI fields.",
+                  ),
                 },
                 {
                   value: "prompt-override",
                   label: props.text.inline("Prompt 覆写", "Prompt override"),
-                  description: props.text.inline("高级模式。允许直接改写命名指令。", "Advanced mode. Allows direct prompt override.")
-                }
+                  description: props.text.inline(
+                    "高级模式。允许直接改写命名指令。",
+                    "Advanced mode. Allows direct prompt override.",
+                  ),
+                },
               ]}
               value={props.draft.namingCompositionMode}
             />
@@ -437,7 +492,9 @@ export function NamingSection(props: {
           <div className="settings-builder-grid">
             <div className="settings-builder-column">
               <div className="settings-builder-strip">
-                <span className="settings-builder-label">{props.text.inline("可用组件", "Available components")}</span>
+                <span className="settings-builder-label">
+                  {props.text.inline("可用组件", "Available components")}
+                </span>
                 <div className="settings-chip-row">
                   {namingComponentOptions.map((option) => (
                     <button
@@ -455,7 +512,9 @@ export function NamingSection(props: {
               </div>
 
               <div className="settings-builder-strip">
-                <span className="settings-builder-label">{props.text.inline("快捷分隔符", "Quick separators")}</span>
+                <span className="settings-builder-label">
+                  {props.text.inline("快捷分隔符", "Quick separators")}
+                </span>
                 <div className="settings-chip-row">
                   {QUICK_SEPARATOR_OPTIONS.map((separator) => (
                     <button
@@ -478,7 +537,11 @@ export function NamingSection(props: {
                     placeholder={props.text.inline("自定义", "Custom")}
                     value={customSeparator}
                   />
-                  <button className="btn-refresh" onClick={() => addSeparator(customSeparator)} type="button">
+                  <button
+                    className="btn-refresh"
+                    onClick={() => addSeparator(customSeparator)}
+                    type="button"
+                  >
                     {props.text.inline("添加", "Add")}
                   </button>
                 </div>
@@ -487,29 +550,44 @@ export function NamingSection(props: {
               <div className="settings-builder-lane">
                 {props.draft.namingBuilder.length === 0 ? (
                   <div className="settings-empty-state">
-                    {props.text.inline("先从上方添加组件或分隔符。", "Start by adding components or separators above.")}
+                    {props.text.inline(
+                      "先从上方添加组件或分隔符。",
+                      "Start by adding components or separators above.",
+                    )}
                   </div>
                 ) : null}
                 {props.draft.namingBuilder.map((item, index) => {
                   const option =
                     item.type === "component"
-                      ? namingComponentOptions.find((candidate) => candidate.value === item.component)
+                      ? namingComponentOptions.find(
+                          (candidate) => candidate.value === item.component,
+                        )
                       : undefined;
 
                   return (
                     <article
-                      className={item.type === "separator" ? "settings-builder-card separator" : "settings-builder-card"}
+                      className={
+                        item.type === "separator"
+                          ? "settings-builder-card separator"
+                          : "settings-builder-card"
+                      }
                       key={`${item.type}-${index}-${item.type === "separator" ? item.value : item.component}`}
                     >
                       <div>
                         <strong>
                           {item.type === "separator"
-                            ? props.text.inline(`分隔符 ${JSON.stringify(item.value)}`, `Separator ${JSON.stringify(item.value)}`)
-                            : option?.label ?? item.component}
+                            ? props.text.inline(
+                                `分隔符 ${JSON.stringify(item.value)}`,
+                                `Separator ${JSON.stringify(item.value)}`,
+                              )
+                            : (option?.label ?? item.component)}
                         </strong>
                         <p>
                           {item.type === "separator"
-                            ? props.text.inline("原样拼进最终标题。", "Inserted into the final title verbatim.")
+                            ? props.text.inline(
+                                "原样拼进最终标题。",
+                                "Inserted into the final title verbatim.",
+                              )
                             : option?.copy}
                         </p>
                       </div>
@@ -519,7 +597,7 @@ export function NamingSection(props: {
                             onChange={(event) => {
                               updateBuilderItem(index, {
                                 ...item,
-                                format: event.target.value as NamingTimestampPreset
+                                format: event.target.value as NamingTimestampPreset,
                               });
                             }}
                             value={item.format ?? DEFAULT_TIMESTAMP_PRESET}
@@ -568,12 +646,14 @@ export function NamingSection(props: {
             </div>
 
             <aside className="settings-preview-card">
-              <span className="settings-preview-kicker">{props.text.inline("预览", "Preview")}</span>
+              <span className="settings-preview-kicker">
+                {props.text.inline("预览", "Preview")}
+              </span>
               <strong>{renderNamingStructurePreview(props.draft, props.text.uiLanguage)}</strong>
               <p>
                 {props.text.inline(
                   "按当前组件顺序生成的标题示例。",
-                  "A sample title generated from the current component order."
+                  "A sample title generated from the current component order.",
                 )}
               </p>
             </aside>
@@ -583,12 +663,14 @@ export function NamingSection(props: {
         <article className="settings-surface-card settings-span-two">
           <div className="settings-card-header">
             <div>
-              <p className="panel-kicker">{props.text.inline("AI tag presets", "AI tag presets")}</p>
+              <p className="panel-kicker">
+                {props.text.inline("AI tag presets", "AI tag presets")}
+              </p>
               <h4>{props.text.inline("把规则做成可编辑预设", "Make rules editable presets")}</h4>
               <p className="settings-copy">
                 {props.text.inline(
                   "为常见场景定义可复用的标签规则。",
-                  "Define reusable tag rules for common scenarios."
+                  "Define reusable tag rules for common scenarios.",
                 )}
               </p>
             </div>
@@ -597,7 +679,7 @@ export function NamingSection(props: {
               onClick={() => {
                 setDialogState({
                   mode: "create",
-                  tag: blankTagDraft()
+                  tag: blankTagDraft(),
                 });
               }}
               type="button"
@@ -615,18 +697,21 @@ export function NamingSection(props: {
                   setDialogState({
                     mode: "edit",
                     index,
-                    tag
+                    tag,
                   });
                 }}
                 type="button"
               >
                 <div className="settings-tag-card-header">
-                  <span className={`settings-tag-pill ${tagToneClass(index)}`}>#{renderTagLabel(tag, props.text.uiLanguage)}</span>
+                  <span className={`settings-tag-pill ${tagToneClass(index)}`}>
+                    #{renderTagLabel(tag, props.text.uiLanguage)}
+                  </span>
                   <code>{tag.id}</code>
                 </div>
                 <p>{tag.description || props.text.inline("还没有说明。", "No description yet.")}</p>
                 <small>
-                  {tag.promptHint || props.text.inline("还没有 AI 规则提示。", "No AI rule hint yet.")}
+                  {tag.promptHint ||
+                    props.text.inline("还没有 AI 规则提示。", "No AI rule hint yet.")}
                 </small>
               </button>
             ))}
@@ -635,7 +720,7 @@ export function NamingSection(props: {
               <div className="settings-empty-state">
                 {props.text.inline(
                   "还没有自定义 tag 预设。可以直接添加，也可以先用默认目录。",
-                  "No custom tag presets yet. Add one now or keep the default catalog."
+                  "No custom tag presets yet. Add one now or keep the default catalog.",
                 )}
               </div>
             ) : null}
@@ -646,7 +731,12 @@ export function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Override", "Override")}</p>
-              <h4>{props.text.inline("给高级用户的 prompt 覆写", "Prompt override for advanced users")}</h4>
+              <h4>
+                {props.text.inline(
+                  "给高级用户的 prompt 覆写",
+                  "Prompt override for advanced users",
+                )}
+              </h4>
             </div>
           </div>
           <label className="settings-field">
@@ -657,7 +747,7 @@ export function NamingSection(props: {
               }}
               placeholder={props.text.inline(
                 "例如：始终先输出一个中文 tag，然后再写一个包含子系统和动作的标题。",
-                "For example: always output a Chinese tag first, then a title with subsystem and action."
+                "For example: always output a Chinese tag first, then a title with subsystem and action.",
               )}
               rows={4}
               value={props.draft.namingCustomPrompt}
@@ -673,15 +763,11 @@ export function NamingSection(props: {
               <p className="settings-copy">
                 {props.text.inline(
                   "在独立页面查看预览和入队结果。",
-                  "Use the dedicated page to view preview and queue results."
+                  "Use the dedicated page to view preview and queue results.",
                 )}
               </p>
             </div>
-            <button
-              className="btn-sm"
-              onClick={props.onOpenRequeue}
-              type="button"
-            >
+            <button className="btn-sm" onClick={props.onOpenRequeue} type="button">
               {props.text.inline("打开重新入队页", "Open requeue page")}
             </button>
           </div>
@@ -691,9 +777,17 @@ export function NamingSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.tt("promptPreview")}</p>
-              <h4>{props.text.inline("命名策略实际发送给 AI 的 Prompt", "The prompt actually sent to AI for naming")}</h4>
+              <h4>
+                {props.text.inline(
+                  "命名策略实际发送给 AI 的 Prompt",
+                  "The prompt actually sent to AI for naming",
+                )}
+              </h4>
               <p className="settings-copy">
-                {props.text.inline("当前命名策略生成的 Prompt。", "Prompt generated from the current naming policy.")}
+                {props.text.inline(
+                  "当前命名策略生成的 Prompt。",
+                  "Prompt generated from the current naming policy.",
+                )}
               </p>
             </div>
             <div className="settings-inline-actions">
@@ -710,7 +804,9 @@ export function NamingSection(props: {
                 }}
                 type="button"
               >
-                {manualPromptPreviewRefreshing ? props.text.tt("refreshing") : props.text.tt("refresh")}
+                {manualPromptPreviewRefreshing
+                  ? props.text.tt("refreshing")
+                  : props.text.tt("refresh")}
               </button>
             </div>
           </div>
@@ -744,7 +840,9 @@ export function NamingSection(props: {
           </dl>
           <pre className="settings-json settings-json-large">
             {props.promptPreview?.prompt ??
-              (props.promptPreviewRefreshing ? props.text.tt("loadingPrompt") : props.text.tt("noPreviewLoaded"))}
+              (props.promptPreviewRefreshing
+                ? props.text.tt("loadingPrompt")
+                : props.text.tt("noPreviewLoaded"))}
           </pre>
         </article>
       </div>
@@ -759,7 +857,9 @@ export function NamingSection(props: {
             ? () => {
                 props.updateDraftState((current) => ({
                   ...current,
-                  namingTags: current.namingTags.filter((_, tagIndex) => tagIndex !== dialogState.index)
+                  namingTags: current.namingTags.filter(
+                    (_, tagIndex) => tagIndex !== dialogState.index,
+                  ),
                 }));
                 setDialogState(null);
               }
@@ -771,13 +871,13 @@ export function NamingSection(props: {
               return {
                 ...current,
                 namingTags: current.namingTags.map((item, tagIndex) =>
-                  tagIndex === dialogState.index ? tag : item
-                )
+                  tagIndex === dialogState.index ? tag : item,
+                ),
               };
             }
             return {
               ...current,
-              namingTags: [...current.namingTags, tag]
+              namingTags: [...current.namingTags, tag],
             };
           });
           setDialogState(null);

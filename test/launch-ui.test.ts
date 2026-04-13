@@ -10,22 +10,22 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/tsx", "scripts/launch-ui.ts", "web"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/tsx", "scripts/launch-ui.ts", "web"],
         },
         repoCwd,
-        "web"
-      )
+        "web",
+      ),
     ).toBe("launcher-web");
 
     expect(
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/tsx", "packages/api/src/index.ts"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/tsx", "packages/api/src/index.ts"],
         },
         repoCwd,
-        "web"
-      )
+        "web",
+      ),
     ).toBe("api");
   });
 
@@ -34,33 +34,33 @@ describe("classifyManagedProcess", () => {
       classifyManagedProcess(
         {
           cwd: `${repoCwd}/packages/web`,
-          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/vite"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/.bin/vite"],
         },
         repoCwd,
-        "web"
-      )
+        "web",
+      ),
     ).toBe("web");
 
     expect(
       classifyManagedProcess(
         {
           cwd: repoCwd,
-          cmdline: ["node", "/tmp/codexnamer/node_modules/vite/bin/vite.js", "build"]
+          cmdline: ["node", "/tmp/codexnamer/node_modules/vite/bin/vite.js", "build"],
         },
         repoCwd,
-        "web"
-      )
+        "web",
+      ),
     ).toBeUndefined();
 
     expect(
       classifyManagedProcess(
         {
           cwd: "/tmp/other-repo",
-          cmdline: ["node", "/tmp/other-repo/node_modules/vite/bin/vite.js"]
+          cmdline: ["node", "/tmp/other-repo/node_modules/vite/bin/vite.js"],
         },
         repoCwd,
-        "web"
-      )
+        "web",
+      ),
     ).toBeUndefined();
   });
 });
@@ -68,7 +68,7 @@ describe("classifyManagedProcess", () => {
 describe("detectSiblingRepoPath", () => {
   it("detects a same-name sibling repo for ai-tools workspaces", () => {
     expect(detectSiblingRepoPath("/home/tester/Desktop/src/ai-tools/codexnamer")).toBe(
-      "/home/tester/Desktop/src/codexnamer"
+      "/home/tester/Desktop/src/codexnamer",
     );
   });
 

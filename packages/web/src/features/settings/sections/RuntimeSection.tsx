@@ -1,6 +1,7 @@
 import { asRecord } from "../../../settings-model.js";
 import type { ConfigView, ProviderResponse } from "../../../types.js";
-import { SettingsSectionFrame, type TextTools } from "../shared.js";
+import type { TextTools } from "../shared.js";
+import { SettingsSectionFrame } from "../shared.js";
 
 export function RuntimeSection(props: {
   configView: ConfigView;
@@ -16,7 +17,7 @@ export function RuntimeSection(props: {
       title={props.text.inline("运行时与解析结果", "Runtime and resolved configuration")}
       copy={props.text.inline(
         "查看配置来源、路径和 provider 解析结果。",
-        "Inspect config sources, paths, and resolved provider state."
+        "Inspect config sources, paths, and resolved provider state.",
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -38,7 +39,9 @@ export function RuntimeSection(props: {
             </div>
             <div>
               <dt>{props.text.tt("resolvedBackend")}</dt>
-              <dd>{String(props.providers?.resolvedProvider?.resolvedBackend ?? props.text.tt("nA"))}</dd>
+              <dd>
+                {String(props.providers?.resolvedProvider?.resolvedBackend ?? props.text.tt("nA"))}
+              </dd>
             </div>
             <div>
               <dt>{props.text.tt("resolvedTransport")}</dt>
@@ -55,7 +58,9 @@ export function RuntimeSection(props: {
           </dl>
           <details className="settings-disclosure">
             <summary>{props.text.tt("inspectResolvedProvider")}</summary>
-            <pre className="settings-json">{JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}</pre>
+            <pre className="settings-json">
+              {JSON.stringify(props.providers?.resolvedProvider ?? {}, null, 2)}
+            </pre>
           </details>
         </article>
       </div>

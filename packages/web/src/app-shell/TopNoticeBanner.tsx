@@ -1,8 +1,6 @@
 import type { UiNotice } from "../control-deck-model.js";
 
-export function TopNoticeBanner(props: {
-  notice: UiNotice | null;
-}) {
+export function TopNoticeBanner(props: { notice: UiNotice | null }) {
   if (!props.notice) {
     return null;
   }

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { computeTerminalLayout, measureDisplayWidth, truncateDisplayText } from "../packages/tui/src/layout.js";
+import {
+  computeTerminalLayout,
+  measureDisplayWidth,
+  truncateDisplayText,
+} from "../packages/tui/src/layout.js";
 
 describe("tui layout", () => {
   test("switches to compact stacked mode on narrow terminals", () => {
@@ -27,7 +31,7 @@ describe("tui layout", () => {
   test("expands detail pane in fullscreen detail mode", () => {
     const layout = computeTerminalLayout(
       { columns: 180, rows: 42 },
-      { screenMode: "browser", viewMode: "detail", showPreview: false }
+      { screenMode: "browser", viewMode: "detail", showPreview: false },
     );
     expect(layout.detailWidth).toBeGreaterThan(150);
     expect(layout.listHeight).toBe(0);

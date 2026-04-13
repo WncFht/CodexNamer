@@ -1,10 +1,10 @@
 import * as React from "react";
-
-import { t, type UiLanguage } from "./i18n.js";
-import { TranscriptPanel } from "./TranscriptPanel.js";
+import { RenameHistoryPanel } from "./features/sessions/RenameHistoryPanel.js";
 import { SessionDetailHeader } from "./features/sessions/SessionDetailHeader.js";
 import { SessionListPane } from "./features/sessions/SessionListPane.js";
-import { RenameHistoryPanel } from "./features/sessions/RenameHistoryPanel.js";
+import type { UiLanguage } from "./i18n.js";
+import { t } from "./i18n.js";
+import { TranscriptPanel } from "./TranscriptPanel.js";
 import type { SessionDetail, SessionSummary } from "./types.js";
 import { AppViewTransition } from "./view-transitions.js";
 
@@ -43,8 +43,13 @@ export function SessionBrowser(props: {
   onToggleFreeze: () => void | Promise<void>;
 }) {
   const [detailView, setDetailView] = React.useState<"transcript" | "naming">("transcript");
-  const tt = React.useCallback((key: Parameters<typeof t>[1]) => t(props.uiLanguage, key), [props.uiLanguage]);
-  const sessionPaneToggleLabel = props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions");
+  const tt = React.useCallback(
+    (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key),
+    [props.uiLanguage],
+  );
+  const sessionPaneToggleLabel = props.sessionPaneCollapsed
+    ? tt("showSessions")
+    : tt("hideSessions");
   const renameHistory = React.useMemo(() => {
     const seen = new Set<string>();
     return (props.detail?.renameHistory ?? []).filter((entry) => {
@@ -86,7 +91,7 @@ export function SessionBrowser(props: {
           break;
       }
     },
-    [props]
+    [props],
   );
 
   return (
@@ -156,12 +161,20 @@ export function SessionBrowser(props: {
                 uiLanguage={props.uiLanguage}
               />
 
-              {props.error ? <div className="error-banner notice-banner error">{props.error}</div> : null}
+              {props.error ? (
+                <div className="error-banner notice-banner error">{props.error}</div>
+              ) : null}
 
               <div className="chat-content-shell">
                 <div className="chat-primary-stack">
-                  {props.loadingDetail ? <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div> : null}
-                  <div aria-label={tt("selectedSession")} className="detail-view-switch" role="tablist">
+                  {props.loadingDetail ? (
+                    <div className="loading-state chat-loading">{tt("loadingSessionDetail")}</div>
+                  ) : null}
+                  <div
+                    aria-label={tt("selectedSession")}
+                    className="detail-view-switch"
+                    role="tablist"
+                  >
                     <button
                       aria-selected={detailView === "transcript"}
                       className={detailView === "transcript" ? "btn-sm active" : "btn-sm"}

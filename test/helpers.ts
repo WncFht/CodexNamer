@@ -1,9 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-
-import type { EffectiveConfig } from "@codexnamer/shared";
 import { buildConfigForTests, CodexNamer } from "@codexnamer/core";
+import type { EffectiveConfig } from "@codexnamer/shared";
 
 type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends Array<infer U>
@@ -22,7 +21,10 @@ export async function createTempWorkspace(): Promise<{
   const codexHome = path.join(root, ".codex");
   const stateDir = path.join(root, ".state");
   await fs.mkdir(path.join(codexHome, "sessions"), { recursive: true });
-  await fs.writeFile(path.join(codexHome, "config.toml"), 'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n');
+  await fs.writeFile(
+    path.join(codexHome, "config.toml"),
+    'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n',
+  );
   return { root, codexHome, stateDir };
 }
 
@@ -45,9 +47,9 @@ export async function writeRolloutFixture(params: {
   const tokenPayload = {
     info: {
       total_token_usage: {
-        total_tokens: 1234
-      }
-    }
+        total_tokens: 1234,
+      },
+    },
   };
   const lines = [
     JSON.stringify({
@@ -57,8 +59,8 @@ export async function writeRolloutFixture(params: {
         id: params.threadId,
         timestamp: "2026-04-04T12:00:00.000Z",
         cwd: params.cwd ?? "/tmp/project-alpha",
-        model_provider: "OpenAI"
-      }
+        model_provider: "OpenAI",
+      },
     }),
     JSON.stringify({
       timestamp: "2026-04-04T12:00:01.000Z",
@@ -69,18 +71,18 @@ export async function writeRolloutFixture(params: {
         content: [
           {
             type: "input_text",
-            text: params.userMessage
-          }
-        ]
-      }
+            text: params.userMessage,
+          },
+        ],
+      },
     }),
     JSON.stringify({
       timestamp: "2026-04-04T12:00:01.000Z",
       type: "event_msg",
       payload: {
         type: "user_message",
-        message: params.userMessage
-      }
+        message: params.userMessage,
+      },
     }),
     JSON.stringify({
       timestamp: "2026-04-04T12:00:02.000Z",
@@ -92,10 +94,10 @@ export async function writeRolloutFixture(params: {
         content: [
           {
             type: "output_text",
-            text: params.lastAgentMessage
-          }
-        ]
-      }
+            text: params.lastAgentMessage,
+          },
+        ],
+      },
     }),
     ...(params.toolCallName
       ? [
@@ -106,8 +108,8 @@ export async function writeRolloutFixture(params: {
               type: "function_call",
               name: params.toolCallName,
               arguments: JSON.stringify(params.toolCallArguments ?? {}),
-              call_id: "call_test_1"
-            }
+              call_id: "call_test_1",
+            },
           }),
           JSON.stringify({
             timestamp: "2026-04-04T12:00:04.000Z",
@@ -115,9 +117,9 @@ export async function writeRolloutFixture(params: {
             payload: {
               type: "function_call_output",
               call_id: "call_test_1",
-              output: params.toolCallOutput ?? "ok"
-            }
-          })
+              output: params.toolCallOutput ?? "ok",
+            },
+          }),
         ]
       : []),
     JSON.stringify({
@@ -125,15 +127,15 @@ export async function writeRolloutFixture(params: {
       type: "event_msg",
       payload: {
         type: "task_complete",
-        last_agent_message: params.lastAgentMessage
-      }
+        last_agent_message: params.lastAgentMessage,
+      },
     }),
     JSON.stringify({
       timestamp: updatedAt,
       type: "task_complete",
       payload: {
-        last_agent_message: params.lastAgentMessage
-      }
+        last_agent_message: params.lastAgentMessage,
+      },
     }),
     JSON.stringify({
       timestamp: updatedAt,
@@ -142,19 +144,21 @@ export async function writeRolloutFixture(params: {
         params.tokenEventStyle === "event-msg"
           ? {
               type: "token_count",
-              ...tokenPayload
+              ...tokenPayload,
             }
-          : tokenPayload
-    })
+          : tokenPayload,
+    }),
   ];
   await fs.writeFile(rolloutPath, `${lines.join("\n")}\n`, "utf8");
   return rolloutPath;
 }
 
-export async function createManagerForTest(overrides: DeepPartial<EffectiveConfig> & {
-  codexHome: string;
-  stateDir: string;
-}): Promise<CodexNamer> {
+export async function createManagerForTest(
+  overrides: DeepPartial<EffectiveConfig> & {
+    codexHome: string;
+    stateDir: string;
+  },
+): Promise<CodexNamer> {
   const workspaceRoot = path.dirname(overrides.codexHome);
   const configPath = path.join(workspaceRoot, ".config", "codexnamer", "config.toml");
   const manager = await CodexNamer.create({
@@ -163,22 +167,23 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
     overrides: buildConfigForTests({
       general: {
         codexHome: overrides.codexHome,
-        stateDir: overrides.stateDir
+        stateDir: overrides.stateDir,
       },
       ai: {
         backend: "none",
         providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
-        temperature: 0.2
+        temperature: 0.2,
       },
-      ...(overrides as Partial<EffectiveConfig>)
+      ...(overrides as Partial<EffectiveConfig>),
     }),
-    operator: "test"
+    operator: "test",
   });
 
-  (manager as unknown as { requireSuccessfulProviderTest: () => Promise<void> }).requireSuccessfulProviderTest =
-    async () => undefined;
+  (
+    manager as unknown as { requireSuccessfulProviderTest: () => Promise<void> }
+  ).requireSuccessfulProviderTest = async () => undefined;
 
   if ((manager.config.ai.backend as string) === "none") {
     (
@@ -201,8 +206,8 @@ export async function createManagerForTest(overrides: DeepPartial<EffectiveConfi
         source: "ai",
         kind: "chore",
         summary: `rename ${session.threadId}`,
-        generatedAt: new Date().toISOString()
-      })
+        generatedAt: new Date().toISOString(),
+      }),
     };
   }
 

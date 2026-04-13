@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest";
-
 import { buildConfigForTests, evaluateAutoRename } from "@codexnamer/core";
 import type { RenameStateRecord, SessionDetail } from "@codexnamer/shared";
+import { describe, expect, it } from "vitest";
 
 function makeDetail(overrides?: Partial<SessionDetail>): SessionDetail {
   return {
@@ -28,7 +27,7 @@ function makeDetail(overrides?: Partial<SessionDetail>): SessionDetail {
     lastAppliedRevision: undefined,
     renameHistory: [],
     transcript: undefined,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -38,7 +37,7 @@ function makeRenameState(overrides?: Partial<RenameStateRecord>): RenameStateRec
     dirtySinceRename: true,
     frozen: false,
     autoApplyCount: 0,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -50,13 +49,13 @@ describe("auto rename evaluation", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 300,
         renameCooldownSeconds: 900,
-        maxAutoRenamesPerSession: 2
-      }
+        maxAutoRenamesPerSession: 2,
+      },
     });
 
     const evaluation = evaluateAutoRename(makeDetail(), config, {
       now: new Date("2026-04-04T12:02:30.000Z"),
-      renameState: makeRenameState()
+      renameState: makeRenameState(),
     });
 
     expect(evaluation.statusEstimate).toBe("candidate_ready");
@@ -71,13 +70,13 @@ describe("auto rename evaluation", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 900,
-        maxAutoRenamesPerSession: 2
-      }
+        maxAutoRenamesPerSession: 2,
+      },
     });
 
     const evaluation = evaluateAutoRename(makeDetail(), config, {
       now: new Date("2026-04-04T12:10:00.000Z"),
-      renameState: makeRenameState()
+      renameState: makeRenameState(),
     });
 
     expect(evaluation.statusEstimate).toBe("finalize_ready");
@@ -92,22 +91,22 @@ describe("auto rename evaluation", () => {
         candidateIdleSeconds: 60,
         finalizeIdleSeconds: 120,
         renameCooldownSeconds: 3600,
-        maxAutoRenamesPerSession: 2
-      }
+        maxAutoRenamesPerSession: 2,
+      },
     });
 
     const cooldownEvaluation = evaluateAutoRename(makeDetail(), config, {
       now: new Date("2026-04-04T12:10:00.000Z"),
       renameState: makeRenameState({
-        lastAutoApplySuccessAt: "2026-04-04T11:30:00.000Z"
-      })
+        lastAutoApplySuccessAt: "2026-04-04T11:30:00.000Z",
+      }),
     });
     expect(cooldownEvaluation.action).toBe("skip");
     expect(cooldownEvaluation.reason).toBe("rename_cooldown");
 
     const frozenEvaluation = evaluateAutoRename(makeDetail({ frozen: true }), config, {
       now: new Date("2026-04-04T12:10:00.000Z"),
-      renameState: makeRenameState()
+      renameState: makeRenameState(),
     });
     expect(frozenEvaluation.action).toBe("skip");
     expect(frozenEvaluation.reason).toBe("frozen");

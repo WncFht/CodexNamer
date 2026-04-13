@@ -5,9 +5,10 @@ import {
   groupSessionsByTime,
   sessionListSubtitle,
   sessionListTitle,
-  toneForSession
+  toneForSession,
 } from "../../browser-utils.js";
-import { sessionStatusLabel, t, type UiLanguage } from "../../i18n.js";
+import type { UiLanguage } from "../../i18n.js";
+import { sessionStatusLabel, t } from "../../i18n.js";
 import type { SessionSummary } from "../../types.js";
 import { addAppTransitionType } from "../../view-transitions.js";
 
@@ -30,7 +31,11 @@ export function SessionListPane(props: {
   onCopySessionId: (threadId: string) => void | Promise<void>;
   onToggleSessionPane: () => void;
 }) {
-  const [contextMenu, setContextMenu] = React.useState<{ threadId: string; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = React.useState<{
+    threadId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [searchDraft, setSearchDraft] = React.useState(props.search);
   const contextMenuRef = React.useRef<HTMLDivElement | null>(null);
   const contextMenuActionRef = React.useRef<HTMLButtonElement | null>(null);
@@ -38,10 +43,15 @@ export function SessionListPane(props: {
   const searchComposingRef = React.useRef(false);
   const groupedSessions = React.useMemo(
     () => groupSessionsByTime(props.sessions, props.uiLanguage),
-    [props.sessions, props.uiLanguage]
+    [props.sessions, props.uiLanguage],
   );
-  const tt = React.useCallback((key: Parameters<typeof t>[1]) => t(props.uiLanguage, key), [props.uiLanguage]);
-  const sessionPaneToggleLabel = props.sessionPaneCollapsed ? tt("showSessions") : tt("hideSessions");
+  const tt = React.useCallback(
+    (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key),
+    [props.uiLanguage],
+  );
+  const sessionPaneToggleLabel = props.sessionPaneCollapsed
+    ? tt("showSessions")
+    : tt("hideSessions");
 
   React.useEffect(() => {
     setSearchDraft(props.search);
@@ -95,7 +105,7 @@ export function SessionListPane(props: {
     (nextValue: string) => {
       props.onSearchChange(nextValue.trim());
     },
-    [props]
+    [props],
   );
 
   const scheduleSearchCommit = React.useCallback(
@@ -108,7 +118,7 @@ export function SessionListPane(props: {
         commitSearch(nextValue);
       }, 300);
     },
-    [commitSearch]
+    [commitSearch],
   );
 
   const clearSearch = React.useCallback(() => {
@@ -127,7 +137,7 @@ export function SessionListPane(props: {
       }
       setContextMenu({ threadId, x, y });
     },
-    [props]
+    [props],
   );
 
   const handleSessionContextMenu = React.useCallback(
@@ -135,7 +145,7 @@ export function SessionListPane(props: {
       event.preventDefault();
       openSessionContextMenu(threadId, event.clientX, event.clientY);
     },
-    [openSessionContextMenu]
+    [openSessionContextMenu],
   );
 
   const handleSessionItemKeyDown = React.useCallback(
@@ -148,7 +158,7 @@ export function SessionListPane(props: {
       const rect = event.currentTarget.getBoundingClientRect();
       openSessionContextMenu(threadId, rect.left + Math.min(rect.width - 16, 120), rect.top + 12);
     },
-    [openSessionContextMenu]
+    [openSessionContextMenu],
   );
 
   const contextMenuPosition = React.useMemo(() => {
@@ -161,19 +171,19 @@ export function SessionListPane(props: {
         ? contextMenu.x
         : Math.max(
             SESSION_CONTEXT_MENU_MARGIN,
-            window.innerWidth - SESSION_CONTEXT_MENU_WIDTH - SESSION_CONTEXT_MENU_MARGIN
+            window.innerWidth - SESSION_CONTEXT_MENU_WIDTH - SESSION_CONTEXT_MENU_MARGIN,
           );
     const maxY =
       typeof window === "undefined"
         ? contextMenu.y
         : Math.max(
             SESSION_CONTEXT_MENU_MARGIN,
-            window.innerHeight - SESSION_CONTEXT_MENU_HEIGHT - SESSION_CONTEXT_MENU_MARGIN
+            window.innerHeight - SESSION_CONTEXT_MENU_HEIGHT - SESSION_CONTEXT_MENU_MARGIN,
           );
 
     return {
       left: Math.max(SESSION_CONTEXT_MENU_MARGIN, Math.min(contextMenu.x, maxX)),
-      top: Math.max(SESSION_CONTEXT_MENU_MARGIN, Math.min(contextMenu.y, maxY))
+      top: Math.max(SESSION_CONTEXT_MENU_MARGIN, Math.min(contextMenu.y, maxY)),
     };
   }, [contextMenu]);
 
@@ -181,12 +191,15 @@ export function SessionListPane(props: {
     (session: SessionSummary) => {
       const subtitle = sessionListSubtitle(session);
       const showWorkspaceLabel =
-        props.selectedWorkspaceLabel === tt("allWorkspaces") || props.selectedWorkspaceLabel !== session.workspaceLabel;
+        props.selectedWorkspaceLabel === tt("allWorkspaces") ||
+        props.selectedWorkspaceLabel !== session.workspaceLabel;
       const meta = [
         showWorkspaceLabel ? session.workspaceLabel : null,
         session.provider ?? tt("unknownProvider"),
-        session.taskCompleteCount > 0 ? `${session.taskCompleteCount} ${props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}` : null,
-        sessionStatusLabel(session.statusEstimate, props.uiLanguage)
+        session.taskCompleteCount > 0
+          ? `${session.taskCompleteCount} ${props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}`
+          : null,
+        sessionStatusLabel(session.statusEstimate, props.uiLanguage),
       ]
         .filter(Boolean)
         .join(" · ");
@@ -195,9 +208,15 @@ export function SessionListPane(props: {
         <>
           <div className="session-item-topline">
             <span className={`session-status-dot ${toneForSession(session)}`} />
-            <span className="session-updated">{formatWhen(session.updatedAt, props.uiLanguage)}</span>
-            {session.frozen ? <span className="session-health-label frozen">{tt("frozen")}</span> : null}
-            {!session.frozen && session.dirty ? <span className="session-health-label dirty">{tt("dirty")}</span> : null}
+            <span className="session-updated">
+              {formatWhen(session.updatedAt, props.uiLanguage)}
+            </span>
+            {session.frozen ? (
+              <span className="session-health-label frozen">{tt("frozen")}</span>
+            ) : null}
+            {!session.frozen && session.dirty ? (
+              <span className="session-health-label dirty">{tt("dirty")}</span>
+            ) : null}
           </div>
           <div className="session-item-title">{sessionListTitle(session)}</div>
           {subtitle ? <div className="session-item-subtitle">{subtitle}</div> : null}
@@ -205,11 +224,14 @@ export function SessionListPane(props: {
         </>
       );
     },
-    [props.selectedWorkspaceLabel, props.uiLanguage, tt]
+    [props.selectedWorkspaceLabel, props.uiLanguage, tt],
   );
 
   return (
-    <section className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"} id="session-list-pane">
+    <section
+      className={props.sessionPaneCollapsed ? "session-list-view collapsed" : "session-list-view"}
+      id="session-list-pane"
+    >
       <header className="view-header session-list-header">
         <div className="session-list-heading">
           <p className="panel-kicker">{tt("conversationArchive")}</p>
@@ -227,7 +249,12 @@ export function SessionListPane(props: {
           >
             {sessionPaneToggleLabel}
           </button>
-          <button className="btn-refresh" onClick={props.onRefresh} title={tt("refresh")} type="button">
+          <button
+            className="btn-refresh"
+            onClick={props.onRefresh}
+            title={tt("refresh")}
+            type="button"
+          >
             &#8635; {tt("refresh")}
           </button>
         </div>
@@ -285,11 +312,11 @@ export function SessionListPane(props: {
       </div>
 
       <div className="session-list">
-        {props.loadingSessions ? <div className="loading-state history-empty">{tt("loadingSessions")}</div> : null}
+        {props.loadingSessions ? (
+          <div className="loading-state history-empty">{tt("loadingSessions")}</div>
+        ) : null}
         {!props.loadingSessions && props.sessions.length === 0 ? (
-          <div className="history-empty">
-            {props.error ? tt("apiNotReady") : tt("noSessions")}
-          </div>
+          <div className="history-empty">{props.error ? tt("apiNotReady") : tt("noSessions")}</div>
         ) : null}
         {groupedSessions.map((group) => (
           <section className="session-group-block" key={group.label}>
@@ -298,7 +325,9 @@ export function SessionListPane(props: {
             </div>
             {group.items.map((session) => (
               <button
-                className={props.selectedId === session.threadId ? "session-item active" : "session-item"}
+                className={
+                  props.selectedId === session.threadId ? "session-item active" : "session-item"
+                }
                 key={session.threadId}
                 onContextMenu={(event) => handleSessionContextMenu(event, session.threadId)}
                 onClick={() =>
@@ -318,7 +347,12 @@ export function SessionListPane(props: {
       </div>
 
       {contextMenu && contextMenuPosition ? (
-        <div className="session-context-menu" ref={contextMenuRef} role="menu" style={contextMenuPosition}>
+        <div
+          className="session-context-menu"
+          ref={contextMenuRef}
+          role="menu"
+          style={contextMenuPosition}
+        >
           <button
             className="session-context-menu-item"
             onClick={() => {

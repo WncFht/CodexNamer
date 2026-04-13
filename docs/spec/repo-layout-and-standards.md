@@ -170,6 +170,11 @@ UI 层只应基于：
 
 ## 风格约束
 
+- 代码质量入口统一使用 Biome：
+  - `npm run lint` → `biome check .`
+  - `npm run lint:fix` → `biome check --write .`
+  - `npm run format` → `biome format --write .`
+- 不重新引入 ESLint 作为主 lint 入口，也不维护独立的 Prettier-only 流程
 - 所有时间统一存 UTC RFC3339
 - 所有 thread 主键统一使用 `threadId`
 - 所有 dirty 判定统一基于 revision

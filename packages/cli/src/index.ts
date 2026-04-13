@@ -3,11 +3,9 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { cac } from "cac";
-
 import { startApiServer, waitForShutdown } from "@codexnamer/api";
 import { CodexNamer } from "@codexnamer/core";
+import { cac } from "cac";
 import {
   getManagedServiceStatus,
   installManagedService,
@@ -15,7 +13,7 @@ import {
   runManagedServiceHost,
   startManagedService,
   stopManagedService,
-  uninstallManagedService
+  uninstallManagedService,
 } from "./service-manager.js";
 
 type IdOptions = { id?: string };
@@ -49,7 +47,9 @@ function normalizeArgv(argv: string[]): string[] {
     if (serviceSubcommand === "run") {
       return [...argv.slice(0, 2), "serve", ...argv.slice(4)];
     }
-    if (["install", "start", "stop", "restart", "status", "uninstall"].includes(serviceSubcommand)) {
+    if (
+      ["install", "start", "stop", "restart", "status", "uninstall"].includes(serviceSubcommand)
+    ) {
       return [...argv.slice(0, 2), `service-${serviceSubcommand}`, ...argv.slice(4)];
     }
   }
@@ -95,7 +95,7 @@ cli
     const webRoot = resolveServeWebRoot(options.webRoot);
     if (!webRoot) {
       throw new Error(
-        "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html."
+        "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html.",
       );
     }
 
@@ -104,7 +104,7 @@ cli
       port,
       webRoot,
       autoStartDaemon: options.daemon !== false,
-      operator: "serve"
+      operator: "serve",
     });
 
     console.error(`[codexnamer] Service listening at http://${host}:${port}/`);
@@ -112,7 +112,7 @@ cli
     console.error(
       options.daemon === false
         ? "[codexnamer] Daemon auto-start is disabled for this run."
-        : "[codexnamer] Daemon auto-start is enabled for this run."
+        : "[codexnamer] Daemon auto-start is enabled for this run.",
     );
 
     await waitForShutdown(app);
@@ -130,40 +130,30 @@ cli
     console.log(JSON.stringify(result, null, 2));
   });
 
-cli
-  .command("service-start", "Start the installed local service")
-  .action(async () => {
-    const result = await startManagedService();
-    console.log(JSON.stringify(result, null, 2));
-  });
+cli.command("service-start", "Start the installed local service").action(async () => {
+  const result = await startManagedService();
+  console.log(JSON.stringify(result, null, 2));
+});
 
-cli
-  .command("service-stop", "Stop the installed local service")
-  .action(async () => {
-    const result = await stopManagedService();
-    console.log(JSON.stringify(result, null, 2));
-  });
+cli.command("service-stop", "Stop the installed local service").action(async () => {
+  const result = await stopManagedService();
+  console.log(JSON.stringify(result, null, 2));
+});
 
-cli
-  .command("service-restart", "Restart the installed local service")
-  .action(async () => {
-    const result = await restartManagedService();
-    console.log(JSON.stringify(result, null, 2));
-  });
+cli.command("service-restart", "Restart the installed local service").action(async () => {
+  const result = await restartManagedService();
+  console.log(JSON.stringify(result, null, 2));
+});
 
-cli
-  .command("service-status", "Show installed service status and health")
-  .action(async () => {
-    const result = await getManagedServiceStatus();
-    console.log(JSON.stringify(result, null, 2));
-  });
+cli.command("service-status", "Show installed service status and health").action(async () => {
+  const result = await getManagedServiceStatus();
+  console.log(JSON.stringify(result, null, 2));
+});
 
-cli
-  .command("service-uninstall", "Remove the installed local service")
-  .action(async () => {
-    const result = await uninstallManagedService();
-    console.log(JSON.stringify(result, null, 2));
-  });
+cli.command("service-uninstall", "Remove the installed local service").action(async () => {
+  const result = await uninstallManagedService();
+  console.log(JSON.stringify(result, null, 2));
+});
 
 cli
   .command("service-host", "Internal service entrypoint")
@@ -180,7 +170,7 @@ cli
   .option("--dirty", "Only show dirty sessions")
   .action(async (options: { dirty?: boolean }) => {
     const sessions = await withManager((manager) =>
-      manager.listSessions({ dirty: options.dirty || undefined })
+      manager.listSessions({ dirty: options.dirty || undefined }),
     );
     console.log(JSON.stringify(sessions, null, 2));
   });
@@ -200,11 +190,11 @@ cli
       JSON.stringify(
         {
           ...detail,
-          renameHistory: detail.renameHistory ?? []
+          renameHistory: detail.renameHistory ?? [],
         },
         null,
-        2
-      )
+        2,
+      ),
     );
   });
 
@@ -285,7 +275,7 @@ cli
     }
 
     const results = await withManager((manager) =>
-      manager.batchApplyDirty({ previewOnly: options.preview || false })
+      manager.batchApplyDirty({ previewOnly: options.preview || false }),
     );
     console.log(JSON.stringify(results, null, 2));
   });
@@ -295,31 +285,25 @@ cli
   .option("--dry-run", "Preview compaction")
   .action(async (options) => {
     const result = await withManager((manager) =>
-      manager.compactIndex({ dryRun: options.dryRun || false })
+      manager.compactIndex({ dryRun: options.dryRun || false }),
     );
     console.log(JSON.stringify(result, null, 2));
   });
 
-cli
-  .command("doctor", "Run environment and storage checks")
-  .action(async () => {
-    const report = await withManager((manager) => manager.doctor());
-    console.log(JSON.stringify(report, null, 2));
-  });
+cli.command("doctor", "Run environment and storage checks").action(async () => {
+  const report = await withManager((manager) => manager.doctor());
+  console.log(JSON.stringify(report, null, 2));
+});
 
-cli
-  .command("config-print", "Print effective config with secrets redacted")
-  .action(async () => {
-    const config = await withManager((manager) => manager.printConfig());
-    console.log(JSON.stringify(config, null, 2));
-  });
+cli.command("config-print", "Print effective config with secrets redacted").action(async () => {
+  const config = await withManager((manager) => manager.printConfig());
+  console.log(JSON.stringify(config, null, 2));
+});
 
-cli
-  .command("provider-test", "Test current provider/backend configuration")
-  .action(async () => {
-    const result = await withManager((manager) => manager.testProvider());
-    console.log(JSON.stringify(result, null, 2));
-  });
+cli.command("provider-test", "Test current provider/backend configuration").action(async () => {
+  const result = await withManager((manager) => manager.testProvider());
+  console.log(JSON.stringify(result, null, 2));
+});
 
 cli.help();
 cli.parse(normalizedArgv);

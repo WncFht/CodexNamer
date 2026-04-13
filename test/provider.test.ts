@@ -1,14 +1,13 @@
-import { describe, expect, it } from "vitest";
-
 import {
-  OpenAICompatibleRenameInferenceService,
+  buildConfigForTests,
   buildRenameContext,
   buildRenamePrompt,
-  buildConfigForTests,
   createRenameInferenceService,
-  probeRenameProvider
+  OpenAICompatibleRenameInferenceService,
+  probeRenameProvider,
 } from "@codexnamer/core";
 import type { SessionTranscript } from "@codexnamer/shared";
+import { describe, expect, it } from "vitest";
 
 describe("provider backends", () => {
   it("uses openai-compatible responses API and parses structured JSON", async () => {
@@ -18,14 +17,14 @@ describe("provider backends", () => {
           preset: "conventional",
           template: "{{summary}}",
           maxLength: 24,
-          language: "zh-CN"
+          language: "zh-CN",
         },
         ai: {
           backend: "openai-compatible",
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -36,22 +35,23 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       async () =>
         new Response(
           JSON.stringify({
-            output_text: '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}'
+            output_text:
+              '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}',
           }),
           {
             status: 200,
             headers: {
-              "content-type": "application/json"
-            }
-          }
-        )
+              "content-type": "application/json",
+            },
+          },
+        ),
     );
 
     const suggestion = await service.suggest({
@@ -62,7 +62,7 @@ describe("provider backends", () => {
       taskCompleteCount: 1,
       tokenTotal: 100,
       firstUserMessage: "实现 session rename",
-      lastAgentMessage: "完成 session rename"
+      lastAgentMessage: "完成 session rename",
     });
 
     expect(suggestion.source).toBe("ai");
@@ -80,7 +80,7 @@ describe("provider backends", () => {
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -91,21 +91,22 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       async () =>
         new Response(
           JSON.stringify({
-            output_text: '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}'
+            output_text:
+              '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}',
           }),
           {
             status: 200,
             headers: {
-              "content-type": "application/json"
-            }
-          }
+              "content-type": "application/json",
+            },
+          },
         ),
       {
         start(entry) {
@@ -114,8 +115,8 @@ describe("provider backends", () => {
         },
         finish(entry) {
           events.push({ phase: "finish", ...entry });
-        }
-      }
+        },
+      },
     );
 
     await service.suggest({
@@ -126,7 +127,7 @@ describe("provider backends", () => {
       taskCompleteCount: 1,
       tokenTotal: 100,
       firstUserMessage: "实现 session rename",
-      lastAgentMessage: "完成 session rename"
+      lastAgentMessage: "完成 session rename",
     });
 
     expect(events).toHaveLength(2);
@@ -143,21 +144,21 @@ describe("provider backends", () => {
         general: {
           codexHome: "~/.codex",
           stateDir: "~/.local/state/codexnamer",
-          uiLanguage: "zh-CN"
+          uiLanguage: "zh-CN",
         },
         naming: {
           preset: "conventional",
           template: "{{summary}}",
           maxLength: 24,
           language: "zh-CN",
-          contextStrategy: "user-only-transcript"
+          contextStrategy: "user-only-transcript",
         },
         ai: {
           backend: "openai-compatible",
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -168,24 +169,25 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       async (_url, init) => {
         capturedPrompt = JSON.parse(String(init?.body)).input;
         return new Response(
           JSON.stringify({
-            output_text: '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}'
+            output_text:
+              '{"name":"0404 feat: rename sessions","kind":"feat","summary":"rename sessions","scope":"codex"}',
           }),
           {
             status: 200,
             headers: {
-              "content-type": "application/json"
-            }
-          }
+              "content-type": "application/json",
+            },
+          },
         );
-      }
+      },
     );
 
     await service.suggest({
@@ -196,7 +198,7 @@ describe("provider backends", () => {
       taskCompleteCount: 1,
       tokenTotal: 100,
       firstUserMessage: "实现 session rename",
-      lastAgentMessage: "完成 session rename"
+      lastAgentMessage: "完成 session rename",
     });
 
     expect(capturedPrompt).toContain("Prompt 语言：中文。");
@@ -211,28 +213,33 @@ describe("provider backends", () => {
       general: {
         codexHome: "~/.codex",
         stateDir: "~/.local/state/codexnamer",
-        uiLanguage: "zh-CN"
+        uiLanguage: "zh-CN",
       },
       naming: {
         ...base.naming,
         contextStrategy: "paired-user-turns",
-        language: "zh-CN"
-      }
+        language: "zh-CN",
+      },
     });
 
     const transcript: SessionTranscript = {
       items: [
         { id: "1", role: "user", kind: "message", content: "先修 settings 保存状态" },
         { id: "2", role: "assistant", kind: "message", content: "我先看一下表单状态逻辑。" },
-        { id: "3", role: "assistant", kind: "message", content: "已经定位到 dirty baseline 比较链路会造成误判。" },
-        { id: "4", role: "user", kind: "message", content: "然后加 paired context strategy" }
+        {
+          id: "3",
+          role: "assistant",
+          kind: "message",
+          content: "已经定位到 dirty baseline 比较链路会造成误判。",
+        },
+        { id: "4", role: "user", kind: "message", content: "然后加 paired context strategy" },
       ],
       counts: {
         total: 4,
         visible: 4,
         hidden: 0,
-        tools: 0
-      }
+        tools: 0,
+      },
     };
 
     const session = {
@@ -255,11 +262,11 @@ describe("provider backends", () => {
           tokenTotal: 100,
           firstUserMessage: "先修 settings 保存状态",
           lastUserMessage: "然后加 paired context strategy",
-          lastAgentMessage: "已经定位到 dirty baseline 比较链路会造成误判。"
+          lastAgentMessage: "已经定位到 dirty baseline 比较链路会造成误判。",
         },
         config,
-        { transcript }
-      )
+        { transcript },
+      ),
     };
 
     const prompt = buildRenamePrompt(session, config);
@@ -281,7 +288,7 @@ describe("provider backends", () => {
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -292,25 +299,25 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       {
         fetchImpl: async () =>
           new Response(
             JSON.stringify({
               output_text:
-                '{"name":"ignored raw name","kind":"debug","summary":"验证 provider test 走真实 rename 请求链路","scope":"provider"}'
+                '{"name":"ignored raw name","kind":"debug","summary":"验证 provider test 走真实 rename 请求链路","scope":"provider"}',
             }),
             {
               status: 200,
               headers: {
-                "content-type": "application/json"
-              }
-            }
-          )
-      }
+                "content-type": "application/json",
+              },
+            },
+          ),
+      },
     );
 
     expect(result.ok).toBe(true);
@@ -326,7 +333,7 @@ describe("provider backends", () => {
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -337,9 +344,9 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       {
         fetchImpl: async (_url, init) => {
@@ -347,34 +354,34 @@ describe("provider backends", () => {
           if (body.stream === true) {
             return new Response(
               [
-                'event: response.output_text.delta',
+                "event: response.output_text.delta",
                 'data: {"type":"response.output_text.delta","delta":"{\\"kind\\":\\"debug\\",\\"summary\\":\\"stream probe 成功\\",\\"scope\\":\\"provider\\",\\"tagId\\":\\"provider\\"}"}',
                 "",
-                'event: response.output_text.done',
+                "event: response.output_text.done",
                 'data: {"type":"response.output_text.done","text":"{\\"kind\\":\\"debug\\",\\"summary\\":\\"stream probe 成功\\",\\"scope\\":\\"provider\\",\\"tagId\\":\\"provider\\"}"}',
-                ""
+                "",
               ].join("\n"),
               {
                 status: 200,
                 headers: {
-                  "content-type": "text/event-stream"
-                }
-              }
+                  "content-type": "text/event-stream",
+                },
+              },
             );
           }
           return new Response(
             JSON.stringify({
-              output_text: ""
+              output_text: "",
             }),
             {
               status: 200,
               headers: {
-                "content-type": "application/json"
-              }
-            }
+                "content-type": "application/json",
+              },
+            },
           );
-        }
-      }
+        },
+      },
     );
 
     expect(result.ok).toBe(true);
@@ -390,7 +397,7 @@ describe("provider backends", () => {
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -401,37 +408,37 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       async (_url, init) => {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         if (body.stream === true) {
           return new Response(
             [
-              'event: response.output_text.done',
+              "event: response.output_text.done",
               'data: {"type":"response.output_text.done","text":"{\\"kind\\":\\"debug\\",\\"summary\\":\\"stream rename 成功\\",\\"scope\\":\\"provider\\",\\"tagId\\":\\"provider\\"}"}',
-              ""
+              "",
             ].join("\n"),
             {
               status: 200,
               headers: {
-                "content-type": "text/event-stream"
-              }
-            }
+                "content-type": "text/event-stream",
+              },
+            },
           );
         }
         return new Response(
           JSON.stringify({
-            output_text: ""
+            output_text: "",
           }),
           {
             status: 200,
             headers: {
-              "content-type": "application/json"
-            }
-          }
+              "content-type": "application/json",
+            },
+          },
         );
       },
       {
@@ -441,8 +448,8 @@ describe("provider backends", () => {
         },
         finish(entry) {
           events.push({ phase: "finish", ...entry });
-        }
-      }
+        },
+      },
     );
 
     const suggestion = await service.suggest({
@@ -452,7 +459,7 @@ describe("provider backends", () => {
       projectName: "project",
       taskCompleteCount: 1,
       tokenTotal: 100,
-      firstUserMessage: "检查 rename SSE fallback"
+      firstUserMessage: "检查 rename SSE fallback",
     });
 
     expect(suggestion.name).toContain("stream rename 成功");
@@ -460,7 +467,7 @@ describe("provider backends", () => {
     expect(events[1]?.status).toBe("succeeded");
     expect(events[1]?.metadata).toMatchObject({
       responseMode: "sse-fallback",
-      sseFallbackReason: "empty-response"
+      sseFallbackReason: "empty-response",
     });
   });
 
@@ -474,15 +481,15 @@ describe("provider backends", () => {
             { type: "separator", value: " · " },
             { type: "component", component: "kind" },
             { type: "separator", value: " · " },
-            { type: "component", component: "summary" }
-          ]
+            { type: "component", component: "summary" },
+          ],
         },
         ai: {
           backend: "openai-compatible",
           providerSource: "manual",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         providerProfiles: [
           {
@@ -493,23 +500,23 @@ describe("provider backends", () => {
             model: "gpt-test",
             apiKey: "test-key",
             enabled: true,
-            isDefault: true
-          }
-        ]
+            isDefault: true,
+          },
+        ],
       }),
       async () =>
         new Response(
           JSON.stringify({
             output_text:
-              '{"name":"ignored raw name","kind":"fix","summary":"修复设置保存循环","scope":"settings","tagId":"settings"}'
+              '{"name":"ignored raw name","kind":"fix","summary":"修复设置保存循环","scope":"settings","tagId":"settings"}',
           }),
           {
             status: 200,
             headers: {
-              "content-type": "application/json"
-            }
-          }
-        )
+              "content-type": "application/json",
+            },
+          },
+        ),
     );
 
     const suggestion = await service.suggest({
@@ -519,7 +526,7 @@ describe("provider backends", () => {
       projectName: "project",
       taskCompleteCount: 1,
       tokenTotal: 100,
-      firstUserMessage: "修复 web settings 保存后重置的问题"
+      firstUserMessage: "修复 web settings 保存后重置的问题",
     });
 
     expect(suggestion.source).toBe("ai");
@@ -537,7 +544,7 @@ describe("provider backends", () => {
           providerSource: "codex-config",
           profile: "default",
           timeoutSeconds: 10,
-          temperature: 0.2
+          temperature: 0.2,
         },
         inheritedCodex: {
           modelProvider: "OpenAI",
@@ -547,14 +554,14 @@ describe("provider backends", () => {
               name: "OpenAI",
               baseUrl: "http://example.test/v1",
               wireApi: "responses",
-              requiresOpenaiAuth: true
-            }
+              requiresOpenaiAuth: true,
+            },
           },
           auth: {
             authMode: "apikey",
-            openaiApiKey: "codex-auth-key"
-          }
-        }
+            openaiApiKey: "codex-auth-key",
+          },
+        },
       }),
       {
         fetchImpl: async (_input, init) => {
@@ -565,25 +572,25 @@ describe("provider backends", () => {
           expect(body.stream).toBe(true);
           return new Response(
             [
-              'event: response.output_text.done',
+              "event: response.output_text.done",
               'data: {"type":"response.output_text.done","text":"{\\"name\\":\\"0404 feat: inherited auth\\",\\"kind\\":\\"feat\\",\\"summary\\":\\"inherited auth\\",\\"scope\\":\\"provider\\"}"}',
-              ""
+              "",
             ].join("\n"),
             {
               status: 200,
               headers: {
-                "content-type": "text/event-stream"
-              }
-            }
+                "content-type": "text/event-stream",
+              },
+            },
           );
         },
         codexRunner: {
           async run() {
             runnerCalled = true;
             throw new Error("runner should not be called");
-          }
-        }
-      }
+          },
+        },
+      },
     );
 
     const suggestion = await service.suggest({
@@ -593,7 +600,7 @@ describe("provider backends", () => {
       projectName: "project",
       taskCompleteCount: 1,
       tokenTotal: 50,
-      firstUserMessage: "沿用 codex 配置命名"
+      firstUserMessage: "沿用 codex 配置命名",
     });
 
     expect(runnerCalled).toBe(false);

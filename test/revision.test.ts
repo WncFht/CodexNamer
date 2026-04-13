@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { buildSessionRevision, isDirtySinceRename } from "@codexnamer/core";
+import { describe, expect, it } from "vitest";
 
 describe("revision and dirty tracking", () => {
   it("changes revision when last agent message changes", () => {
@@ -12,17 +11,17 @@ describe("revision and dirty tracking", () => {
       tokenTotal: 100,
       firstUserMessage: "Implement rename",
       lastUserMessage: "Implement rename",
-      lastAgentMessage: "Initial result"
+      lastAgentMessage: "Initial result",
     };
 
     const first = buildSessionRevision(base, { sizeBytes: 100, mtime: "2026-04-04T00:00:00Z" });
     const second = buildSessionRevision(
       {
         ...base,
-        lastAgentMessage: "Updated result"
+        lastAgentMessage: "Updated result",
       },
       { sizeBytes: 120, mtime: "2026-04-04T00:10:00Z" },
-      first
+      first,
     );
 
     expect(first.currentRevision).not.toBe(second.currentRevision);
@@ -30,4 +29,3 @@ describe("revision and dirty tracking", () => {
     expect(isDirtySinceRename(first.currentRevision, first.currentRevision)).toBe(false);
   });
 });
-

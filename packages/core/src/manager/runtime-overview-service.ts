@@ -5,19 +5,15 @@ import path from "node:path";
 import type { DoctorReport, OverviewReport } from "@codexnamer/shared";
 
 import { inspectRenameProvider } from "../provider.js";
+import { readSessionIndex } from "../session-index.js";
 import {
   ACCEPTED_OFFICIAL_RENAME_SOURCES,
   applyOfficialNamingPolicy,
   applyRuleSignatureState,
-  getBlockedOfficialNameThreadIds
+  getBlockedOfficialNameThreadIds,
 } from "./naming-policy.js";
-import {
-  describeRuntimeState,
-  type DaemonSweepSnapshot,
-  type RenameReplaySnapshot,
-  resolveDaemonStatus
-} from "./runtime-state.js";
-import { readSessionIndex } from "../session-index.js";
+import type { DaemonSweepSnapshot, RenameReplaySnapshot } from "./runtime-state.js";
+import { describeRuntimeState, resolveDaemonStatus } from "./runtime-state.js";
 import type { ManagerServiceContext } from "./shared.js";
 
 export async function doctor(context: ManagerServiceContext): Promise<DoctorReport> {
@@ -37,7 +33,7 @@ export async function doctor(context: ManagerServiceContext): Promise<DoctorRepo
     fs
       .stat(dbPath)
       .then(() => true)
-      .catch(() => false)
+      .catch(() => false),
   ]);
 
   const sessionIndexReadable = await fs
@@ -60,9 +56,9 @@ export async function doctor(context: ManagerServiceContext): Promise<DoctorRepo
     stats: stats.stats,
     autoRename: {
       ...context.config.watch,
-      autoApply: context.config.rename.autoApply
+      autoApply: context.config.rename.autoApply,
     },
-    provider: inspectRenameProvider(context.config) as unknown as Record<string, unknown>
+    provider: inspectRenameProvider(context.config) as unknown as Record<string, unknown>,
   };
 }
 
@@ -71,13 +67,16 @@ export async function overview(context: ManagerServiceContext): Promise<Overview
   const blockedOfficialThreadIds = getBlockedOfficialNameThreadIds(context.db, context.config);
   const report = context.db.getOverviewReport({
     nonAcceptedNamedThreadIds: blockedOfficialThreadIds,
-    acceptedAppliedSources: [...ACCEPTED_OFFICIAL_RENAME_SOURCES]
+    acceptedAppliedSources: [...ACCEPTED_OFFICIAL_RENAME_SOURCES],
   });
   const currentRuleSignature = context.currentRuleSignature;
   const sessions = context.db
     .listSessions()
     .map((session) =>
-      applyRuleSignatureState(applyOfficialNamingPolicy(session, blockedOfficialThreadIds), currentRuleSignature)
+      applyRuleSignatureState(
+        applyOfficialNamingPolicy(session, blockedOfficialThreadIds),
+        currentRuleSignature,
+      ),
     );
   const ruleCoverage = sessions.reduce(
     (summary, session) => {
@@ -102,8 +101,8 @@ export async function overview(context: ManagerServiceContext): Promise<Overview
       latest: 0,
       outdated: 0,
       manual: 0,
-      unknown: 0
-    } satisfies OverviewReport["ruleCoverage"]
+      unknown: 0,
+    } satisfies OverviewReport["ruleCoverage"],
   );
   const daemonState = context.db.getMaintenanceState<DaemonSweepSnapshot>("daemon_runtime");
   const replayState = context.db.getMaintenanceState<RenameReplaySnapshot>("rename_replay");
@@ -129,13 +128,13 @@ export async function overview(context: ManagerServiceContext): Promise<Overview
         configuredAutoApply: context.config.rename.autoApply,
         daemonStatus,
         actualExecution,
-        summary: daemonState?.summary
-      })
+        summary: daemonState?.summary,
+      }),
     },
     ruleCoverage,
     replay: {
       lastRunAt: replayState?.lastRunAt,
-      recentRuns: Array.isArray(replayState?.recentRuns) ? replayState.recentRuns : []
-    }
+      recentRuns: Array.isArray(replayState?.recentRuns) ? replayState.recentRuns : [],
+    },
   };
 }

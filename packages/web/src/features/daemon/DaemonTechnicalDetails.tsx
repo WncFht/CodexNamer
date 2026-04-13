@@ -13,7 +13,10 @@ export function DaemonTechnicalDetails(props: {
           <p className="panel-kicker">{props.inline("高级", "Advanced")}</p>
           <h3>{props.inline("进程细节与日志", "Process details and logs")}</h3>
           <p className="settings-copy">
-            {props.inline("查看进程参数、工作目录和最近日志。", "View process arguments, working directory, and recent logs.")}
+            {props.inline(
+              "查看进程参数、工作目录和最近日志。",
+              "View process arguments, working directory, and recent logs.",
+            )}
           </p>
         </div>
       </div>
@@ -45,7 +48,8 @@ export function DaemonTechnicalDetails(props: {
               </div>
             </dl>
             <p className="daemon-mono">
-              {props.daemon?.command.executable ?? "node"} {props.daemon?.command.scriptPath ?? "--"}{" "}
+              {props.daemon?.command.executable ?? "node"}{" "}
+              {props.daemon?.command.scriptPath ?? "--"}{" "}
               {props.daemon?.command.args.join(" ") ?? ""}
             </p>
             <p className="settings-copy">
@@ -67,13 +71,17 @@ export function DaemonTechnicalDetails(props: {
               {props.daemon?.recentLogs?.length ? (
                 props.daemon.recentLogs.map((entry, index) => (
                   <div className={`daemon-log-line ${entry.stream}`} key={`${entry.at}-${index}`}>
-                    <span className="daemon-log-time">{formatWhen(entry.at, props.uiLanguage)}</span>
+                    <span className="daemon-log-time">
+                      {formatWhen(entry.at, props.uiLanguage)}
+                    </span>
                     <span className="daemon-log-stream">{entry.stream}</span>
                     <code>{entry.line}</code>
                   </div>
                 ))
               ) : (
-                <p className="settings-copy">{props.inline("还没有 daemon 日志。", "No daemon logs yet.")}</p>
+                <p className="settings-copy">
+                  {props.inline("还没有 daemon 日志。", "No daemon logs yet.")}
+                </p>
               )}
             </div>
           </article>

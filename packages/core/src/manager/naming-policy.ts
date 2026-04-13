@@ -3,7 +3,7 @@ import type {
   RenameHistoryRecord,
   RenameSuggestion,
   SessionDetail,
-  SessionSummary
+  SessionSummary,
 } from "@codexnamer/shared";
 
 import type { StateDatabase } from "../database.js";
@@ -20,13 +20,13 @@ function splitDisambiguationBase(name: string): { root: string; nextIndex: numbe
   if (!match || !match[1]?.trim()) {
     return {
       root: trimmed,
-      nextIndex: 2
+      nextIndex: 2,
     };
   }
 
   return {
     root: match[1].trimEnd(),
-    nextIndex: Number(match[2]) + 1
+    nextIndex: Number(match[2]) + 1,
   };
 }
 
@@ -60,7 +60,10 @@ export function isAcceptedOfficialRenameSource(source?: string): boolean {
   return source === "ai" || source === "manual";
 }
 
-export function requiresAcceptedRewrite(config: EffectiveConfig, renameState?: { lastAppliedSource?: string }): boolean {
+export function requiresAcceptedRewrite(
+  config: EffectiveConfig,
+  renameState?: { lastAppliedSource?: string },
+): boolean {
   return (
     shouldTreatNonAcceptedNamesAsUnnamed(config) &&
     Boolean(renameState?.lastAppliedSource) &&
@@ -68,7 +71,10 @@ export function requiresAcceptedRewrite(config: EffectiveConfig, renameState?: {
   );
 }
 
-export function getNonAcceptedNamedThreadIds(db: StateDatabase, config: EffectiveConfig): Set<string> {
+export function getNonAcceptedNamedThreadIds(
+  db: StateDatabase,
+  config: EffectiveConfig,
+): Set<string> {
   if (!shouldTreatNonAcceptedNamesAsUnnamed(config)) {
     return new Set<string>();
   }
@@ -93,7 +99,7 @@ export function getDuplicateAcceptedNamedThreadIds(db: StateDatabase): Set<strin
     const group = groups.get(key) ?? [];
     group.push({
       threadId: session.threadId,
-      appliedAt: renameState?.lastAppliedAt
+      appliedAt: renameState?.lastAppliedAt,
     });
     groups.set(key, group);
   }
@@ -105,7 +111,9 @@ export function getDuplicateAcceptedNamedThreadIds(db: StateDatabase): Set<strin
     }
     group
       .sort(
-        (left, right) => (left.appliedAt ?? "").localeCompare(right.appliedAt ?? "") || left.threadId.localeCompare(right.threadId)
+        (left, right) =>
+          (left.appliedAt ?? "").localeCompare(right.appliedAt ?? "") ||
+          left.threadId.localeCompare(right.threadId),
       )
       .slice(1)
       .forEach((item) => duplicateThreadIds.add(item.threadId));
@@ -113,8 +121,14 @@ export function getDuplicateAcceptedNamedThreadIds(db: StateDatabase): Set<strin
   return duplicateThreadIds;
 }
 
-export function getBlockedOfficialNameThreadIds(db: StateDatabase, config: EffectiveConfig): Set<string> {
-  return new Set<string>([...getNonAcceptedNamedThreadIds(db, config), ...getDuplicateAcceptedNamedThreadIds(db)]);
+export function getBlockedOfficialNameThreadIds(
+  db: StateDatabase,
+  config: EffectiveConfig,
+): Set<string> {
+  return new Set<string>([
+    ...getNonAcceptedNamedThreadIds(db, config),
+    ...getDuplicateAcceptedNamedThreadIds(db),
+  ]);
 }
 
 export function collectReservedOfficialNameKeys(
@@ -123,9 +137,10 @@ export function collectReservedOfficialNameKeys(
   options?: {
     excludeThreadId?: string;
     blockedOfficialThreadIds?: Set<string>;
-  }
+  },
 ): Set<string> {
-  const blockedOfficialThreadIds = options?.blockedOfficialThreadIds ?? getBlockedOfficialNameThreadIds(db, config);
+  const blockedOfficialThreadIds =
+    options?.blockedOfficialThreadIds ?? getBlockedOfficialNameThreadIds(db, config);
   const reserved = new Set<string>();
 
   for (const session of db.listSessions()) {
@@ -149,7 +164,7 @@ export function ensureUniqueName(
   options?: {
     reservedNameKeys?: Set<string>;
     blockedOfficialThreadIds?: Set<string>;
-  }
+  },
 ): string {
   const trimmed = rawName.trim();
   if (!trimmed) {
@@ -157,12 +172,10 @@ export function ensureUniqueName(
   }
 
   const reservedNameKeys = new Set<string>(options?.reservedNameKeys ?? []);
-  for (
-    const key of collectReservedOfficialNameKeys(db, config, {
-      excludeThreadId: threadId,
-      blockedOfficialThreadIds: options?.blockedOfficialThreadIds
-    })
-  ) {
+  for (const key of collectReservedOfficialNameKeys(db, config, {
+    excludeThreadId: threadId,
+    blockedOfficialThreadIds: options?.blockedOfficialThreadIds,
+  })) {
     reservedNameKeys.add(key);
   }
 
@@ -190,7 +203,7 @@ export function ensureUniqueRenameSuggestion(
   options?: {
     reservedNameKeys?: Set<string>;
     blockedOfficialThreadIds?: Set<string>;
-  }
+  },
 ): RenameSuggestion {
   const uniqueName = ensureUniqueName(db, config, suggestion.name, threadId, options);
   if (uniqueName === suggestion.name) {
@@ -202,14 +215,14 @@ export function ensureUniqueRenameSuggestion(
     name: uniqueName,
     metadata: {
       ...(suggestion.metadata ?? {}),
-      deduplicated: "true"
-    }
+      deduplicated: "true",
+    },
   };
 }
 
 export function applyRuleSignatureState<T extends SessionSummary | SessionDetail>(
   session: T,
-  currentRuleSignature: string
+  currentRuleSignature: string,
 ): T {
   return {
     ...session,
@@ -217,23 +230,25 @@ export function applyRuleSignatureState<T extends SessionSummary | SessionDetail
     ruleStatus: summarizeRuleStatus({
       lastAppliedSource: session.lastAppliedSource,
       lastAppliedRuleSignature: session.lastAppliedRuleSignature,
-      currentRuleSignature
-    })
+      currentRuleSignature,
+    }),
   };
 }
 
 export function applyOfficialNamingPolicy<T extends SessionSummary | SessionDetail>(
   session: T,
-  nonAcceptedNamedThreadIds: Set<string>
+  nonAcceptedNamedThreadIds: Set<string>,
 ): T {
   const pendingAcceptedRewrite = nonAcceptedNamedThreadIds.has(session.threadId);
   return {
     ...session,
     officialName: pendingAcceptedRewrite ? undefined : session.officialName,
-    dirty: session.dirty || pendingAcceptedRewrite
+    dirty: session.dirty || pendingAcceptedRewrite,
   };
 }
 
 export function filterVisibleRenameHistory(history: RenameHistoryRecord[]): RenameHistoryRecord[] {
-  return history.filter((entry) => entry.status === "preview_only" || isAcceptedOfficialRenameSource(entry.source));
+  return history.filter(
+    (entry) => entry.status === "preview_only" || isAcceptedOfficialRenameSource(entry.source),
+  );
 }

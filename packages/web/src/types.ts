@@ -21,9 +21,9 @@ export type {
   RenameReplayResult,
   RenameSuggestResponse,
   SessionDetail,
-  SessionsResponse,
   SessionSummary,
+  SessionsResponse,
   SessionTranscriptPage,
   UiLanguage,
-  WorkspaceSummary
+  WorkspaceSummary,
 } from "@codexnamer/shared";

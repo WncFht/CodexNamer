@@ -1,4 +1,3 @@
-import type Database from "better-sqlite3";
 import type {
   AiBackend,
   AiRequestLogDetail,
@@ -7,11 +6,16 @@ import type {
   AiRequestStatus,
   AiRequestTransport,
   EffectiveConfig,
-  RenameSuggestion
+  RenameSuggestion,
 } from "@codexnamer/shared";
+import type Database from "better-sqlite3";
 
 function toOptionalNumber(value: unknown): number | undefined {
-  return typeof value === "number" ? value : Number.isFinite(Number(value)) ? Number(value) : undefined;
+  return typeof value === "number"
+    ? value
+    : Number.isFinite(Number(value))
+      ? Number(value)
+      : undefined;
 }
 
 export function startAiRequestLog(
@@ -28,14 +32,14 @@ export function startAiRequestLog(
     promptText?: string;
     requestPayload?: Record<string, unknown>;
     metadata?: Record<string, string>;
-  }
+  },
 ): number {
   const result = db
     .prepare(
       `INSERT INTO ai_request_logs (
         thread_id, project_name, backend, transport, status, started_at, base_url, model, prompt_chars, prompt_text,
         request_payload_json, metadata_json
-      ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       params.threadId,
@@ -48,7 +52,7 @@ export function startAiRequestLog(
       params.promptChars ?? null,
       params.promptText ?? null,
       params.requestPayload ? JSON.stringify(params.requestPayload) : null,
-      params.metadata ? JSON.stringify(params.metadata) : null
+      params.metadata ? JSON.stringify(params.metadata) : null,
     );
 
   return Number(result.lastInsertRowid);
@@ -77,25 +81,25 @@ export function finishAiRequestLog(
     };
     error?: string;
     metadata?: Record<string, string>;
-  }
+  },
 ): void {
-  const previous = db.prepare(`SELECT metadata_json FROM ai_request_logs WHERE id = ?`).get(params.id) as
-    | Record<string, unknown>
-    | undefined;
+  const previous = db
+    .prepare(`SELECT metadata_json FROM ai_request_logs WHERE id = ?`)
+    .get(params.id) as Record<string, unknown> | undefined;
   const previousMetadata =
     typeof previous?.metadata_json === "string" && previous.metadata_json
       ? (JSON.parse(previous.metadata_json) as Record<string, string>)
       : {};
   const mergedMetadata = {
     ...previousMetadata,
-    ...(params.metadata ?? {})
+    ...(params.metadata ?? {}),
   };
 
   db.prepare(
     `UPDATE ai_request_logs
        SET status = ?, finished_at = ?, duration_ms = ?, response_chars = ?, response_text = ?, response_payload_json = ?,
            result_json = ?, error = ?, metadata_json = ?
-     WHERE id = ?`
+     WHERE id = ?`,
   ).run(
     params.status,
     params.finishedAt,
@@ -106,7 +110,7 @@ export function finishAiRequestLog(
     params.result ? JSON.stringify(params.result) : null,
     params.error ?? null,
     Object.keys(mergedMetadata).length > 0 ? JSON.stringify(mergedMetadata) : null,
-    params.id
+    params.id,
   );
 }
 
@@ -119,7 +123,7 @@ export function getAiRequestLogReport(
     project?: string;
     status?: AiRequestStatus;
     transport?: AiRequestTransport;
-  }
+  },
 ): AiRequestLogReport {
   const limit = Math.max(1, Math.trunc(options?.limit ?? 40));
   const page = Math.max(1, Math.trunc(options?.page ?? 1));
@@ -171,11 +175,15 @@ export function getAiRequestLogReport(
        FROM ai_request_logs
        ${whereSql}
        ORDER BY started_at DESC, id DESC
-       LIMIT ? OFFSET ?`
+       LIMIT ? OFFSET ?`,
     )
     .all(...whereParams, limit, offset) as Array<Record<string, unknown>>;
   const total = Number(
-    ((db.prepare(`SELECT COUNT(*) AS count FROM ai_request_logs ${whereSql}`).get(...whereParams) as Record<string, unknown>).count ?? 0)
+    (
+      db
+        .prepare(`SELECT COUNT(*) AS count FROM ai_request_logs ${whereSql}`)
+        .get(...whereParams) as Record<string, unknown>
+    ).count ?? 0,
   );
   const statusCountsRow = db
     .prepare(
@@ -184,7 +192,7 @@ export function getAiRequestLogReport(
           SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
        FROM ai_request_logs
-       ${whereSql}`
+       ${whereSql}`,
     )
     .get(...whereParams) as Record<string, unknown>;
   const projectRows = db
@@ -192,14 +200,22 @@ export function getAiRequestLogReport(
       `SELECT DISTINCT COALESCE(NULLIF(TRIM(project_name), ''), '') AS project_name
        FROM ai_request_logs
        ${facetWhereSql}
-       ORDER BY project_name COLLATE NOCASE ASC`
+       ORDER BY project_name COLLATE NOCASE ASC`,
     )
     .all(...facetParams) as Array<Record<string, unknown>>;
-  const activeCount = Number((db.prepare(`SELECT COUNT(*) AS count FROM ai_request_logs WHERE status = 'running'`).get() as Record<string, unknown>).count ?? 0);
+  const activeCount = Number(
+    (
+      db
+        .prepare(`SELECT COUNT(*) AS count FROM ai_request_logs WHERE status = 'running'`)
+        .get() as Record<string, unknown>
+    ).count ?? 0,
+  );
   const lastFinishedAt = (
-    db.prepare(`SELECT finished_at FROM ai_request_logs WHERE finished_at IS NOT NULL ORDER BY finished_at DESC, id DESC LIMIT 1`).get() as
-      | Record<string, unknown>
-      | undefined
+    db
+      .prepare(
+        `SELECT finished_at FROM ai_request_logs WHERE finished_at IS NOT NULL ORDER BY finished_at DESC, id DESC LIMIT 1`,
+      )
+      .get() as Record<string, unknown> | undefined
   )?.finished_at as string | undefined;
 
   return {
@@ -212,9 +228,9 @@ export function getAiRequestLogReport(
     statusCounts: {
       running: Number(statusCountsRow.running ?? 0),
       succeeded: Number(statusCountsRow.succeeded ?? 0),
-      failed: Number(statusCountsRow.failed ?? 0)
+      failed: Number(statusCountsRow.failed ?? 0),
     },
-    projects: projectRows.map((row) => ((row.project_name as string | null) ?? "")),
+    projects: projectRows.map((row) => (row.project_name as string | null) ?? ""),
     items: rows.map((row) => ({
       id: Number(row.id ?? 0),
       threadId: (row.thread_id as string | null) ?? "",
@@ -231,25 +247,29 @@ export function getAiRequestLogReport(
       responseChars: toOptionalNumber(row.response_chars),
       finalName:
         typeof row.result_json === "string" && row.result_json
-          ? (((JSON.parse(row.result_json) as AiRequestLogDetail["result"])?.composition?.finalName as string | undefined) ?? undefined)
+          ? (((JSON.parse(row.result_json) as AiRequestLogDetail["result"])?.composition
+              ?.finalName as string | undefined) ?? undefined)
           : undefined,
       error: (row.error as string | null) ?? undefined,
       metadata:
         typeof row.metadata_json === "string" && row.metadata_json
           ? (JSON.parse(row.metadata_json) as Record<string, string>)
-          : undefined
-    }))
+          : undefined,
+    })),
   };
 }
 
-export function getAiRequestLogDetail(db: Database.Database, id: number): AiRequestLogDetail | undefined {
+export function getAiRequestLogDetail(
+  db: Database.Database,
+  id: number,
+): AiRequestLogDetail | undefined {
   const row = db
     .prepare(
       `SELECT id, thread_id, project_name, backend, transport, status, started_at, finished_at, duration_ms,
               base_url, model, prompt_chars, prompt_text, request_payload_json, response_chars, response_text,
               response_payload_json, result_json, error, metadata_json
        FROM ai_request_logs
-       WHERE id = ?`
+       WHERE id = ?`,
     )
     .get(id) as Record<string, unknown> | undefined;
   if (!row) {
@@ -291,6 +311,6 @@ export function getAiRequestLogDetail(db: Database.Database, id: number): AiRequ
     metadata:
       typeof row.metadata_json === "string" && row.metadata_json
         ? (JSON.parse(row.metadata_json) as Record<string, string>)
-        : undefined
+        : undefined,
   };
 }

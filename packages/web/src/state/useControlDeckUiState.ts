@@ -1,11 +1,6 @@
 import { startTransition, useEffect, useRef, useState } from "react";
-
-import {
-  readUiStateFromUrl,
-  writeUiStateToUrl,
-  type TabId,
-  type UiNotice
-} from "../control-deck-model.js";
+import type { TabId, UiNotice } from "../control-deck-model.js";
+import { readUiStateFromUrl, writeUiStateToUrl } from "../control-deck-model.js";
 
 export function useControlDeckUiState() {
   const initialUiStateRef = useRef<ReturnType<typeof readUiStateFromUrl> | null>(null);
@@ -15,11 +10,17 @@ export function useControlDeckUiState() {
   const initialUiState = initialUiStateRef.current;
 
   const [tab, setTab] = useState<TabId>(initialUiState.tab);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(initialUiState.selectedWorkspaceId);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(
+    initialUiState.selectedWorkspaceId,
+  );
   const [selectedId, setSelectedId] = useState<string | undefined>(initialUiState.selectedId);
-  const [selectedRequestLogId, setSelectedRequestLogId] = useState<number | undefined>(initialUiState.selectedRequestLogId);
+  const [selectedRequestLogId, setSelectedRequestLogId] = useState<number | undefined>(
+    initialUiState.selectedRequestLogId,
+  );
   const [search, setSearchState] = useState(initialUiState.search);
-  const [showHiddenTranscript, setShowHiddenTranscript] = useState(initialUiState.showHiddenTranscript);
+  const [showHiddenTranscript, setShowHiddenTranscript] = useState(
+    initialUiState.showHiddenTranscript,
+  );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<UiNotice | null>(null);
 
@@ -30,7 +31,7 @@ export function useControlDeckUiState() {
       showHiddenTranscript,
       selectedWorkspaceId,
       selectedId,
-      selectedRequestLogId
+      selectedRequestLogId,
     });
   }, [search, selectedId, selectedRequestLogId, selectedWorkspaceId, showHiddenTranscript, tab]);
 
@@ -91,6 +92,6 @@ export function useControlDeckUiState() {
     error,
     setError,
     notice,
-    setNotice
+    setNotice,
   };
 }

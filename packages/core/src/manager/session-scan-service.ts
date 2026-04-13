@@ -6,17 +6,22 @@ import type {
   SessionListQuery,
   SessionSummary,
   SessionsResponse,
-  WorkspaceSummary
+  WorkspaceSummary,
 } from "@codexnamer/shared";
 
 import { estimateSessionStatus } from "../auto-rename.js";
 import { buildSessionRevision } from "../revision.js";
-import { discoverRolloutFiles, ingestRolloutFile, readSessionTranscript, readSessionTranscriptPage } from "../rollout.js";
+import {
+  discoverRolloutFiles,
+  ingestRolloutFile,
+  readSessionTranscript,
+  readSessionTranscriptPage,
+} from "../rollout.js";
 import {
   applyOfficialNamingPolicy,
   applyRuleSignatureState,
   filterVisibleRenameHistory,
-  getBlockedOfficialNameThreadIds
+  getBlockedOfficialNameThreadIds,
 } from "./naming-policy.js";
 import type { ManagerServiceContext } from "./shared.js";
 
@@ -29,12 +34,14 @@ function filterAndSortSessions(
   sessions: SessionSummary[],
   query: SessionListQuery,
   options?: {
-    loadDetailText?: (threadId: string) => {
-      firstUserMessage?: string;
-      lastUserMessage?: string;
-      lastAgentMessage?: string;
-    } | undefined;
-  }
+    loadDetailText?: (threadId: string) =>
+      | {
+          firstUserMessage?: string;
+          lastUserMessage?: string;
+          lastAgentMessage?: string;
+        }
+      | undefined;
+  },
 ): SessionSummary[] {
   const project = normalizeSearchValue(query.project);
   const provider = normalizeSearchValue(query.provider);
@@ -78,7 +85,7 @@ function filterAndSortSessions(
         item.statusEstimate,
         detail?.firstUserMessage,
         detail?.lastUserMessage,
-        detail?.lastAgentMessage
+        detail?.lastAgentMessage,
       ]
         .filter(Boolean)
         .join(" ")
@@ -95,16 +102,16 @@ function filterAndSortSessions(
   return filtered.sort((left, right) => {
     const leftValue =
       sort === "project"
-        ? left.projectName ?? ""
+        ? (left.projectName ?? "")
         : sort === "officialName"
-          ? left.officialName ?? ""
-          : left.updatedAt ?? "";
+          ? (left.officialName ?? "")
+          : (left.updatedAt ?? "");
     const rightValue =
       sort === "project"
-        ? right.projectName ?? ""
+        ? (right.projectName ?? "")
         : sort === "officialName"
-          ? right.officialName ?? ""
-          : right.updatedAt ?? "";
+          ? (right.officialName ?? "")
+          : (right.updatedAt ?? "");
 
     const compare = String(leftValue).localeCompare(String(rightValue));
     return order === "asc" ? compare : -compare;
@@ -137,9 +144,9 @@ export async function performScan(context: ManagerServiceContext): Promise<ScanR
             rolloutPath,
             lastOffset: previousCursor.lastOffset,
             lastSize: previousCursor.lastSize,
-            lastMtime: previousCursor.lastMtime
+            lastMtime: previousCursor.lastMtime,
           }
-        : undefined
+        : undefined,
     });
 
     if (!ingest.session) {
@@ -151,15 +158,15 @@ export async function performScan(context: ManagerServiceContext): Promise<ScanR
       ingest.session,
       {
         sizeBytes: stat.size,
-        mtime: stat.mtime.toISOString()
+        mtime: stat.mtime.toISOString(),
       },
-      previousRevision
+      previousRevision,
     );
 
     context.db.upsertSession({
       session: ingest.session,
       revision,
-      cursor: ingest.cursor
+      cursor: ingest.cursor,
     });
 
     updatedSessions += 1;
@@ -176,44 +183,51 @@ export async function performScan(context: ManagerServiceContext): Promise<ScanR
       continue;
     }
     const detail = applyOfficialNamingPolicy(rawDetail, blockedOfficialThreadIds);
-    context.db.updateStatusEstimate(detail.threadId, estimateSessionStatus(detail, context.config, now));
+    context.db.updateStatusEstimate(
+      detail.threadId,
+      estimateSessionStatus(detail, context.config, now),
+    );
   }
 
   return {
     scannedRollouts: rolloutFiles.length,
-    updatedSessions
+    updatedSessions,
   };
 }
 
 export async function listSessions(
   context: ManagerServiceContext,
-  options?: { dirty?: boolean }
+  options?: { dirty?: boolean },
 ): Promise<SessionSummary[]> {
   await context.scan();
   const blockedOfficialThreadIds = getBlockedOfficialNameThreadIds(context.db, context.config);
   return context.db
     .listSessions()
     .map((session) =>
-      applyRuleSignatureState(applyOfficialNamingPolicy(session, blockedOfficialThreadIds), context.currentRuleSignature)
+      applyRuleSignatureState(
+        applyOfficialNamingPolicy(session, blockedOfficialThreadIds),
+        context.currentRuleSignature,
+      ),
     )
     .filter((session) => (options?.dirty === undefined ? true : session.dirty === options.dirty));
 }
 
 export async function querySessions(
   context: ManagerServiceContext,
-  query: SessionListQuery
+  query: SessionListQuery,
 ): Promise<SessionsResponse> {
   const allSessions = await listSessions(context, {
-    dirty: query.dirty
+    dirty: query.dirty,
   });
   const workspaces = await listWorkspaces(context, {
-    dirty: query.dirty
+    dirty: query.dirty,
   });
   const filteredSessions = filterAndSortSessions(allSessions, query, {
-    loadDetailText: (threadId) => context.db.getSessionDetail(threadId)
+    loadDetailText: (threadId) => context.db.getSessionDetail(threadId),
   });
   const total = filteredSessions.length;
-  const items = typeof query.limit === "number" ? filteredSessions.slice(0, query.limit) : filteredSessions;
+  const items =
+    typeof query.limit === "number" ? filteredSessions.slice(0, query.limit) : filteredSessions;
 
   return {
     items,
@@ -221,15 +235,15 @@ export async function querySessions(
     workspaces,
     counts: {
       dirty: allSessions.filter((item) => item.dirty).length,
-      frozen: allSessions.filter((item) => item.frozen).length
+      frozen: allSessions.filter((item) => item.frozen).length,
     },
-    nextCursor: null
+    nextCursor: null,
   };
 }
 
 export async function listWorkspaces(
   context: ManagerServiceContext,
-  options?: { dirty?: boolean }
+  options?: { dirty?: boolean },
 ): Promise<WorkspaceSummary[]> {
   await context.scan();
   return context.db.listWorkspaceSummaries(options);
@@ -238,7 +252,7 @@ export async function listWorkspaces(
 export async function getSessionDetail(
   context: ManagerServiceContext,
   threadId: string,
-  options?: { includeTranscript?: boolean }
+  options?: { includeTranscript?: boolean },
 ): Promise<SessionDetail | undefined> {
   await context.scan();
   const detail = context.db.getSessionDetail(threadId);
@@ -248,12 +262,14 @@ export async function getSessionDetail(
   const blockedOfficialThreadIds = getBlockedOfficialNameThreadIds(context.db, context.config);
   const normalizedDetail = applyRuleSignatureState(
     applyOfficialNamingPolicy(detail, blockedOfficialThreadIds),
-    context.currentRuleSignature
+    context.currentRuleSignature,
   );
   return {
     ...normalizedDetail,
     renameHistory: filterVisibleRenameHistory(context.db.getRenameHistory(threadId)),
-    transcript: options?.includeTranscript ? await readSessionTranscript(detail.rolloutPath) : undefined
+    transcript: options?.includeTranscript
+      ? await readSessionTranscript(detail.rolloutPath)
+      : undefined,
   };
 }
 
@@ -266,7 +282,7 @@ export async function getSessionTranscriptPage(
     includeHidden?: boolean;
     role?: "all" | "user" | "assistant" | "tool" | "system";
     query?: string;
-  }
+  },
 ) {
   await context.scan();
   const detail = context.db.getSessionDetail(threadId);
@@ -280,6 +296,6 @@ export async function getSessionTranscriptPage(
     pageSize: options?.pageSize,
     includeHidden: options?.includeHidden,
     role: options?.role,
-    query: options?.query
+    query: options?.query,
   });
 }

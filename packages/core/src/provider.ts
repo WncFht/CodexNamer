@@ -1,40 +1,43 @@
 import type { EffectiveConfig, MaterializedSession, RenameSuggestion } from "@codexnamer/shared";
-
+import {
+  inspectRenameProvider,
+  resolveProfile,
+  shouldPreferStreamingProviderRequest,
+} from "./provider/profile.js";
 import {
   buildProviderProbeSession,
   buildRenamePrompt,
   composeAiSuggestion,
-  extractFirstJsonObject
+  extractFirstJsonObject,
 } from "./provider/prompt.js";
-import { inspectRenameProvider, resolveProfile, shouldPreferStreamingProviderRequest } from "./provider/profile.js";
 import {
   executeProviderRequest,
   executeStreamingProviderRequest,
-  finishRequestLog
+  finishRequestLog,
 } from "./provider/request.js";
-import {
-  type FetchLike,
-  type ProviderDiagnostics,
-  RenameInferenceError,
-  type RenameInferenceRequestLogger,
-  type RenameInferenceService
+import type {
+  FetchLike,
+  ProviderDiagnostics,
+  RenameInferenceRequestLogger,
+  RenameInferenceService,
 } from "./provider/shared.js";
+import { RenameInferenceError } from "./provider/shared.js";
 
+export { inspectRenameProvider, resolveRenameProvider } from "./provider/profile.js";
+export { buildRenamePrompt } from "./provider/prompt.js";
 export {
   type FetchLike,
   type ProviderDiagnostics,
   RenameInferenceError,
   type RenameInferenceRequestLogger,
-  type RenameInferenceService
+  type RenameInferenceService,
 } from "./provider/shared.js";
-export { buildRenamePrompt } from "./provider/prompt.js";
-export { inspectRenameProvider, resolveRenameProvider } from "./provider/profile.js";
 
 export async function probeRenameProvider(
   config: EffectiveConfig,
   options?: {
     fetchImpl?: FetchLike;
-  }
+  },
 ): Promise<{
   ok: boolean;
   testedAt: string;
@@ -50,7 +53,7 @@ export async function probeRenameProvider(
       ok: false,
       testedAt,
       diagnostics,
-      error: "AI rename is disabled."
+      error: "AI rename is disabled.",
     };
   }
 
@@ -60,7 +63,7 @@ export async function probeRenameProvider(
       ok: false,
       testedAt,
       diagnostics,
-      error: "Provider is missing base URL or model."
+      error: "Provider is missing base URL or model.",
     };
   }
   if (!provider.credentialValue) {
@@ -68,7 +71,7 @@ export async function probeRenameProvider(
       ok: false,
       testedAt,
       diagnostics,
-      error: "Provider is missing an API key or bearer token."
+      error: "Provider is missing an API key or bearer token.",
     };
   }
 
@@ -83,13 +86,22 @@ export async function probeRenameProvider(
       testedAt,
       latencyMs: Date.now() - startedAtMs,
       diagnostics,
-      responseText: suggestion.name
+      responseText: suggestion.name,
     };
   } catch (error) {
-    if (error instanceof RenameInferenceError && (error.code === "empty-response" || error.code === "invalid-json")) {
+    if (
+      error instanceof RenameInferenceError &&
+      (error.code === "empty-response" || error.code === "invalid-json")
+    ) {
       try {
         const prompt = buildRenamePrompt(probeSession, config);
-        const streamResponse = await executeStreamingProviderRequest(fetchImpl, provider, config, prompt, probeSession);
+        const streamResponse = await executeStreamingProviderRequest(
+          fetchImpl,
+          provider,
+          config,
+          prompt,
+          probeSession,
+        );
         const streamText = streamResponse.text;
         if (!streamText.trim()) {
           throw new RenameInferenceError("Model returned an empty response.", "empty-response");
@@ -104,14 +116,14 @@ export async function probeRenameProvider(
           providerRef: provider.providerRef ?? "",
           requestType: provider.requestType,
           authKind: provider.credentialKind ?? "",
-          authSource: provider.credentialSource ?? ""
+          authSource: provider.credentialSource ?? "",
         });
         return {
           ok: true,
           testedAt,
           latencyMs: Date.now() - startedAtMs,
           diagnostics,
-          responseText: composed.suggestion.name
+          responseText: composed.suggestion.name,
         };
       } catch (streamError) {
         return {
@@ -119,7 +131,7 @@ export async function probeRenameProvider(
           testedAt,
           latencyMs: Date.now() - startedAtMs,
           diagnostics,
-          error: streamError instanceof Error ? streamError.message : "Unknown error"
+          error: streamError instanceof Error ? streamError.message : "Unknown error",
         };
       }
     }
@@ -128,7 +140,7 @@ export async function probeRenameProvider(
       testedAt,
       latencyMs: Date.now() - startedAtMs,
       diagnostics,
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }
@@ -137,7 +149,7 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
   constructor(
     private readonly config: EffectiveConfig,
     private readonly fetchImpl: FetchLike = fetch,
-    private readonly requestLogger?: RenameInferenceRequestLogger
+    private readonly requestLogger?: RenameInferenceRequestLogger,
   ) {}
 
   async suggest(session: MaterializedSession): Promise<RenameSuggestion> {
@@ -147,16 +159,26 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
 
     const provider = resolveProfile(this.config);
     if (!provider || !provider.baseUrl || !provider.model) {
-      throw new RenameInferenceError("Provider is missing base URL or model.", "provider-misconfigured");
+      throw new RenameInferenceError(
+        "Provider is missing base URL or model.",
+        "provider-misconfigured",
+      );
     }
     if (!provider.credentialValue) {
-      throw new RenameInferenceError("Provider is missing an API key or bearer token.", "missing-auth");
+      throw new RenameInferenceError(
+        "Provider is missing an API key or bearer token.",
+        "missing-auth",
+      );
     }
 
     const prompt = buildRenamePrompt(session, this.config);
     const preferStreaming = shouldPreferStreamingProviderRequest(this.config);
     let response:
-      | { text: string; payload?: Record<string, unknown>; logContext: { id?: number; startedAtMs: number } }
+      | {
+          text: string;
+          payload?: Record<string, unknown>;
+          logContext: { id?: number; startedAtMs: number };
+        }
       | undefined;
     try {
       if (preferStreaming) {
@@ -166,15 +188,22 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
           this.config,
           prompt,
           session,
-          this.requestLogger
+          this.requestLogger,
         );
         response = {
           text: streamingResponse.text,
           payload: undefined,
-          logContext: streamingResponse.logContext
+          logContext: streamingResponse.logContext,
         };
       } else {
-        response = await executeProviderRequest(this.fetchImpl, provider, this.config, prompt, session, this.requestLogger);
+        response = await executeProviderRequest(
+          this.fetchImpl,
+          provider,
+          this.config,
+          prompt,
+          session,
+          this.requestLogger,
+        );
       }
       let responseText = response.text;
       let parsedModelOutput = extractFirstJsonObject(responseText);
@@ -184,7 +213,13 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
         finishMetadata.responseMode = "sse-primary";
       } else if (!responseText.trim() || !parsedModelOutput) {
         const fallbackReason = !responseText.trim() ? "empty-response" : "invalid-json";
-        const streamResponse = await executeStreamingProviderRequest(this.fetchImpl, provider, this.config, prompt, session);
+        const streamResponse = await executeStreamingProviderRequest(
+          this.fetchImpl,
+          provider,
+          this.config,
+          prompt,
+          session,
+        );
         const streamText = streamResponse.text;
         if (!streamText.trim()) {
           throw new RenameInferenceError("Model returned an empty response.", "empty-response");
@@ -211,7 +246,7 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
         providerRef: provider.providerRef ?? "",
         requestType: provider.requestType,
         authKind: provider.credentialKind ?? "",
-        authSource: provider.credentialSource ?? ""
+        authSource: provider.credentialSource ?? "",
       });
       finishRequestLog(this.requestLogger, response.logContext, {
         status: "succeeded",
@@ -219,7 +254,7 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
         responseText,
         responsePayload: response.payload,
         result: composed.result,
-        metadata: Object.keys(finishMetadata).length > 0 ? finishMetadata : undefined
+        metadata: Object.keys(finishMetadata).length > 0 ? finishMetadata : undefined,
       });
       return composed.suggestion;
     } catch (error) {
@@ -227,12 +262,15 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
         let metadata: Record<string, string> | undefined;
         if (preferStreaming) {
           metadata = {
-            responseMode: "sse-primary"
+            responseMode: "sse-primary",
           };
-        } else if (error instanceof RenameInferenceError && (error.code === "empty-response" || error.code === "invalid-json")) {
+        } else if (
+          error instanceof RenameInferenceError &&
+          (error.code === "empty-response" || error.code === "invalid-json")
+        ) {
           metadata = {
             responseMode: "sse-fallback-failed",
-            sseFallbackReason: error.code
+            sseFallbackReason: error.code,
           };
         }
         finishRequestLog(this.requestLogger, response.logContext, {
@@ -241,7 +279,7 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
           responseText: response.text,
           responsePayload: response.payload,
           error: error instanceof Error ? error.message : "Unknown provider request failure.",
-          metadata
+          metadata,
         });
       }
       if (error instanceof RenameInferenceError) {
@@ -249,7 +287,7 @@ export class OpenAICompatibleRenameInferenceService implements RenameInferenceSe
       }
       throw new RenameInferenceError(
         error instanceof Error ? error.message : "Unknown provider request failure.",
-        "request-failed"
+        "request-failed",
       );
     }
   }
@@ -264,7 +302,11 @@ export function createRenameInferenceService(
     fetchImpl?: FetchLike;
     codexRunner?: unknown;
     requestLogger?: RenameInferenceRequestLogger;
-  }
+  },
 ): RenameInferenceService {
-  return new OpenAICompatibleRenameInferenceService(config, options?.fetchImpl, options?.requestLogger);
+  return new OpenAICompatibleRenameInferenceService(
+    config,
+    options?.fetchImpl,
+    options?.requestLogger,
+  );
 }

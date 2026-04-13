@@ -4,10 +4,10 @@ import { useControlDeckActions } from "./actions/useControlDeckActions.js";
 import {
   ALL_WORKSPACES_ID,
   liveRefreshResourcesForTab,
-  panelResourcesForTab
+  panelResourcesForTab,
 } from "./control-deck-model.js";
-import { useControlDeckResources } from "./useControlDeckResources.js";
 import { useControlDeckUiState } from "./state/useControlDeckUiState.js";
+import { useControlDeckResources } from "./useControlDeckResources.js";
 
 export function useControlDeckState() {
   const ui = useControlDeckUiState();
@@ -17,7 +17,7 @@ export function useControlDeckState() {
     ui.setError(message);
     ui.setNotice({
       tone: "error",
-      text: message
+      text: message,
     });
   };
 
@@ -29,7 +29,7 @@ export function useControlDeckState() {
     selectedRequestLogId: ui.selectedRequestLogId,
     onSelectSession: ui.setSelectedId,
     onSelectWorkspace: ui.setSelectedWorkspaceId,
-    onFailure: setFailure
+    onFailure: setFailure,
   });
   const refreshCurrentView = resources.refreshCurrentView;
 
@@ -54,14 +54,14 @@ export function useControlDeckState() {
       setConfigView: resources.setConfigView,
       loadResources: resources.loadResources,
       mergeCurrentTabResources: resources.mergeCurrentTabResources,
-      refreshCurrentView: resources.refreshCurrentView
+      refreshCurrentView: resources.refreshCurrentView,
     },
     ui: {
       tab: ui.tab,
       selectedId: ui.selectedId,
       setError: ui.setError,
-      setNotice: ui.setNotice
-    }
+      setNotice: ui.setNotice,
+    },
   });
 
   return {
@@ -113,7 +113,7 @@ export function useControlDeckState() {
     replayRenamesSince: actionState.replayRenamesSince,
     startDaemon: actionState.startDaemon,
     stopDaemon: actionState.stopDaemon,
-    actions: actionState.actions
+    actions: actionState.actions,
   };
 }
 

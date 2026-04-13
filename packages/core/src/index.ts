@@ -6,6 +6,6 @@ export * from "./naming.js";
 export * from "./provider.js";
 export * from "./rename-context.js";
 export * from "./revision.js";
-export * from "./rule-signature.js";
 export * from "./rollout.js";
+export * from "./rule-signature.js";
 export * from "./session-index.js";

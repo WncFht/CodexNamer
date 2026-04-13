@@ -85,7 +85,7 @@ function isProcessAlive(processId: number): boolean {
 
 export function resolveDaemonStatus(
   config: EffectiveConfig,
-  daemonState: DaemonSweepSnapshot | undefined
+  daemonState: DaemonSweepSnapshot | undefined,
 ): OverviewReport["runtime"]["daemonStatus"] {
   if (!daemonState?.lastSweepAt) {
     return "not_seen";
@@ -102,7 +102,10 @@ export function resolveDaemonStatus(
     }
   }
 
-  const intervalSeconds = Math.max(1, Math.trunc(daemonState.intervalSeconds || config.watch.scanIntervalSeconds));
+  const intervalSeconds = Math.max(
+    1,
+    Math.trunc(daemonState.intervalSeconds || config.watch.scanIntervalSeconds),
+  );
   const staleAfterMs = Math.max(intervalSeconds * 2_500, 30_000);
   return Date.now() - lastSweepAt <= staleAfterMs ? "running" : "stale";
 }

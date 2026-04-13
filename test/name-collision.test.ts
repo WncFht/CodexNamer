@@ -7,7 +7,7 @@ describe("rename name collision handling", () => {
     const workspace = await createTempWorkspace();
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
 
     try {
@@ -15,13 +15,13 @@ describe("rename name collision handling", () => {
         codexHome: workspace.codexHome,
         threadId: "dup-manual-1",
         userMessage: "第一个会话",
-        lastAgentMessage: "第一个会话已完成"
+        lastAgentMessage: "第一个会话已完成",
       });
       await writeRolloutFixture({
         codexHome: workspace.codexHome,
         threadId: "dup-manual-2",
         userMessage: "第二个会话",
-        lastAgentMessage: "第二个会话已完成"
+        lastAgentMessage: "第二个会话已完成",
       });
 
       const first = await manager.rename("dup-manual-1", "Shared title");
@@ -38,7 +38,7 @@ describe("rename name collision handling", () => {
     const workspace = await createTempWorkspace();
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
 
     try {
@@ -46,13 +46,13 @@ describe("rename name collision handling", () => {
         codexHome: workspace.codexHome,
         threadId: "dup-apply-1",
         userMessage: "先占用一个正式名字",
-        lastAgentMessage: "这个会话先写入正式名字"
+        lastAgentMessage: "这个会话先写入正式名字",
       });
       await writeRolloutFixture({
         codexHome: workspace.codexHome,
         threadId: "dup-apply-2",
         userMessage: "后面的会话尝试应用同名候选",
-        lastAgentMessage: "这个会话会复用同一个候选名"
+        lastAgentMessage: "这个会话会复用同一个候选名",
       });
 
       await manager.rename("dup-apply-1", "Shared title");
@@ -61,7 +61,7 @@ describe("rename name collision handling", () => {
         name: "Shared title",
         source: "ai",
         generatedAt: "2026-04-04T12:10:00.000Z",
-        ruleSignature: manager.currentRuleSignature
+        ruleSignature: manager.currentRuleSignature,
       });
 
       const result = await manager.apply("dup-apply-2");
@@ -84,8 +84,8 @@ describe("rename name collision handling", () => {
         providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
-        temperature: 0.2
-      }
+        temperature: 0.2,
+      },
     });
 
     try {
@@ -93,13 +93,13 @@ describe("rename name collision handling", () => {
         codexHome: workspace.codexHome,
         threadId: "dup-existing-1",
         userMessage: "先出现的正式名",
-        lastAgentMessage: "第一个会话先拿到正式标题"
+        lastAgentMessage: "第一个会话先拿到正式标题",
       });
       await writeRolloutFixture({
         codexHome: workspace.codexHome,
         threadId: "dup-existing-2",
         userMessage: "后出现的正式名",
-        lastAgentMessage: "第二个会话错误地拿到了同名标题"
+        lastAgentMessage: "第二个会话错误地拿到了同名标题",
       });
 
       await manager.scan();
@@ -111,7 +111,7 @@ describe("rename name collision handling", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:00.000Z",
-        autoApply: false
+        autoApply: false,
       });
       manager.db.recordRename({
         threadId: "dup-existing-2",
@@ -121,7 +121,7 @@ describe("rename name collision handling", () => {
         status: "applied",
         operator: "test",
         appliedAt: "2026-04-04T12:00:01.000Z",
-        autoApply: false
+        autoApply: false,
       });
 
       const sessions = await manager.listSessions();

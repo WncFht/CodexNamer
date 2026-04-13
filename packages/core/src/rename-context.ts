@@ -5,7 +5,7 @@ import type {
   RenameContextSegment,
   RenameContextSegmentSource,
   RenameContextStrategy,
-  SessionTranscript
+  SessionTranscript,
 } from "@codexnamer/shared";
 
 import { excerpt, normalizeWhitespace, stripControl } from "./util.js";
@@ -42,13 +42,13 @@ const WEAK_ASSISTANT_PREFIXES = [
   /^Let me\b/i,
   /^I'm going to\b/i,
   /^I am going to\b/i,
-  /^I'll first\b/i
+  /^I'll first\b/i,
 ];
 const PLACEHOLDER_ASSISTANT_PATTERNS = [
   /^\(内容过长/i,
   /^内容过长/i,
   /^\(content too long/i,
-  /^content too long/i
+  /^content too long/i,
 ];
 const STRONG_ASSISTANT_SIGNAL_PATTERN =
   /定位|修复|完成|结论|原因|问题|误判|支持|实现|更新|确认|建议|需要|应用|失败|成功|回退|接入|重写|清理|合并|改成|处理|生成|写入|resolved|fixed|implemented|confirmed|updated|failed|succeeded|cause|issue|result|conclusion/i;
@@ -61,7 +61,7 @@ function buildSegment(
   role: "user" | "assistant",
   content: string | undefined,
   source: RenameContextSegmentSource,
-  timestamp?: string
+  timestamp?: string,
 ): RenameContextSegment | undefined {
   const normalized = normalizeContextMessage(content);
   if (!normalized) {
@@ -72,7 +72,7 @@ function buildSegment(
     role,
     content: normalized,
     source,
-    timestamp
+    timestamp,
   };
 }
 
@@ -100,7 +100,7 @@ function linePrefix(segment: RenameContextSegment): string {
 function appendWithinBudget(
   selected: RenameContextSegment[],
   segment: RenameContextSegment,
-  remainingChars: number
+  remainingChars: number,
 ): { usedChars: number; clipped: boolean } {
   const prefix = linePrefix(segment);
   const newlineChars = selected.length > 0 ? 1 : 0;
@@ -108,7 +108,7 @@ function appendWithinBudget(
   if (contentBudget <= 0) {
     return {
       usedChars: 0,
-      clipped: false
+      clipped: false,
     };
   }
 
@@ -116,18 +116,18 @@ function appendWithinBudget(
   if (!clippedContent) {
     return {
       usedChars: 0,
-      clipped: false
+      clipped: false,
     };
   }
 
   selected.push({
     ...segment,
-    content: clippedContent
+    content: clippedContent,
   });
 
   return {
     usedChars: newlineChars + prefix.length + clippedContent.length,
-    clipped: clippedContent !== segment.content
+    clipped: clippedContent !== segment.content,
   };
 }
 
@@ -135,7 +135,9 @@ function formatContextText(segments: RenameContextSegment[]): string {
   return segments.map((segment) => `${linePrefix(segment)}${segment.content}`).join("\n");
 }
 
-function dedupeConsecutiveMessages(messages: VisibleTranscriptMessage[]): VisibleTranscriptMessage[] {
+function dedupeConsecutiveMessages(
+  messages: VisibleTranscriptMessage[],
+): VisibleTranscriptMessage[] {
   const output: VisibleTranscriptMessage[] = [];
   for (const message of messages) {
     const previous = output[output.length - 1];
@@ -149,12 +151,12 @@ function dedupeConsecutiveMessages(messages: VisibleTranscriptMessage[]): Visibl
 
 function buildSummaryCandidates(
   session: MaterializedSession,
-  strategy: Extract<RenameContextStrategy, "summary-signals" | "last-user-last-assistant">
+  strategy: Extract<RenameContextStrategy, "summary-signals" | "last-user-last-assistant">,
 ): RenameContextSegment[] {
   if (strategy === "last-user-last-assistant") {
     return [
       buildSegment("user", session.lastUserMessage, "summary_last_user"),
-      buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant")
+      buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant"),
     ].filter((value): value is RenameContextSegment => Boolean(value));
   }
 
@@ -165,9 +167,9 @@ function buildSummaryCandidates(
       session.lastUserMessage && session.lastUserMessage !== session.firstUserMessage
         ? session.lastUserMessage
         : undefined,
-      "summary_last_user"
+      "summary_last_user",
     ),
-    buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant")
+    buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant"),
   ].filter((value): value is RenameContextSegment => Boolean(value));
 }
 
@@ -177,7 +179,7 @@ function buildContextFromCandidates(
   requestedStrategy: RenameContext["requestedStrategy"],
   strategy: RenameContext["strategy"],
   session: MaterializedSession,
-  fallbackReason?: RenameContext["fallbackReason"]
+  fallbackReason?: RenameContext["fallbackReason"],
 ): RenameContext {
   const selected: RenameContextSegment[] = [];
   let remainingChars = maxChars;
@@ -205,8 +207,8 @@ function buildContextFromCandidates(
     summarySignals: {
       firstUserMessage: normalizeContextMessage(session.firstUserMessage),
       lastUserMessage: normalizeContextMessage(session.lastUserMessage),
-      lastAgentMessage: normalizeContextMessage(session.lastAgentMessage)
-    }
+      lastAgentMessage: normalizeContextMessage(session.lastAgentMessage),
+    },
   };
 }
 
@@ -214,7 +216,7 @@ function buildSummarySignalContext(
   session: MaterializedSession,
   maxChars: number,
   requestedStrategy: RenameContext["requestedStrategy"],
-  fallbackReason?: RenameContext["fallbackReason"]
+  fallbackReason?: RenameContext["fallbackReason"],
 ): RenameContext {
   return buildContextFromCandidates(
     buildSummaryCandidates(session, "summary-signals"),
@@ -222,27 +224,27 @@ function buildSummarySignalContext(
     requestedStrategy,
     "summary-signals",
     session,
-    fallbackReason
+    fallbackReason,
   );
 }
 
 function buildLastTurnContext(
   session: MaterializedSession,
   maxChars: number,
-  requestedStrategy: RenameContext["requestedStrategy"]
+  requestedStrategy: RenameContext["requestedStrategy"],
 ): RenameContext {
   return buildContextFromCandidates(
     buildSummaryCandidates(session, "last-user-last-assistant"),
     maxChars,
     requestedStrategy,
     "last-user-last-assistant",
-    session
+    session,
   );
 }
 
 function buildTranscriptCandidates(
   transcript: SessionTranscript | undefined,
-  roles: Array<"user" | "assistant">
+  roles: Array<"user" | "assistant">,
 ): RenameContextSegment[] {
   const messages = collectTranscriptMessages(transcript, roles);
   return messages
@@ -252,7 +254,7 @@ function buildTranscriptCandidates(
 
 function collectTranscriptMessages(
   transcript: SessionTranscript | undefined,
-  roles: Array<"user" | "assistant">
+  roles: Array<"user" | "assistant">,
 ): VisibleTranscriptMessage[] {
   if (!transcript) {
     return [];
@@ -262,14 +264,15 @@ function collectTranscriptMessages(
   const candidates = transcript.items
     .filter((item) => !item.hidden)
     .filter((item) => item.kind === "message")
-    .filter((item): item is typeof item & { role: "user" | "assistant" } =>
-      item.role === "user" || item.role === "assistant"
+    .filter(
+      (item): item is typeof item & { role: "user" | "assistant" } =>
+        item.role === "user" || item.role === "assistant",
     )
     .filter((item) => allowedRoles.has(item.role))
     .map((item) => ({
       role: item.role,
       content: normalizeContextMessage(item.content) ?? "",
-      timestamp: item.timestamp
+      timestamp: item.timestamp,
     }))
     .filter((item) => Boolean(item.content)) as VisibleTranscriptMessage[];
 
@@ -283,7 +286,7 @@ function countAssistantSignalMatches(content: string): number {
     /\//,
     /\d/,
     /packages\//,
-    /api|config|rename|prompt|test|build|session|provider|style|context|文档|设置|会话|命名|pdf|report|chapter|image|skill/i
+    /api|config|rename|prompt|test|build|session|provider|style|context|文档|设置|会话|命名|pdf|report|chapter|image|skill/i,
   ];
   return signals.filter((pattern) => pattern.test(content)).length;
 }
@@ -322,7 +325,7 @@ function extractPairedTurns(messages: VisibleTranscriptMessage[]): PairedContext
       "user",
       message.content,
       turns.length === 0 ? "transcript_seed" : "paired_user_turn",
-      message.timestamp
+      message.timestamp,
     );
     if (!userSegment) {
       continue;
@@ -345,7 +348,7 @@ function extractPairedTurns(messages: VisibleTranscriptMessage[]): PairedContext
           "assistant",
           previous.content,
           "paired_previous_assistant",
-          previous.timestamp
+          previous.timestamp,
         );
         if (assistantSegment) {
           break;
@@ -355,7 +358,7 @@ function extractPairedTurns(messages: VisibleTranscriptMessage[]): PairedContext
 
     turns.push({
       ...(assistantSegment ? { assistant: assistantSegment } : {}),
-      user: userSegment
+      user: userSegment,
     });
   }
 
@@ -365,7 +368,7 @@ function extractPairedTurns(messages: VisibleTranscriptMessage[]): PairedContext
 function appendTurnWithinBudget(
   selected: RenameContextSegment[],
   turn: PairedContextTurn,
-  remainingChars: number
+  remainingChars: number,
 ): { usedChars: number; clipped: boolean } {
   const pairedSegments = turn.assistant ? [turn.assistant, turn.user] : [turn.user];
   const staged = [...selected];
@@ -380,7 +383,7 @@ function appendTurnWithinBudget(
       }
       return {
         usedChars: 0,
-        clipped
+        clipped,
       };
     }
     usedChars += appended.usedChars;
@@ -390,7 +393,7 @@ function appendTurnWithinBudget(
   selected.push(...staged.slice(selected.length));
   return {
     usedChars,
-    clipped
+    clipped,
   };
 }
 
@@ -405,27 +408,17 @@ function buildTranscriptContext(
     | "user-transcript-last-assistant"
     | "paired-user-turns"
   >,
-  transcript?: SessionTranscript
+  transcript?: SessionTranscript,
 ): RenameContext {
   if (!transcript) {
-    return buildSummarySignalContext(
-      session,
-      maxChars,
-      requestedStrategy,
-      "missing_transcript"
-    );
+    return buildSummarySignalContext(session, maxChars, requestedStrategy, "missing_transcript");
   }
 
   if (requestedStrategy === "paired-user-turns") {
     const visibleMessages = collectTranscriptMessages(transcript, ["user", "assistant"]);
     const pairedTurns = extractPairedTurns(visibleMessages);
     if (pairedTurns.length === 0) {
-      return buildSummarySignalContext(
-        session,
-        maxChars,
-        requestedStrategy,
-        "empty_transcript"
-      );
+      return buildSummarySignalContext(session, maxChars, requestedStrategy, "empty_transcript");
     }
 
     const [seedTurn, ...remainingTurns] = pairedTurns;
@@ -465,7 +458,14 @@ function buildTranscriptContext(
 
       remainingChars -= appended.usedChars;
       truncated ||= appended.clipped;
-      tail.push(turn.assistant ? { assistant: stagedSelected[staged.length], user: stagedSelected[staged.length + 1] ?? turn.user } : { user: stagedSelected[staged.length] ?? turn.user });
+      tail.push(
+        turn.assistant
+          ? {
+              assistant: stagedSelected[staged.length],
+              user: stagedSelected[staged.length + 1] ?? turn.user,
+            }
+          : { user: stagedSelected[staged.length] ?? turn.user },
+      );
     }
 
     for (const turn of tail.reverse()) {
@@ -486,8 +486,8 @@ function buildTranscriptContext(
       summarySignals: {
         firstUserMessage: normalizeContextMessage(session.firstUserMessage),
         lastUserMessage: normalizeContextMessage(session.lastUserMessage),
-        lastAgentMessage: normalizeContextMessage(session.lastAgentMessage)
-      }
+        lastAgentMessage: normalizeContextMessage(session.lastAgentMessage),
+      },
     };
   }
 
@@ -500,19 +500,14 @@ function buildTranscriptContext(
 
   const recentCandidates = buildTranscriptCandidates(transcript, roles);
   if (recentCandidates.length === 0) {
-    return buildSummarySignalContext(
-      session,
-      maxChars,
-      requestedStrategy,
-      "empty_transcript"
-    );
+    return buildSummarySignalContext(session, maxChars, requestedStrategy, "empty_transcript");
   }
 
   const seedContent =
     requestedStrategy === "assistant-only-transcript"
       ? undefined
-      : normalizeContextMessage(session.firstUserMessage) ??
-        recentCandidates.find((segment) => segment.role === "user")?.content;
+      : (normalizeContextMessage(session.firstUserMessage) ??
+        recentCandidates.find((segment) => segment.role === "user")?.content);
   const seedSegment = seedContent
     ? buildSegment("user", seedContent, "transcript_seed")
     : undefined;
@@ -562,7 +557,11 @@ function buildTranscriptContext(
   selected.push(...tail.reverse());
 
   if (requestedStrategy === "user-transcript-last-assistant") {
-    const lastAssistant = buildSegment("assistant", session.lastAgentMessage, "summary_last_assistant");
+    const lastAssistant = buildSegment(
+      "assistant",
+      session.lastAgentMessage,
+      "summary_last_assistant",
+    );
     if (lastAssistant) {
       const appended = appendWithinBudget(selected, lastAssistant, remainingChars);
       if (appended.usedChars > 0) {
@@ -585,8 +584,8 @@ function buildTranscriptContext(
     summarySignals: {
       firstUserMessage: normalizeContextMessage(session.firstUserMessage),
       lastUserMessage: normalizeContextMessage(session.lastUserMessage),
-      lastAgentMessage: normalizeContextMessage(session.lastAgentMessage)
-    }
+      lastAgentMessage: normalizeContextMessage(session.lastAgentMessage),
+    },
   };
 }
 
@@ -595,7 +594,7 @@ export function buildRenameContext(
   config: EffectiveConfig,
   options?: {
     transcript?: SessionTranscript;
-  }
+  },
 ): RenameContext {
   const requestedStrategy = config.naming.contextStrategy;
   const maxChars = Math.max(32, Math.trunc(config.naming.contextMaxChars || 8_000));

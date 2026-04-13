@@ -1,5 +1,11 @@
+import type {
+  OverviewReport,
+  RenameSource,
+  SessionStatusEstimate,
+  SessionSummary,
+  WorkspaceSummary,
+} from "@codexnamer/shared";
 import type Database from "better-sqlite3";
-import type { OverviewReport, RenameSource, SessionStatusEstimate, SessionSummary, WorkspaceSummary } from "@codexnamer/shared";
 
 import { workspaceIdForCwd, workspaceLabelForCwd } from "../util.js";
 
@@ -33,11 +39,13 @@ export function buildWorkspaceSummaries(sessions: SessionSummary[]): WorkspaceSu
       dirtyCount: session.dirty ? 1 : 0,
       frozenCount: session.frozen ? 1 : 0,
       latestUpdatedAt: session.updatedAt,
-      projects: session.projectName ? [session.projectName] : []
+      projects: session.projectName ? [session.projectName] : [],
     });
   }
 
-  return Array.from(groups.values()).sort((left, right) => (right.latestUpdatedAt ?? "").localeCompare(left.latestUpdatedAt ?? ""));
+  return Array.from(groups.values()).sort((left, right) =>
+    (right.latestUpdatedAt ?? "").localeCompare(left.latestUpdatedAt ?? ""),
+  );
 }
 
 export function getOverviewReport(
@@ -46,7 +54,7 @@ export function getOverviewReport(
   options?: {
     nonAcceptedNamedThreadIds?: Set<string>;
     acceptedAppliedSources?: RenameSource[];
-  }
+  },
 ): OverviewReport {
   const workspaces = buildWorkspaceSummaries(sessions);
   const nonAcceptedNamedThreadIds = options?.nonAcceptedNamedThreadIds ?? new Set<string>();
@@ -57,7 +65,7 @@ export function getOverviewReport(
               COALESCE(rs.dirty_since_rename, 0) AS dirty_since_rename,
               COALESCE(rs.force_rewrite, 0) AS force_rewrite
        FROM sessions s
-       LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id`
+       LEFT JOIN rename_state rs ON rs.thread_id = s.thread_id`,
     )
     .all() as Array<Record<string, unknown>>;
   const pipeline: OverviewReport["pipeline"] = {
@@ -68,7 +76,7 @@ export function getOverviewReport(
     applied: 0,
     idle: 0,
     archivedHint: 0,
-    missing: 0
+    missing: 0,
   };
 
   for (const session of sessions) {
@@ -102,7 +110,10 @@ export function getOverviewReport(
     }
   }
 
-  const topWorkspaceMap = new Map<string, OverviewReport["workload"]["topWorkspacesByTokens"][number]>();
+  const topWorkspaceMap = new Map<
+    string,
+    OverviewReport["workload"]["topWorkspacesByTokens"][number]
+  >();
   let totalTokens = 0;
   let totalTasks = 0;
   let dirtyTokens = 0;
@@ -158,7 +169,7 @@ export function getOverviewReport(
         workspaceId,
         workspaceLabel,
         sessions: 1,
-        tokens: tokenTotal
+        tokens: tokenTotal,
       });
     }
   }
@@ -171,7 +182,7 @@ export function getOverviewReport(
     .prepare(
       `SELECT id, thread_id, kind, source, status, applied_at
        FROM rename_history
-       ORDER BY applied_at DESC, id DESC`
+       ORDER BY applied_at DESC, id DESC`,
     )
     .all() as Array<Record<string, unknown>>;
   const acceptedAppliedSourceSet = new Set(acceptedAppliedSources);
@@ -205,7 +216,7 @@ export function getOverviewReport(
     aiApplied: 0,
     manualApplied: 0,
     autoApplied: 0,
-    lastAppliedAt: undefined as string | undefined
+    lastAppliedAt: undefined as string | undefined,
   };
 
   for (const row of latestHistoryByThread.values()) {
@@ -248,7 +259,10 @@ export function getOverviewReport(
       renameHistorySummary.autoApplied += 1;
     }
     if (typeof row.applied_at === "string") {
-      if (!renameHistorySummary.lastAppliedAt || row.applied_at > renameHistorySummary.lastAppliedAt) {
+      if (
+        !renameHistorySummary.lastAppliedAt ||
+        row.applied_at > renameHistorySummary.lastAppliedAt
+      ) {
         renameHistorySummary.lastAppliedAt = row.applied_at;
       }
     }
@@ -267,9 +281,13 @@ export function getOverviewReport(
       failed: 0,
       autoApplied: 0,
       manualApplied: 0,
-      aiApplied: 0
+      aiApplied: 0,
     };
-    if (row.status === "applied" && typeof row.source === "string" && acceptedAppliedSourceSet.has(row.source as RenameSource)) {
+    if (
+      row.status === "applied" &&
+      typeof row.source === "string" &&
+      acceptedAppliedSourceSet.has(row.source as RenameSource)
+    ) {
       bucket.applied += 1;
       if (row.source === "ai") {
         bucket.aiApplied += 1;
@@ -305,28 +323,37 @@ export function getOverviewReport(
       failed: Number(row?.failed ?? 0),
       autoApplied: Number(row?.autoApplied ?? 0),
       manualApplied: Number(row?.manualApplied ?? 0),
-      aiApplied: Number(row?.aiApplied ?? 0)
+      aiApplied: Number(row?.aiApplied ?? 0),
     });
   }
 
-  const dirtySessionCount = sessions.filter((item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId)).length;
+  const dirtySessionCount = sessions.filter(
+    (item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId),
+  ).length;
   const acceptedOfficialNames = sessions
     .filter((item) => Boolean(item.officialName) && !nonAcceptedNamedThreadIds.has(item.threadId))
     .map((item) => item.officialName ?? "");
   const averageTitleLength =
     acceptedOfficialNames.length > 0
-      ? Math.round(acceptedOfficialNames.reduce((sum, name) => sum + name.trim().length, 0) / acceptedOfficialNames.length)
+      ? Math.round(
+          acceptedOfficialNames.reduce((sum, name) => sum + name.trim().length, 0) /
+            acceptedOfficialNames.length,
+        )
       : 0;
 
   return {
     sessions: {
       total: sessions.length,
       workspaces: workspaces.length,
-      dirty: sessions.filter((item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId)).length,
-      clean: sessions.filter((item) => !item.dirty && !nonAcceptedNamedThreadIds.has(item.threadId)).length,
+      dirty: sessions.filter((item) => item.dirty || nonAcceptedNamedThreadIds.has(item.threadId))
+        .length,
+      clean: sessions.filter((item) => !item.dirty && !nonAcceptedNamedThreadIds.has(item.threadId))
+        .length,
       frozen: sessions.filter((item) => item.frozen).length,
-      named: sessions.filter((item) => Boolean(item.officialName) && !nonAcceptedNamedThreadIds.has(item.threadId)).length,
-      withCandidate: sessions.filter((item) => Boolean(item.candidateName)).length
+      named: sessions.filter(
+        (item) => Boolean(item.officialName) && !nonAcceptedNamedThreadIds.has(item.threadId),
+      ).length,
+      withCandidate: sessions.filter((item) => Boolean(item.candidateName)).length,
     },
     runtime: {
       configuredAutoApply: "unknown",
@@ -338,14 +365,15 @@ export function getOverviewReport(
       lastSweepIntervalSeconds: undefined,
       lastSweepSummary: undefined,
       recentSweeps: [],
-      explain: "The current daemon scans sessions and prints preview evaluations, but it does not call apply()."
+      explain:
+        "The current daemon scans sessions and prints preview evaluations, but it does not call apply().",
     },
     ruleCoverage: {
       currentSignature: "",
       latest: 0,
       outdated: 0,
       manual: 0,
-      unknown: 0
+      unknown: 0,
     },
     workload: {
       totalTokens,
@@ -356,7 +384,8 @@ export function getOverviewReport(
       finalizeReadyTokens,
       appliedTokens,
       averageTokensPerSession: sessions.length > 0 ? Math.round(totalTokens / sessions.length) : 0,
-      averageTokensPerDirtySession: dirtySessionCount > 0 ? Math.round(dirtyTokens / dirtySessionCount) : 0,
+      averageTokensPerDirtySession:
+        dirtySessionCount > 0 ? Math.round(dirtyTokens / dirtySessionCount) : 0,
       averageTitleLength,
       topWorkspacesByTokens: Array.from(topWorkspaceMap.values())
         .sort((left, right) => {
@@ -365,7 +394,7 @@ export function getOverviewReport(
           }
           return right.sessions - left.sessions;
         })
-        .slice(0, 6)
+        .slice(0, 6),
     },
     pipeline,
     renameHistory: {
@@ -377,15 +406,15 @@ export function getOverviewReport(
       aiApplied: renameHistorySummary.aiApplied,
       manualApplied: renameHistorySummary.manualApplied,
       autoApplied: renameHistorySummary.autoApplied,
-      lastAppliedAt: renameHistorySummary.lastAppliedAt
+      lastAppliedAt: renameHistorySummary.lastAppliedAt,
     },
     replay: {
       lastRunAt: undefined,
-      recentRuns: []
+      recentRuns: [],
     },
     activity: {
       windowDays: activityWindowDays,
-      buckets: activityBuckets
-    }
+      buckets: activityBuckets,
+    },
   };
 }

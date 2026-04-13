@@ -11,7 +11,7 @@ describe("rollout ingest", () => {
     const temp = await createTempWorkspace();
     const manager = await createManagerForTest({
       codexHome: temp.codexHome,
-      stateDir: temp.stateDir
+      stateDir: temp.stateDir,
     });
 
     try {
@@ -20,27 +20,27 @@ describe("rollout ingest", () => {
         threadId: "thread-token-event",
         userMessage: "看看 token 统计为什么是空的",
         lastAgentMessage: "我来修 token_count 解析。",
-        tokenEventStyle: "event-msg"
+        tokenEventStyle: "event-msg",
       });
       const stat = await fs.stat(rolloutPath);
       const initial = await ingestRolloutFile({
         rolloutPath,
-        stat
+        stat,
       });
 
       expect(initial.session?.tokenTotal).toBe(1234);
 
       const staleSession = {
         ...initial.session!,
-        tokenTotal: 0
+        tokenTotal: 0,
       };
       const revision = buildSessionRevision(
         staleSession,
         {
           sizeBytes: stat.size,
-          mtime: stat.mtime.toISOString()
+          mtime: stat.mtime.toISOString(),
         },
-        undefined
+        undefined,
       );
 
       manager.db.upsertSession({
@@ -51,8 +51,8 @@ describe("rollout ingest", () => {
           lastOffset: stat.size,
           lastSize: stat.size,
           lastMtime: stat.mtime.toISOString(),
-          lastScanAt: new Date().toISOString()
-        }
+          lastScanAt: new Date().toISOString(),
+        },
       });
 
       await manager.scan();

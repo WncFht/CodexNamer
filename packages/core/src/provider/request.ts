@@ -6,7 +6,7 @@ import type {
   RenameInferenceRequestLogger,
   RequestLogContext,
   RequestLogResult,
-  ResolvedProvider
+  ResolvedProvider,
 } from "./shared.js";
 
 function startRequestLog(
@@ -21,7 +21,7 @@ function startRequestLog(
     promptText?: string;
     requestPayload?: Record<string, unknown>;
     metadata?: Record<string, string>;
-  }
+  },
 ): RequestLogContext {
   const startedAtMs = Date.now();
   const startedAt = toUtcIso(new Date(startedAtMs));
@@ -37,9 +37,9 @@ function startRequestLog(
       promptChars: params.promptChars,
       promptText: params.promptText,
       requestPayload: params.requestPayload,
-      metadata: params.metadata
+      metadata: params.metadata,
     }),
-    startedAtMs
+    startedAtMs,
   };
 }
 
@@ -54,7 +54,7 @@ export function finishRequestLog(
     result?: RequestLogResult;
     error?: string;
     metadata?: Record<string, string>;
-  }
+  },
 ): void {
   if (!logger || !context.id) {
     return;
@@ -71,7 +71,7 @@ export function finishRequestLog(
     responsePayload: params.responsePayload,
     result: params.result,
     error: params.error,
-    metadata: params.metadata
+    metadata: params.metadata,
   });
 }
 
@@ -136,9 +136,11 @@ function extractChatCompletionText(payload: Record<string, unknown>): string {
   if (Array.isArray(content)) {
     return content
       .map((item) =>
-        item && typeof item === "object" && typeof (item as Record<string, unknown>).text === "string"
+        item &&
+        typeof item === "object" &&
+        typeof (item as Record<string, unknown>).text === "string"
           ? ((item as Record<string, unknown>).text as string)
-          : ""
+          : "",
       )
       .join("\n")
       .trim();
@@ -161,7 +163,7 @@ async function parseJsonResponse(response: Response): Promise<{
     return {
       status: response.status,
       text,
-      payload: JSON.parse(text) as Record<string, unknown>
+      payload: JSON.parse(text) as Record<string, unknown>,
     };
   } catch {
     throw new Error(`Invalid JSON response: ${text.slice(0, 400)}`);
@@ -171,7 +173,7 @@ async function parseJsonResponse(response: Response): Promise<{
 function buildProviderAuthHeaders(provider: ResolvedProvider): Record<string, string> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    ...provider.headers
+    ...provider.headers,
   };
   if (provider.credentialValue) {
     headers.Authorization = `Bearer ${provider.credentialValue}`;
@@ -208,7 +210,11 @@ function extractResponsesStreamText(raw: string): string {
       }
       if (event.type === "response.content_part.done") {
         const part = event.part;
-        if (part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string") {
+        if (
+          part &&
+          typeof part === "object" &&
+          typeof (part as Record<string, unknown>).text === "string"
+        ) {
           completedText = (part as Record<string, unknown>).text as string;
         }
       }
@@ -230,7 +236,11 @@ function extractChatCompletionStreamText(raw: string): string {
         continue;
       }
       const delta = (choices[0] as Record<string, unknown>).delta;
-      if (delta && typeof delta === "object" && typeof (delta as Record<string, unknown>).content === "string") {
+      if (
+        delta &&
+        typeof delta === "object" &&
+        typeof (delta as Record<string, unknown>).content === "string"
+      ) {
         content += (delta as Record<string, unknown>).content as string;
       }
     } catch {
@@ -246,12 +256,12 @@ export async function callResponsesApi(
   config: EffectiveConfig,
   prompt: string,
   session: MaterializedSession,
-  logger?: RenameInferenceRequestLogger
+  logger?: RenameInferenceRequestLogger,
 ): Promise<{ text: string; payload: Record<string, unknown>; logContext: RequestLogContext }> {
   const requestPayload = {
     model: provider.model,
     temperature: config.ai.temperature,
-    input: prompt
+    input: prompt,
   };
   const logContext = startRequestLog(logger, session, {
     backend: provider.requestedBackend,
@@ -264,8 +274,8 @@ export async function callResponsesApi(
     metadata: {
       profile: provider.profileId,
       providerRef: provider.providerRef ?? "",
-      requestedBackend: provider.requestedBackend
-    }
+      requestedBackend: provider.requestedBackend,
+    },
   });
 
   try {
@@ -273,7 +283,7 @@ export async function callResponsesApi(
       method: "POST",
       headers: buildProviderAuthHeaders(provider),
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify(requestPayload)
+      body: JSON.stringify(requestPayload),
     });
 
     const parsed = await parseJsonResponse(response);
@@ -281,12 +291,12 @@ export async function callResponsesApi(
     return {
       text,
       payload: parsed.payload,
-      logContext
+      logContext,
     };
   } catch (error) {
     finishRequestLog(logger, logContext, {
       status: "failed",
-      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown",
     });
     throw error;
   }
@@ -298,7 +308,7 @@ export async function callChatCompletionsApi(
   config: EffectiveConfig,
   prompt: string,
   session: MaterializedSession,
-  logger?: RenameInferenceRequestLogger
+  logger?: RenameInferenceRequestLogger,
 ): Promise<{ text: string; payload: Record<string, unknown>; logContext: RequestLogContext }> {
   const requestPayload = {
     model: provider.model,
@@ -307,13 +317,13 @@ export async function callChatCompletionsApi(
       {
         role: "system",
         content:
-          "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
+          "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId.",
       },
       {
         role: "user",
-        content: prompt
-      }
-    ]
+        content: prompt,
+      },
+    ],
   };
   const logContext = startRequestLog(logger, session, {
     backend: provider.requestedBackend,
@@ -326,8 +336,8 @@ export async function callChatCompletionsApi(
     metadata: {
       profile: provider.profileId,
       providerRef: provider.providerRef ?? "",
-      requestedBackend: provider.requestedBackend
-    }
+      requestedBackend: provider.requestedBackend,
+    },
   });
 
   try {
@@ -335,7 +345,7 @@ export async function callChatCompletionsApi(
       method: "POST",
       headers: buildProviderAuthHeaders(provider),
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify(requestPayload)
+      body: JSON.stringify(requestPayload),
     });
 
     const parsed = await parseJsonResponse(response);
@@ -343,12 +353,12 @@ export async function callChatCompletionsApi(
     return {
       text,
       payload: parsed.payload,
-      logContext
+      logContext,
     };
   } catch (error) {
     finishRequestLog(logger, logContext, {
       status: "failed",
-      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown",
     });
     throw error;
   }
@@ -360,7 +370,7 @@ export async function executeProviderRequest(
   config: EffectiveConfig,
   prompt: string,
   session: MaterializedSession,
-  logger?: RenameInferenceRequestLogger
+  logger?: RenameInferenceRequestLogger,
 ): Promise<{ text: string; payload?: Record<string, unknown>; logContext: RequestLogContext }> {
   if (provider.requestType === "responses") {
     return callResponsesApi(fetchImpl, provider, config, prompt, session, logger);
@@ -374,13 +384,13 @@ export async function callStreamingResponsesApi(
   config: EffectiveConfig,
   prompt: string,
   session: MaterializedSession,
-  logger?: RenameInferenceRequestLogger
+  logger?: RenameInferenceRequestLogger,
 ): Promise<{ text: string; logContext: RequestLogContext }> {
   const requestPayload = {
     model: provider.model,
     temperature: config.ai.temperature,
     input: prompt,
-    stream: true
+    stream: true,
   };
   const logContext = startRequestLog(logger, session, {
     backend: provider.requestedBackend,
@@ -393,8 +403,8 @@ export async function callStreamingResponsesApi(
     metadata: {
       profile: provider.profileId,
       providerRef: provider.providerRef ?? "",
-      requestedBackend: provider.requestedBackend
-    }
+      requestedBackend: provider.requestedBackend,
+    },
   });
 
   try {
@@ -402,7 +412,7 @@ export async function callStreamingResponsesApi(
       method: "POST",
       headers: buildProviderAuthHeaders(provider),
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify(requestPayload)
+      body: JSON.stringify(requestPayload),
     });
     const raw = await response.text();
     if (!response.ok) {
@@ -410,12 +420,12 @@ export async function callStreamingResponsesApi(
     }
     return {
       text: extractResponsesStreamText(raw),
-      logContext
+      logContext,
     };
   } catch (error) {
     finishRequestLog(logger, logContext, {
       status: "failed",
-      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown",
     });
     throw error;
   }
@@ -427,7 +437,7 @@ export async function callStreamingChatCompletionsApi(
   config: EffectiveConfig,
   prompt: string,
   session: MaterializedSession,
-  logger?: RenameInferenceRequestLogger
+  logger?: RenameInferenceRequestLogger,
 ): Promise<{ text: string; logContext: RequestLogContext }> {
   const requestPayload = {
     model: provider.model,
@@ -436,14 +446,14 @@ export async function callStreamingChatCompletionsApi(
       {
         role: "system",
         content:
-          "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId."
+          "You generate concise but specific session names. Return JSON only with keys: name, kind, summary, scope, tagId.",
       },
       {
         role: "user",
-        content: prompt
-      }
+        content: prompt,
+      },
     ],
-    stream: true
+    stream: true,
   };
   const logContext = startRequestLog(logger, session, {
     backend: provider.requestedBackend,
@@ -456,8 +466,8 @@ export async function callStreamingChatCompletionsApi(
     metadata: {
       profile: provider.profileId,
       providerRef: provider.providerRef ?? "",
-      requestedBackend: provider.requestedBackend
-    }
+      requestedBackend: provider.requestedBackend,
+    },
   });
 
   try {
@@ -465,7 +475,7 @@ export async function callStreamingChatCompletionsApi(
       method: "POST",
       headers: buildProviderAuthHeaders(provider),
       signal: AbortSignal.timeout(config.ai.timeoutSeconds * 1000),
-      body: JSON.stringify(requestPayload)
+      body: JSON.stringify(requestPayload),
     });
     const raw = await response.text();
     if (!response.ok) {
@@ -473,12 +483,12 @@ export async function callStreamingChatCompletionsApi(
     }
     return {
       text: extractChatCompletionStreamText(raw),
-      logContext
+      logContext,
     };
   } catch (error) {
     finishRequestLog(logger, logContext, {
       status: "failed",
-      error: error instanceof Error ? error.message.slice(0, 300) : "unknown"
+      error: error instanceof Error ? error.message.slice(0, 300) : "unknown",
     });
     throw error;
   }
@@ -490,7 +500,7 @@ export async function executeStreamingProviderRequest(
   config: EffectiveConfig,
   prompt: string,
   session: MaterializedSession,
-  logger?: RenameInferenceRequestLogger
+  logger?: RenameInferenceRequestLogger,
 ): Promise<{ text: string; logContext: RequestLogContext }> {
   if (provider.requestType === "responses") {
     return callStreamingResponsesApi(fetchImpl, provider, config, prompt, session, logger);

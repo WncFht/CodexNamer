@@ -1,52 +1,38 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import {
-  type AiRequestLogDetail,
-  type AiRequestLogReport,
-  type AutoRenamePreview,
-  type ConfigDocument,
-  type ConfigView,
-  type DoctorReport,
-  type EffectiveConfig,
-  type MaterializedSession,
-  type OverviewReport,
-  type PromptPreview,
-  type RenameReplayPreviewResult,
-  type RenameReplayResult,
-  type RenameSuggestion,
-  type ScanReport,
-  SESSION_INDEX_FILENAME,
-  type SessionDetail,
-  type SessionIndexSnapshot,
-  type SessionListQuery,
-  type SessionsResponse,
-  type SessionSummary,
-  type WorkspaceSummary
+import type {
+  AiRequestLogDetail,
+  AiRequestLogReport,
+  AutoRenamePreview,
+  ConfigDocument,
+  ConfigView,
+  DoctorReport,
+  EffectiveConfig,
+  MaterializedSession,
+  OverviewReport,
+  PromptPreview,
+  RenameReplayPreviewResult,
+  RenameReplayResult,
+  RenameSuggestion,
+  ScanReport,
+  SessionDetail,
+  SessionIndexSnapshot,
+  SessionListQuery,
+  SessionSummary,
+  SessionsResponse,
+  WorkspaceSummary,
 } from "@codexnamer/shared";
+import { SESSION_INDEX_FILENAME } from "@codexnamer/shared";
 
 import { loadEffectiveConfig } from "./config.js";
 import { StateDatabase } from "./database.js";
-import { createRenameInferenceService } from "./provider.js";
 import {
-  ensureUniqueRenameSuggestion,
-  getBlockedOfficialNameThreadIds,
-  isAcceptedOfficialRenameSource,
-  normalizeComparableName,
-  requiresAcceptedRewrite
-} from "./manager/naming-policy.js";
-import { requireSuccessfulProviderTest as ensureProviderTestReady } from "./manager/provider-state.js";
-import { computeRenameRuleSignature } from "./rule-signature.js";
-import { readSessionTranscript } from "./rollout.js";
-import { buildRenameContext } from "./rename-context.js";
-import type { compactSessionIndex } from "./session-index.js";
-import { deepMerge } from "./util.js";
-import {
-  batchApplyDirty as batchApplyDirtyService,
-  apply as applyService,
-  rename as renameService,
-  suggest as suggestService
-} from "./manager/rename-command-service.js";
+  getConfigView as getConfigViewService,
+  parseCodexProviderConfig as parseCodexProviderConfigService,
+  printConfig as printConfigService,
+  testProvider as testProviderService,
+  updateConfig as updateConfigService,
+} from "./manager/config-runtime-service.js";
 import {
   compactIndex as compactIndexService,
   freeze as freezeService,
@@ -55,26 +41,42 @@ import {
   previewRequeueRenamesSince as previewRequeueRenamesSinceService,
   requeueRenamesSince as requeueRenamesSinceService,
   runAutoRenameSweep as runAutoRenameSweepService,
-  unfreeze as unfreezeService
+  unfreeze as unfreezeService,
 } from "./manager/maintenance-service.js";
 import {
-  getConfigView as getConfigViewService,
-  parseCodexProviderConfig as parseCodexProviderConfigService,
-  printConfig as printConfigService,
-  testProvider as testProviderService,
-  updateConfig as updateConfigService
-} from "./manager/config-runtime-service.js";
+  ensureUniqueRenameSuggestion,
+  getBlockedOfficialNameThreadIds,
+  isAcceptedOfficialRenameSource,
+  normalizeComparableName,
+  requiresAcceptedRewrite,
+} from "./manager/naming-policy.js";
 import { buildPromptPreview as buildPromptPreviewService } from "./manager/prompt-preview-service.js";
-import { doctor as doctorService, overview as overviewService } from "./manager/runtime-overview-service.js";
+import { requireSuccessfulProviderTest as ensureProviderTestReady } from "./manager/provider-state.js";
+import {
+  apply as applyService,
+  batchApplyDirty as batchApplyDirtyService,
+  rename as renameService,
+  suggest as suggestService,
+} from "./manager/rename-command-service.js";
+import {
+  doctor as doctorService,
+  overview as overviewService,
+} from "./manager/runtime-overview-service.js";
 import {
   getSessionDetail as getSessionDetailService,
   getSessionTranscriptPage as getSessionTranscriptPageService,
   listSessions as listSessionsService,
   listWorkspaces as listWorkspacesService,
   performScan,
-  querySessions as querySessionsService
+  querySessions as querySessionsService,
 } from "./manager/session-scan-service.js";
 import type { ManagerServiceContext, ResolveSuggestionOptions } from "./manager/shared.js";
+import { createRenameInferenceService } from "./provider.js";
+import { buildRenameContext } from "./rename-context.js";
+import { readSessionTranscript } from "./rollout.js";
+import { computeRenameRuleSignature } from "./rule-signature.js";
+import type { compactSessionIndex } from "./session-index.js";
+import { deepMerge } from "./util.js";
 
 const SCAN_FRESH_WINDOW_MS = 1_200;
 
@@ -89,7 +91,7 @@ export class CodexNamer {
   private lastScanCompletedAt = 0;
   private lastScanResult: ScanReport = {
     scannedRollouts: 0,
-    updatedSessions: 0
+    updatedSessions: 0,
   };
   private readonly cwd: string;
   private readonly configPath?: string;
@@ -103,13 +105,13 @@ export class CodexNamer {
       cwd?: string;
       configPath?: string;
       overrides?: Partial<EffectiveConfig>;
-    }
+    },
   ) {
     this.inferenceService = createRenameInferenceService(config, {
       requestLogger: {
         start: (entry) => this.db.startAiRequestLog(entry),
-        finish: (entry) => this.db.finishAiRequestLog(entry)
-      }
+        finish: (entry) => this.db.finishAiRequestLog(entry),
+      },
     });
     this.cwd = options?.cwd ?? process.cwd();
     this.configPath = options?.configPath;
@@ -125,13 +127,13 @@ export class CodexNamer {
     const config = await loadEffectiveConfig({
       cwd: options?.cwd,
       configPath: options?.configPath,
-      overrides: options?.overrides
+      overrides: options?.overrides,
     });
     const db = await StateDatabase.create(path.join(config.general.stateDir, "app.db"));
     return new CodexNamer(config, db, options?.operator, {
       cwd: options?.cwd,
       configPath: options?.configPath,
-      overrides: options?.overrides
+      overrides: options?.overrides,
     });
   }
 
@@ -151,27 +153,29 @@ export class CodexNamer {
       resolvePreviewConfig: (userConfig) => this.resolvePreviewConfig(userConfig),
       buildSyntheticPromptSession: (config) => this.buildSyntheticPromptSession(config),
       requireSuccessfulProviderTest: (config) => this.requireSuccessfulProviderTest(config),
-      materializeSessionForSuggestion: (detail, config) => this.materializeSessionForSuggestion(detail, config),
-      resolveSuggestionForDetail: (detail, options) => this.resolveSuggestionForDetail(detail, options),
+      materializeSessionForSuggestion: (detail, config) =>
+        this.materializeSessionForSuggestion(detail, config),
+      resolveSuggestionForDetail: (detail, options) =>
+        this.resolveSuggestionForDetail(detail, options),
       scan: () => this.scan(),
-      listSessions: (options) => this.listSessions(options)
+      listSessions: (options) => this.listSessions(options),
     } as ManagerServiceContext;
     Object.defineProperties(context, {
       config: {
-        get: () => this.config
+        get: () => this.config,
       },
       inferenceService: {
-        get: () => this.inferenceService
+        get: () => this.inferenceService,
       },
       sessionIndexPath: {
-        get: () => this.sessionIndexPath
+        get: () => this.sessionIndexPath,
       },
       backupDir: {
-        get: () => this.backupDir
+        get: () => this.backupDir,
       },
       currentRuleSignature: {
-        get: () => this.currentRuleSignature
-      }
+        get: () => this.currentRuleSignature,
+      },
     });
     return context;
   }
@@ -196,14 +200,14 @@ export class CodexNamer {
     const nextConfig = await loadEffectiveConfig({
       cwd: this.cwd,
       configPath: this.configPath,
-      overrides: this.overrides
+      overrides: this.overrides,
     });
     this.config = nextConfig;
     this.inferenceService = createRenameInferenceService(nextConfig, {
       requestLogger: {
         start: (entry) => this.db.startAiRequestLog(entry),
-        finish: (entry) => this.db.finishAiRequestLog(entry)
-      }
+        finish: (entry) => this.db.finishAiRequestLog(entry),
+      },
     });
     this.sessionIndexCache = undefined;
     this.lastScanCompletedAt = 0;
@@ -231,7 +235,7 @@ export class CodexNamer {
       lastUserMessage: "请测试当前 AI rename backend 是否可用。",
       lastAgentMessage: "这是 provider test 的 synthetic session。",
       taskCompleteCount: 1,
-      tokenTotal: 128
+      tokenTotal: 128,
     };
   }
 
@@ -242,37 +246,38 @@ export class CodexNamer {
     return deepMerge(this.config, userConfig as Partial<EffectiveConfig>);
   }
 
-  private async requireSuccessfulProviderTest(config: EffectiveConfig = this.config): Promise<void> {
+  private async requireSuccessfulProviderTest(
+    config: EffectiveConfig = this.config,
+  ): Promise<void> {
     await ensureProviderTestReady(this.db, config);
   }
 
   private async materializeSessionForSuggestion(
     detail: SessionDetail,
-    config: EffectiveConfig = this.config
+    config: EffectiveConfig = this.config,
   ): Promise<MaterializedSession> {
     const transcriptStrategies = new Set([
       "user-assistant-transcript",
       "user-only-transcript",
       "assistant-only-transcript",
       "user-transcript-last-assistant",
-      "paired-user-turns"
+      "paired-user-turns",
     ]);
-    const transcript =
-      transcriptStrategies.has(config.naming.contextStrategy)
-        ? detail.transcript ?? (await readSessionTranscript(detail.rolloutPath))
-        : undefined;
+    const transcript = transcriptStrategies.has(config.naming.contextStrategy)
+      ? (detail.transcript ?? (await readSessionTranscript(detail.rolloutPath)))
+      : undefined;
 
     return {
       ...detail,
       renameContext: buildRenameContext(detail, config, {
-        transcript
-      })
+        transcript,
+      }),
     };
   }
 
   private async resolveSuggestionForDetail(
     detail: SessionDetail,
-    options?: ResolveSuggestionOptions
+    options?: ResolveSuggestionOptions,
   ): Promise<RenameSuggestion> {
     await this.requireSuccessfulProviderTest();
     const currentRuleSignature = this.currentRuleSignature;
@@ -293,7 +298,8 @@ export class CodexNamer {
     if (canReuseCandidate) {
       const finalizeReusedSuggestion = () => {
         const blockedOfficialThreadIds =
-          options?.blockedOfficialThreadIds ?? getBlockedOfficialNameThreadIds(this.db, this.config);
+          options?.blockedOfficialThreadIds ??
+          getBlockedOfficialNameThreadIds(this.db, this.config);
         const reusedSuggestion = ensureUniqueRenameSuggestion(
           this.db,
           this.config,
@@ -304,17 +310,20 @@ export class CodexNamer {
             source: renameState?.currentCandidateSource ?? "heuristic",
             kind: "chore",
             summary: renameState?.currentCandidateName ?? "",
-            generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString()
+            generatedAt: renameState?.currentCandidateGeneratedAt ?? new Date().toISOString(),
           },
           {
             reservedNameKeys: options?.reservedNameKeys,
-            blockedOfficialThreadIds
-          }
+            blockedOfficialThreadIds,
+          },
         );
-        if (options?.saveCandidate !== false && reusedSuggestion.name !== renameState?.currentCandidateName) {
+        if (
+          options?.saveCandidate !== false &&
+          reusedSuggestion.name !== renameState?.currentCandidateName
+        ) {
           this.db.saveCandidate(detail.threadId, {
             ...reusedSuggestion,
-            ruleSignature: currentRuleSignature
+            ruleSignature: currentRuleSignature,
           });
         }
         if (options?.reservedNameKeys) {
@@ -328,7 +337,9 @@ export class CodexNamer {
         : finalizeReusedSuggestion();
     }
 
-    const rawSuggestion = await this.inferenceService.suggest(await this.materializeSessionForSuggestion(detail));
+    const rawSuggestion = await this.inferenceService.suggest(
+      await this.materializeSessionForSuggestion(detail),
+    );
     const finalizeSuggestion = () => {
       const blockedOfficialThreadIds =
         options?.blockedOfficialThreadIds ?? getBlockedOfficialNameThreadIds(this.db, this.config);
@@ -339,13 +350,13 @@ export class CodexNamer {
         rawSuggestion,
         {
           reservedNameKeys: options?.reservedNameKeys,
-          blockedOfficialThreadIds
-        }
+          blockedOfficialThreadIds,
+        },
       );
       if (options?.saveCandidate !== false) {
         this.db.saveCandidate(detail.threadId, {
           ...suggestion,
-          ruleSignature: currentRuleSignature
+          ruleSignature: currentRuleSignature,
         });
       }
       if (options?.reservedNameKeys) {
@@ -354,7 +365,9 @@ export class CodexNamer {
       return suggestion;
     };
 
-    return options?.reservationScheduler ? options.reservationScheduler(finalizeSuggestion) : finalizeSuggestion();
+    return options?.reservationScheduler
+      ? options.reservationScheduler(finalizeSuggestion)
+      : finalizeSuggestion();
   }
 
   private async performScan(): Promise<ScanReport> {
@@ -397,7 +410,7 @@ export class CodexNamer {
 
   async getSessionDetail(
     threadId: string,
-    options?: { includeTranscript?: boolean }
+    options?: { includeTranscript?: boolean },
   ): Promise<SessionDetail | undefined> {
     return getSessionDetailService(this.serviceContext, threadId, options);
   }
@@ -410,7 +423,7 @@ export class CodexNamer {
       includeHidden?: boolean;
       role?: "all" | "user" | "assistant" | "tool" | "system";
       query?: string;
-    }
+    },
   ) {
     return getSessionTranscriptPageService(this.serviceContext, threadId, options);
   }
@@ -425,7 +438,7 @@ export class CodexNamer {
       autoApply?: boolean;
       skipScan?: boolean;
       detail?: SessionDetail;
-    }
+    },
   ): Promise<{ written: boolean; name: string }> {
     return applyService(this.serviceContext, threadId, options);
   }
@@ -435,12 +448,19 @@ export class CodexNamer {
   }
 
   async batchApplyDirty(options?: { previewOnly?: boolean }): Promise<
-    Array<{ threadId: string; action: "applied" | "skipped" | "preview"; name?: string; reason?: string }>
+    Array<{
+      threadId: string;
+      action: "applied" | "skipped" | "preview";
+      name?: string;
+      reason?: string;
+    }>
   > {
     return batchApplyDirtyService(this.serviceContext, options);
   }
 
-  async compactIndex(options?: { dryRun?: boolean }): Promise<Awaited<ReturnType<typeof compactSessionIndex>>> {
+  async compactIndex(options?: {
+    dryRun?: boolean;
+  }): Promise<Awaited<ReturnType<typeof compactSessionIndex>>> {
     return compactIndexService(this.serviceContext, options);
   }
 
@@ -469,7 +489,7 @@ export class CodexNamer {
   }
 
   async updateConfig(
-    patch: ConfigDocument
+    patch: ConfigDocument,
   ): Promise<{ writtenTo: string; restartRequired: boolean; config: ConfigView }> {
     return updateConfigService(this.serviceContext, patch);
   }
@@ -492,7 +512,10 @@ export class CodexNamer {
     return testProviderService(this.serviceContext, options);
   }
 
-  async buildPromptPreview(options?: { threadId?: string; userConfig?: ConfigDocument }): Promise<PromptPreview> {
+  async buildPromptPreview(options?: {
+    threadId?: string;
+    userConfig?: ConfigDocument;
+  }): Promise<PromptPreview> {
     return buildPromptPreviewService(this.serviceContext, options);
   }
 
@@ -556,7 +579,7 @@ export class CodexNamer {
       this.sessionIndexCache = {
         size: stat.size,
         mtimeMs: stat.mtimeMs,
-        snapshot
+        snapshot,
       };
       return snapshot;
     } catch (error) {
@@ -567,7 +590,7 @@ export class CodexNamer {
         this.sessionIndexCache = {
           size: 0,
           mtimeMs: 0,
-          snapshot
+          snapshot,
         };
         return snapshot;
       }

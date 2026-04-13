@@ -1,28 +1,27 @@
 import * as React from "react";
-
-import { copyTextToClipboard } from "./clipboard.js";
 import { SidebarRail } from "./app-shell/SidebarRail.js";
 import { TopNoticeBanner } from "./app-shell/TopNoticeBanner.js";
-import { useThemePreference } from "./app-shell/useThemePreference.js";
 import { usePaneLayoutState } from "./app-shell/usePaneLayoutState.js";
+import { useThemePreference } from "./app-shell/useThemePreference.js";
+import { copyTextToClipboard } from "./clipboard.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
-import { addAppTransitionType, AppViewTransition } from "./view-transitions.js";
+import { AppViewTransition, addAppTransitionType } from "./view-transitions.js";
 
 const WORKSPACE_PANE_MIN_WIDTH = 220;
 const WORKSPACE_PANE_MAX_WIDTH = 420;
 const SettingsPanel = React.lazy(() =>
-  import("./SettingsPanel.js").then((module) => ({ default: module.SettingsPanel }))
+  import("./SettingsPanel.js").then((module) => ({ default: module.SettingsPanel })),
 );
 const RenameOpsPanel = React.lazy(() =>
-  import("./RenameOpsPanel.js").then((module) => ({ default: module.RenameOpsPanel }))
+  import("./RenameOpsPanel.js").then((module) => ({ default: module.RenameOpsPanel })),
 );
 const RequeuePanel = React.lazy(() =>
-  import("./RequeuePanel.js").then((module) => ({ default: module.RequeuePanel }))
+  import("./RequeuePanel.js").then((module) => ({ default: module.RequeuePanel })),
 );
 const DaemonPanel = React.lazy(() =>
-  import("./DaemonPanel.js").then((module) => ({ default: module.DaemonPanel }))
+  import("./DaemonPanel.js").then((module) => ({ default: module.DaemonPanel })),
 );
 
 function LazyTabShell(props: {
@@ -55,17 +54,26 @@ export function App() {
   const theme = useThemePreference();
   const paneLayout = usePaneLayoutState({
     tab: state.tab,
-    selectedId: state.selectedId
+    selectedId: state.selectedId,
   });
-  const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(() => state.tab === "settings");
-  const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(() => state.tab === "maintenance");
+  const [settingsPanelLoaded, setSettingsPanelLoaded] = React.useState(
+    () => state.tab === "settings",
+  );
+  const [maintenancePanelLoaded, setMaintenancePanelLoaded] = React.useState(
+    () => state.tab === "maintenance",
+  );
   const [requeuePanelLoaded, setRequeuePanelLoaded] = React.useState(() => state.tab === "requeue");
   const [daemonPanelLoaded, setDaemonPanelLoaded] = React.useState(() => state.tab === "daemon");
   const uiLanguage = normalizeUiLanguage(state.configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
-  const previewApplyCount = state.preview?.items.filter((item) => item.status === "apply").length ?? 0;
-  const previewSuggestCount = state.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
-  const totalWorkspaceSessionCount = state.workspaces.reduce((sum, workspace) => sum + workspace.sessionCount, 0);
+  const previewApplyCount =
+    state.preview?.items.filter((item) => item.status === "apply").length ?? 0;
+  const previewSuggestCount =
+    state.preview?.items.filter((item) => item.status === "suggest").length ?? 0;
+  const totalWorkspaceSessionCount = state.workspaces.reduce(
+    (sum, workspace) => sum + workspace.sessionCount,
+    0,
+  );
   const selectedWorkspace =
     state.selectedWorkspaceId === ALL_WORKSPACES_ID
       ? undefined
@@ -109,16 +117,16 @@ export function App() {
         await copyTextToClipboard(threadId);
         state.setNotice({
           tone: "success",
-          text: t(uiLanguage, "copiedSessionId")
+          text: t(uiLanguage, "copiedSessionId"),
         });
       } catch {
         state.setNotice({
           tone: "error",
-          text: t(uiLanguage, "copySessionIdFailed")
+          text: t(uiLanguage, "copySessionIdFailed"),
         });
       }
     },
-    [state, uiLanguage]
+    [state, uiLanguage],
   );
 
   return (
@@ -128,7 +136,7 @@ export function App() {
       style={
         {
           "--sidebar-width": `${paneLayout.workspacePaneWidth}px`,
-          "--session-list-width": `${paneLayout.sessionPaneCollapsed ? 0 : paneLayout.sessionPaneWidth}px`
+          "--session-list-width": `${paneLayout.sessionPaneCollapsed ? 0 : paneLayout.sessionPaneWidth}px`,
         } as React.CSSProperties
       }
     >
@@ -204,7 +212,11 @@ export function App() {
           ) : null}
         </div>
 
-        <LazyTabShell active={state.tab === "settings"} loaded={settingsPanelLoaded} loadingLabel={tt("loading")}>
+        <LazyTabShell
+          active={state.tab === "settings"}
+          loaded={settingsPanelLoaded}
+          loadingLabel={tt("loading")}
+        >
           <SettingsPanel
             configView={state.configView}
             daemon={state.daemon}
@@ -224,11 +236,17 @@ export function App() {
             promptPreview={state.promptPreview}
             promptPreviewRefreshing={state.promptPreviewRefreshing}
             selectedThreadId={state.selectedId}
-            onRefreshPromptPreview={(userConfig, options) => void state.refreshPromptPreview(userConfig, options)}
+            onRefreshPromptPreview={(userConfig, options) =>
+              void state.refreshPromptPreview(userConfig, options)
+            }
           />
         </LazyTabShell>
 
-        <LazyTabShell active={state.tab === "maintenance"} loaded={maintenancePanelLoaded} loadingLabel={tt("loading")}>
+        <LazyTabShell
+          active={state.tab === "maintenance"}
+          loaded={maintenancePanelLoaded}
+          loadingLabel={tt("loading")}
+        >
           <RenameOpsPanel
             aiRequestLogs={state.aiRequestLogs}
             aiRequestLogDetail={state.aiRequestLogDetail}
@@ -251,7 +269,11 @@ export function App() {
           />
         </LazyTabShell>
 
-        <LazyTabShell active={state.tab === "requeue"} loaded={requeuePanelLoaded} loadingLabel={tt("loading")}>
+        <LazyTabShell
+          active={state.tab === "requeue"}
+          loaded={requeuePanelLoaded}
+          loadingLabel={tt("loading")}
+        >
           <RequeuePanel
             onRefresh={() => state.refreshRequeue()}
             onRequeue={(params) => state.replayRenamesSince(params)}
@@ -260,7 +282,11 @@ export function App() {
           />
         </LazyTabShell>
 
-        <LazyTabShell active={state.tab === "daemon"} loaded={daemonPanelLoaded} loadingLabel={tt("loading")}>
+        <LazyTabShell
+          active={state.tab === "daemon"}
+          loaded={daemonPanelLoaded}
+          loadingLabel={tt("loading")}
+        >
           <DaemonPanel
             actioning={state.daemonActioning}
             daemon={state.daemon}

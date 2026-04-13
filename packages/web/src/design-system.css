@@ -1,6 +1,7 @@
 :root {
-  --font-ui: "jf-openhuninn-2.0", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    "Noto Sans", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-ui:
+    "jf-openhuninn-2.0", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", sans-serif;
   --font-display: var(--font-ui);
   --font-mono: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
@@ -202,7 +203,11 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(circle at top, color-mix(in srgb, var(--color-accent) 4%, transparent), transparent 38%),
+    radial-gradient(
+      circle at top,
+      color-mix(in srgb, var(--color-accent) 4%, transparent),
+      transparent 38%
+    ),
     var(--color-bg-page);
   color: var(--color-text-primary);
 }
@@ -576,7 +581,11 @@ pre.settings-json {
 
 #sidebar {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-bg-muted) 82%, var(--color-bg-surface) 18%), transparent),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-bg-muted) 82%, var(--color-bg-surface) 18%),
+      transparent
+    ),
     var(--color-bg-page);
   color: var(--color-text-primary);
   border-right: 1px solid var(--color-border-soft);
@@ -622,7 +631,10 @@ pre.settings-json {
   place-items: center;
   font-size: 1rem;
   line-height: 1;
-  transition: transform var(--transition-slower), opacity var(--transition-base), color var(--transition-base);
+  transition:
+    transform var(--transition-slower),
+    opacity var(--transition-base),
+    color var(--transition-base);
 }
 
 .theme-toggle[data-theme-mode="system"] .theme-toggle-glyph {
@@ -723,7 +735,8 @@ pre.settings-json {
 
 .project-item.active {
   border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
-  background: linear-gradient(
+  background:
+    linear-gradient(
       180deg,
       color-mix(in srgb, var(--color-accent-soft) 78%, var(--color-bg-surface) 22%),
       color-mix(in srgb, var(--color-bg-surface) 84%, var(--color-accent-soft) 16%)
@@ -1380,12 +1393,11 @@ pre.settings-json {
 .ops-state-card[data-tone="success"],
 .ops-reason-card[data-tone="success"] {
   border-color: color-mix(in srgb, var(--color-success) 18%, var(--color-border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-success) 4%, var(--color-bg-surface) 96%),
-      color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-success) 4%, var(--color-bg-surface) 96%),
+    color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
+  );
 }
 
 .ops-runtime-inline-item.warning,
@@ -1394,24 +1406,22 @@ pre.settings-json {
 .ops-state-card[data-tone="warning"],
 .ops-reason-card[data-tone="warning"] {
   border-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-warning) 5%, var(--color-bg-surface) 95%),
-      color-mix(in srgb, var(--color-bg-muted) 14%, var(--color-bg-surface) 86%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-warning) 5%, var(--color-bg-surface) 95%),
+    color-mix(in srgb, var(--color-bg-muted) 14%, var(--color-bg-surface) 86%)
+  );
 }
 
 .ops-runtime-inline-item.manual,
 .ops-state-card[data-tone="manual"],
 .ops-reason-card[data-tone="manual"] {
   border-color: color-mix(in srgb, var(--color-note) 18%, var(--color-border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-note) 4%, var(--color-bg-surface) 96%),
-      color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-note) 4%, var(--color-bg-surface) 96%),
+    color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
+  );
 }
 
 .ops-action-button-row,
@@ -1453,32 +1463,29 @@ pre.settings-json {
 
 .settings-connectivity-card.success {
   border-color: color-mix(in srgb, var(--color-success) 18%, var(--color-border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-success) 4%, var(--color-bg-surface) 96%),
-      color-mix(in srgb, var(--color-bg-muted) 10%, var(--color-bg-surface) 90%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-success) 4%, var(--color-bg-surface) 96%),
+    color-mix(in srgb, var(--color-bg-muted) 10%, var(--color-bg-surface) 90%)
+  );
 }
 
 .settings-connectivity-card.danger {
   border-color: color-mix(in srgb, var(--color-danger) 18%, var(--color-border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-danger) 4%, var(--color-bg-surface) 96%),
-      color-mix(in srgb, var(--color-bg-muted) 10%, var(--color-bg-surface) 90%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-danger) 4%, var(--color-bg-surface) 96%),
+    color-mix(in srgb, var(--color-bg-muted) 10%, var(--color-bg-surface) 90%)
+  );
 }
 
 .settings-connectivity-card.idle {
   border-color: color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-accent-soft) 20%, var(--color-bg-surface) 80%),
-      color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent-soft) 20%, var(--color-bg-surface) 80%),
+    color-mix(in srgb, var(--color-bg-muted) 12%, var(--color-bg-surface) 88%)
+  );
 }
 
 .settings-connectivity-stack {

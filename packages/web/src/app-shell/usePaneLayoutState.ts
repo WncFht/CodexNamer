@@ -27,19 +27,22 @@ function readStoredBoolean(key: string, fallback = false): boolean {
   return raw === null ? fallback : raw === "true";
 }
 
-export function usePaneLayoutState(params: {
-  tab: string;
-  selectedId?: string;
-}) {
+export function usePaneLayoutState(params: { tab: string; selectedId?: string }) {
   const workspaceDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
   const sessionDragRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
   const [sessionPaneCollapsed, setSessionPaneCollapsed] = React.useState(() =>
-    readStoredBoolean("csm:sessionPaneCollapsed", false)
+    readStoredBoolean("csm:sessionPaneCollapsed", false),
   );
-  const [workspacePaneWidth, setWorkspacePaneWidth] = React.useState(() => readStoredNumber("csm:workspacePaneWidth", 280));
-  const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() => readStoredNumber("csm:sessionPaneWidth", 390));
+  const [workspacePaneWidth, setWorkspacePaneWidth] = React.useState(() =>
+    readStoredNumber("csm:workspacePaneWidth", 280),
+  );
+  const [sessionPaneWidth, setSessionPaneWidth] = React.useState(() =>
+    readStoredNumber("csm:sessionPaneWidth", 390),
+  );
   const [sessionFocusMode, setSessionFocusMode] = React.useState(false);
-  const sessionPaneRestoreWidthRef = React.useRef(Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)));
+  const sessionPaneRestoreWidthRef = React.useRef(
+    Math.max(SESSION_PANE_RESTORE_WIDTH, readStoredNumber("csm:sessionPaneWidth", 390)),
+  );
 
   React.useEffect(() => {
     window.localStorage.setItem("csm:sessionPaneCollapsed", String(sessionPaneCollapsed));
@@ -73,10 +76,15 @@ export function usePaneLayoutState(params: {
       }
       if (sessionDragRef.current) {
         const delta = event.clientX - sessionDragRef.current.startX;
-        const nextWidth = Math.max(220, Math.min(SESSION_PANE_MAX_WIDTH, sessionDragRef.current.startWidth + delta));
+        const nextWidth = Math.max(
+          220,
+          Math.min(SESSION_PANE_MAX_WIDTH, sessionDragRef.current.startWidth + delta),
+        );
         if (nextWidth <= SESSION_PANE_AUTO_COLLAPSE_WIDTH) {
           setSessionPaneCollapsed(true);
-          setSessionPaneWidth(Math.max(sessionPaneRestoreWidthRef.current, SESSION_PANE_RESTORE_WIDTH));
+          setSessionPaneWidth(
+            Math.max(sessionPaneRestoreWidthRef.current, SESSION_PANE_RESTORE_WIDTH),
+          );
         } else {
           setSessionPaneCollapsed(false);
           setSessionPaneWidth(Math.max(SESSION_PANE_MIN_WIDTH, nextWidth));
@@ -144,7 +152,7 @@ export function usePaneLayoutState(params: {
     event.preventDefault();
     workspaceDragRef.current = {
       startX: event.clientX,
-      startWidth: workspacePaneWidth
+      startWidth: workspacePaneWidth,
     };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
@@ -155,7 +163,7 @@ export function usePaneLayoutState(params: {
     setSessionPaneCollapsed(false);
     sessionDragRef.current = {
       startX: event.clientX,
-      startWidth: sessionPaneWidth
+      startWidth: sessionPaneWidth,
     };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
@@ -165,7 +173,9 @@ export function usePaneLayoutState(params: {
     setSessionPaneCollapsed((previous) => {
       const nextCollapsed = !previous;
       if (!nextCollapsed) {
-        setSessionPaneWidth(Math.max(sessionPaneRestoreWidthRef.current, SESSION_PANE_RESTORE_WIDTH));
+        setSessionPaneWidth(
+          Math.max(sessionPaneRestoreWidthRef.current, SESSION_PANE_RESTORE_WIDTH),
+        );
       }
       return nextCollapsed;
     });
@@ -184,6 +194,6 @@ export function usePaneLayoutState(params: {
     startWorkspaceResize,
     startSessionResize,
     toggleSessionPane,
-    handleSessionPaneWidthChange: adjustSessionPaneWidth
+    handleSessionPaneWidthChange: adjustSessionPaneWidth,
   };
 }

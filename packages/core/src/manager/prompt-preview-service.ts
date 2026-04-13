@@ -6,7 +6,7 @@ import type { ManagerServiceContext } from "./shared.js";
 
 export async function buildPromptPreview(
   context: ManagerServiceContext,
-  options?: { threadId?: string; userConfig?: ConfigDocument }
+  options?: { threadId?: string; userConfig?: ConfigDocument },
 ): Promise<PromptPreview> {
   const previewConfig = context.resolvePreviewConfig(options?.userConfig);
   let session;
@@ -18,7 +18,7 @@ export async function buildPromptPreview(
     const syntheticSession = context.buildSyntheticPromptSession(previewConfig);
     session = {
       ...syntheticSession,
-      renameContext: buildRenameContext(syntheticSession, previewConfig)
+      renameContext: buildRenameContext(syntheticSession, previewConfig),
     };
   }
 
@@ -26,6 +26,6 @@ export async function buildPromptPreview(
     threadId: session.threadId,
     synthetic: !options?.threadId,
     prompt: buildRenamePrompt(session, previewConfig),
-    renameContext: session.renameContext ?? buildRenameContext(session, previewConfig)
+    renameContext: session.renameContext ?? buildRenameContext(session, previewConfig),
   };
 }

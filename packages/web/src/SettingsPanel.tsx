@@ -1,17 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { parseCodexProvider, testProvider } from "./api.js";
+import { usePromptPreviewController } from "./features/settings/hooks/usePromptPreviewController.js";
+import { AiProviderSection } from "./features/settings/sections/AiProviderSection.js";
+import { NamingSection } from "./features/settings/sections/NamingSection.js";
+import { OverviewSection } from "./features/settings/sections/OverviewSection.js";
+import { RuntimeSection } from "./features/settings/sections/RuntimeSection.js";
+import { SchedulerSection } from "./features/settings/sections/SchedulerSection.js";
+import type {
+  InlineText,
+  SettingsSectionId,
+  TextTools,
+  Translate,
+} from "./features/settings/shared.js";
+import { SettingsNav, SettingsSummaryMetric } from "./features/settings/shared.js";
 import { formatUiNumber, normalizeUiLanguage, t } from "./i18n.js";
 import {
   deriveRuntimeDisplay,
   runtimeExecutionLabel,
-  runtimeProgressExplanation
+  runtimeProgressExplanation,
 } from "./runtime-display.js";
 import {
   encodeDraft,
   encodedConfigKey,
   updateSelectedProfile,
-  useSettingsDraft
+  useSettingsDraft,
 } from "./settings-model.js";
 import type {
   ConfigDocument,
@@ -20,23 +33,9 @@ import type {
   OverviewResponse,
   PromptPreviewResponse,
   ProviderResponse,
-  ProviderTestResponse
+  ProviderTestResponse,
 } from "./types.js";
 import { AppViewTransition } from "./view-transitions.js";
-import { usePromptPreviewController } from "./features/settings/hooks/usePromptPreviewController.js";
-import { AiProviderSection } from "./features/settings/sections/AiProviderSection.js";
-import { NamingSection } from "./features/settings/sections/NamingSection.js";
-import { OverviewSection } from "./features/settings/sections/OverviewSection.js";
-import { RuntimeSection } from "./features/settings/sections/RuntimeSection.js";
-import { SchedulerSection } from "./features/settings/sections/SchedulerSection.js";
-import {
-  SettingsNav,
-  SettingsSummaryMetric,
-  type InlineText,
-  type SettingsSectionId,
-  type TextTools,
-  type Translate
-} from "./features/settings/shared.js";
 
 export function SettingsPanel(props: {
   configView: ConfigView | null;
@@ -52,12 +51,14 @@ export function SettingsPanel(props: {
   onReload: () => void | Promise<void>;
   onRefreshPromptPreview: (
     userConfig?: ConfigDocument,
-    options?: { urgent?: boolean }
+    options?: { urgent?: boolean },
   ) => void | Promise<void>;
   onOpenRequeue: () => void;
   onSave: (patch: ConfigDocument) => void | Promise<void>;
 }) {
-  const { draft, dirty, setDirty, draftRef, updateDraftState, updateDraftField } = useSettingsDraft(props.configView);
+  const { draft, dirty, setDirty, draftRef, updateDraftState, updateDraftField } = useSettingsDraft(
+    props.configView,
+  );
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("naming");
   const [providerTesting, setProviderTesting] = useState(false);
   const [providerTestResult, setProviderTestResult] = useState<ProviderTestResponse | null>(null);
@@ -66,11 +67,14 @@ export function SettingsPanel(props: {
   const inline: InlineText = (zh, en) => (uiLanguage === "zh-CN" ? zh : en);
   const runtimeDisplay = deriveRuntimeDisplay(props.overview, props.daemon);
   const previewDraft = useMemo(() => (draft ? encodeDraft(draft) : null), [draft]);
-  const previewDraftKey = useMemo(() => (previewDraft ? encodedConfigKey(previewDraft) : ""), [previewDraft]);
+  const previewDraftKey = useMemo(
+    () => (previewDraft ? encodedConfigKey(previewDraft) : ""),
+    [previewDraft],
+  );
   const text = {
     tt,
     inline,
-    uiLanguage
+    uiLanguage,
   } satisfies TextTools;
 
   useEffect(() => {
@@ -83,7 +87,7 @@ export function SettingsPanel(props: {
     selectedThreadId: props.selectedThreadId,
     dirty,
     hasPromptPreview: Boolean(props.promptPreview),
-    onRefreshPromptPreview: props.onRefreshPromptPreview
+    onRefreshPromptPreview: props.onRefreshPromptPreview,
   });
 
   if (!props.configView || !draft) {
@@ -116,7 +120,7 @@ export function SettingsPanel(props: {
             onOpenRequeue={props.onOpenRequeue}
             onRefreshPromptPreview={async (_userConfig, options) => {
               await promptPreviewController.refreshPreview({
-                urgent: options?.urgent
+                urgent: options?.urgent,
               });
             }}
             promptPreview={props.promptPreview}
@@ -144,13 +148,17 @@ export function SettingsPanel(props: {
                 ...current,
                 aiProviderSource: "manual",
                 aiBackend: parsed.profile.requestType ?? current.aiBackend,
-                providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-                  requestType: parsed.profile.requestType,
-                  providerRef: parsed.profile.providerRef,
-                  baseUrl: parsed.profile.baseUrl,
-                  model: parsed.profile.model,
-                  apiKey: parsed.profile.apiKey
-                })
+                providerProfiles: updateSelectedProfile(
+                  current.providerProfiles,
+                  current.selectedProfileId,
+                  {
+                    requestType: parsed.profile.requestType,
+                    providerRef: parsed.profile.providerRef,
+                    baseUrl: parsed.profile.baseUrl,
+                    model: parsed.profile.model,
+                    apiKey: parsed.profile.apiKey,
+                  },
+                ),
               }));
             }}
             onTestProvider={async () => {
@@ -165,7 +173,9 @@ export function SettingsPanel(props: {
           />
         );
       case "scheduler":
-        return <SchedulerSection draft={loadedDraft} text={text} updateDraftField={updateDraftField} />;
+        return (
+          <SchedulerSection draft={loadedDraft} text={text} updateDraftField={updateDraftField} />
+        );
       case "runtime":
         return <RuntimeSection configView={configView} providers={props.providers} text={text} />;
       case "overview":
@@ -191,14 +201,22 @@ export function SettingsPanel(props: {
           <h2>{inline("命名与运行设置", "Naming and runtime settings")}</h2>
           <p>
             {inline(
-              dirty ? "当前有未保存修改。保存后再按需验证 Prompt。" : "调整命名规则、AI 提供方和后台阈值。",
-              dirty ? "You have unsaved edits. Save first, then verify the prompt when needed." : "Adjust naming rules, AI providers, and runtime thresholds."
+              dirty
+                ? "当前有未保存修改。保存后再按需验证 Prompt。"
+                : "调整命名规则、AI 提供方和后台阈值。",
+              dirty
+                ? "You have unsaved edits. Save first, then verify the prompt when needed."
+                : "Adjust naming rules, AI providers, and runtime thresholds.",
             )}
           </p>
         </div>
 
         <div className="settings-header-actions">
-          {dirty ? <span className="panel-note settings-dirty-note">{inline("有未保存修改", "Unsaved changes")}</span> : null}
+          {dirty ? (
+            <span className="panel-note settings-dirty-note">
+              {inline("有未保存修改", "Unsaved changes")}
+            </span>
+          ) : null}
           <button
             className="btn-refresh"
             onClick={() => {
@@ -209,7 +227,12 @@ export function SettingsPanel(props: {
           >
             {tt("reload")}
           </button>
-          <button className="btn-sm primary" disabled={!dirty || props.saving} onClick={() => void handleSave()} type="button">
+          <button
+            className="btn-sm primary"
+            disabled={!dirty || props.saving}
+            onClick={() => void handleSave()}
+            type="button"
+          >
             {props.saving ? tt("savingSettings") : tt("saveSettings")}
           </button>
         </div>
@@ -222,7 +245,7 @@ export function SettingsPanel(props: {
             <SettingsSummaryMetric
               detail={inline(
                 `${formatUiNumber(props.previewSuggestCount, uiLanguage)} 个 suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} 个 apply`,
-                `${formatUiNumber(props.previewSuggestCount, uiLanguage)} suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} apply`
+                `${formatUiNumber(props.previewSuggestCount, uiLanguage)} suggest / ${formatUiNumber(props.previewApplyCount, uiLanguage)} apply`,
               )}
               label={tt("dirtyQueue")}
               value={formatUiNumber(props.overview?.sessions.dirty, uiLanguage)}
@@ -230,7 +253,7 @@ export function SettingsPanel(props: {
             <SettingsSummaryMetric
               detail={inline(
                 `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} 个自动应用`,
-                `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} auto applied`
+                `${formatUiNumber(props.overview?.renameHistory.autoApplied, uiLanguage)} auto applied`,
               )}
               label={tt("aiApplied")}
               value={formatUiNumber(props.overview?.renameHistory.aiApplied, uiLanguage)}
@@ -238,7 +261,7 @@ export function SettingsPanel(props: {
             <SettingsSummaryMetric
               detail={inline(
                 `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} 个正式标题参与统计`,
-                `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} official titles in sample`
+                `${formatUiNumber(props.overview?.sessions.named, uiLanguage)} official titles in sample`,
               )}
               label={inline("平均标题字数", "Average title length")}
               value={formatUiNumber(props.overview?.workload.averageTitleLength, uiLanguage)}

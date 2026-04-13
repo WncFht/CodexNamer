@@ -14,7 +14,7 @@ export class ApiEventLog {
       cursor: ++this.cursor,
       type,
       at: new Date().toISOString(),
-      payload
+      payload,
     };
     this.events.push(event);
     if (this.events.length > this.capacity) {
@@ -31,7 +31,7 @@ export class ApiEventLog {
     const items = this.events.filter((event) => event.cursor > cursor).slice(0, boundedLimit);
     return {
       items,
-      nextCursor: items.at(-1)?.cursor ?? this.cursor
+      nextCursor: items.at(-1)?.cursor ?? this.cursor,
     };
   }
 }

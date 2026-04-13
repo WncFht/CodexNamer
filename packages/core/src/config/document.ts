@@ -1,5 +1,6 @@
+import type { ConfigDocument, EffectiveConfig } from "@codexnamer/shared";
+import { REDACTED_SECRET } from "@codexnamer/shared";
 import * as TOML from "@iarna/toml";
-import { REDACTED_SECRET, type ConfigDocument, type EffectiveConfig } from "@codexnamer/shared";
 
 import { ensureTrailingNewline } from "../util.js";
 
@@ -33,7 +34,9 @@ function getNumber(record: Record<string, unknown>, ...keys: string[]): number |
   return undefined;
 }
 
-function normalizeProviderSource(value: string | undefined): EffectiveConfig["ai"]["providerSource"] | undefined {
+function normalizeProviderSource(
+  value: string | undefined,
+): EffectiveConfig["ai"]["providerSource"] | undefined {
   if (!value) {
     return undefined;
   }
@@ -47,7 +50,7 @@ function normalizeProviderSource(value: string | undefined): EffectiveConfig["ai
 }
 
 function normalizeWireApi(
-  value: string | undefined
+  value: string | undefined,
 ):
   | EffectiveConfig["providerProfiles"][number]["requestType"]
   | EffectiveConfig["inheritedCodex"]["providers"][string]["wireApi"]
@@ -64,7 +67,9 @@ function normalizeWireApi(
   return undefined;
 }
 
-function normalizeAiBackend(value: string | undefined): EffectiveConfig["ai"]["backend"] | undefined {
+function normalizeAiBackend(
+  value: string | undefined,
+): EffectiveConfig["ai"]["backend"] | undefined {
   if (!value) {
     return undefined;
   }
@@ -85,14 +90,22 @@ function normalizeNamingTags(value: unknown): EffectiveConfig["naming"]["tags"] 
       id: getString(record, "id") ?? "",
       label: getString(record, "label"),
       description: getString(record, "description"),
-      promptHint: getString(record, "prompt_hint", "promptHint")
+      promptHint: getString(record, "prompt_hint", "promptHint"),
     }))
     .filter((tag) => tag.id.trim().length > 0);
 
   return tags.length > 0 ? tags : undefined;
 }
 
-const NAMING_COMPONENTS = ["timestamp", "workspace", "project", "tag", "kind", "scope", "summary"] as const;
+const NAMING_COMPONENTS = [
+  "timestamp",
+  "workspace",
+  "project",
+  "tag",
+  "kind",
+  "scope",
+  "summary",
+] as const;
 
 function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["builder"] | undefined {
   if (!Array.isArray(value)) {
@@ -108,13 +121,15 @@ function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["buil
         return separator
           ? {
               type: "separator" as const,
-              value: separator
+              value: separator,
             }
           : undefined;
       }
 
       if (type === "component") {
-        const component = getString(record, "component") as (typeof NAMING_COMPONENTS)[number] | undefined;
+        const component = getString(record, "component") as
+          | (typeof NAMING_COMPONENTS)[number]
+          | undefined;
         if (!component || !NAMING_COMPONENTS.includes(component)) {
           return undefined;
         }
@@ -122,23 +137,28 @@ function normalizeNamingBuilder(value: unknown): EffectiveConfig["naming"]["buil
         return {
           type: "component" as const,
           component,
-          ...(component === "timestamp" && format ? { format } : {})
+          ...(component === "timestamp" && format ? { format } : {}),
         };
       }
 
       return undefined;
     })
-    .filter((item): item is NonNullable<EffectiveConfig["naming"]["builder"]>[number] => Boolean(item));
+    .filter((item): item is NonNullable<EffectiveConfig["naming"]["builder"]>[number] =>
+      Boolean(item),
+    );
 
   return builder.length > 0 ? builder : undefined;
 }
 
-function normalizeProviderProfileRecords(records: Record<string, unknown>): EffectiveConfig["providerProfiles"] {
+function normalizeProviderProfileRecords(
+  records: Record<string, unknown>,
+): EffectiveConfig["providerProfiles"] {
   return Object.entries(records).map(([profileId, value]) => {
     const record = value as Record<string, unknown>;
     return {
       profileId,
-      requestType: normalizeWireApi(getString(record, "request_type", "requestType")) ?? "responses",
+      requestType:
+        normalizeWireApi(getString(record, "request_type", "requestType")) ?? "responses",
       displayName: getString(record, "display_name", "displayName") ?? profileId,
       providerRef: getString(record, "provider_ref", "providerRef"),
       baseUrl: getString(record, "base_url", "baseUrl"),
@@ -147,7 +167,7 @@ function normalizeProviderProfileRecords(records: Record<string, unknown>): Effe
       apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
       headers: (record.headers as Record<string, string> | undefined) ?? {},
       enabled: getBoolean(record, "enabled") ?? true,
-      isDefault: getBoolean(record, "is_default", "isDefault") ?? profileId === "default"
+      isDefault: getBoolean(record, "is_default", "isDefault") ?? profileId === "default",
     };
   });
 }
@@ -162,12 +182,17 @@ export function normalizeConfigDocumentInput(raw: Record<string, unknown>): Conf
 
   const providerProfiles = Array.isArray(raw.providerProfiles)
     ? raw.providerProfiles
-        .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+        .filter((value): value is Record<string, unknown> =>
+          Boolean(value && typeof value === "object"),
+        )
         .map((record) => ({
           profileId: getString(record, "profile_id", "profileId") ?? "default",
-          requestType: normalizeWireApi(getString(record, "request_type", "requestType")) ?? "responses",
+          requestType:
+            normalizeWireApi(getString(record, "request_type", "requestType")) ?? "responses",
           displayName:
-            getString(record, "display_name", "displayName") ?? getString(record, "profile_id", "profileId") ?? "default",
+            getString(record, "display_name", "displayName") ??
+            getString(record, "profile_id", "profileId") ??
+            "default",
           providerRef: getString(record, "provider_ref", "providerRef"),
           baseUrl: getString(record, "base_url", "baseUrl"),
           model: getString(record, "model"),
@@ -175,7 +200,7 @@ export function normalizeConfigDocumentInput(raw: Record<string, unknown>): Conf
           apiKeyRef: getString(record, "api_key_ref", "apiKeyRef"),
           headers: (record.headers as Record<string, string> | undefined) ?? {},
           enabled: getBoolean(record, "enabled") ?? true,
-          isDefault: getBoolean(record, "is_default", "isDefault") ?? false
+          isDefault: getBoolean(record, "is_default", "isDefault") ?? false,
         }))
     : normalizeProviderProfileRecords((raw.provider ?? {}) as Record<string, unknown>);
 
@@ -183,17 +208,25 @@ export function normalizeConfigDocumentInput(raw: Record<string, unknown>): Conf
     general: {
       codexHome: getString(general, "codex_home", "codexHome"),
       stateDir: getString(general, "state_dir", "stateDir"),
-      uiLanguage: getString(general, "ui_language", "uiLanguage") as EffectiveConfig["general"]["uiLanguage"] | undefined
+      uiLanguage: getString(general, "ui_language", "uiLanguage") as
+        | EffectiveConfig["general"]["uiLanguage"]
+        | undefined,
     },
     rename: {
-      autoApply: getString(rename, "auto_apply", "autoApply") as EffectiveConfig["rename"]["autoApply"] | undefined
+      autoApply: getString(rename, "auto_apply", "autoApply") as
+        | EffectiveConfig["rename"]["autoApply"]
+        | undefined,
     },
     watch: {
       scanIntervalSeconds: getNumber(watch, "scan_interval_seconds", "scanIntervalSeconds"),
       candidateIdleSeconds: getNumber(watch, "candidate_idle_seconds", "candidateIdleSeconds"),
       finalizeIdleSeconds: getNumber(watch, "finalize_idle_seconds", "finalizeIdleSeconds"),
       renameCooldownSeconds: getNumber(watch, "rename_cooldown_seconds", "renameCooldownSeconds"),
-      maxAutoRenamesPerSession: getNumber(watch, "max_auto_renames_per_session", "maxAutoRenamesPerSession")
+      maxAutoRenamesPerSession: getNumber(
+        watch,
+        "max_auto_renames_per_session",
+        "maxAutoRenamesPerSession",
+      ),
     },
     naming: {
       preset: getString(naming, "preset"),
@@ -209,7 +242,7 @@ export function normalizeConfigDocumentInput(raw: Record<string, unknown>): Conf
         | undefined,
       builder: normalizeNamingBuilder(naming.builder),
       tags: normalizeNamingTags(naming.tags),
-      customPrompt: getString(naming, "custom_prompt", "customPrompt")
+      customPrompt: getString(naming, "custom_prompt", "customPrompt"),
     },
     ai: {
       backend: normalizeAiBackend(getString(ai, "backend")),
@@ -217,24 +250,28 @@ export function normalizeConfigDocumentInput(raw: Record<string, unknown>): Conf
       profile: getString(ai, "profile"),
       timeoutSeconds: getNumber(ai, "timeout_seconds", "timeoutSeconds"),
       temperature: getNumber(ai, "temperature"),
-      maxConcurrency: getNumber(ai, "max_concurrency", "maxConcurrency")
+      maxConcurrency: getNumber(ai, "max_concurrency", "maxConcurrency"),
     },
     providerProfiles: providerProfiles.length > 0 ? providerProfiles : undefined,
     maintenance: {
-      suggestCompactIndexAboveMb: getNumber(maintenance, "suggest_compact_index_above_mb", "suggestCompactIndexAboveMb"),
+      suggestCompactIndexAboveMb: getNumber(
+        maintenance,
+        "suggest_compact_index_above_mb",
+        "suggestCompactIndexAboveMb",
+      ),
       suggestCompactIndexAboveLines: getNumber(
         maintenance,
         "suggest_compact_index_above_lines",
-        "suggestCompactIndexAboveLines"
+        "suggestCompactIndexAboveLines",
       ),
-      backupBeforeCompact: getBoolean(maintenance, "backup_before_compact", "backupBeforeCompact")
-    }
+      backupBeforeCompact: getBoolean(maintenance, "backup_before_compact", "backupBeforeCompact"),
+    },
   };
 }
 
 function mergeProviderProfiles(
   baseProfiles: ConfigDocument["providerProfiles"] | undefined,
-  patchProfiles: NonNullable<ConfigDocument["providerProfiles"]>
+  patchProfiles: NonNullable<ConfigDocument["providerProfiles"]>,
 ): ConfigDocument["providerProfiles"] {
   const existingById = new Map((baseProfiles ?? []).map((profile) => [profile.profileId, profile]));
 
@@ -243,14 +280,17 @@ function mergeProviderProfiles(
     return {
       ...existing,
       ...profile,
-      apiKey: profile.apiKey === REDACTED_SECRET || profile.apiKey === undefined ? existing?.apiKey : profile.apiKey || undefined,
+      apiKey:
+        profile.apiKey === REDACTED_SECRET || profile.apiKey === undefined
+          ? existing?.apiKey
+          : profile.apiKey || undefined,
       apiKeyRef:
         profile.apiKeyRef === REDACTED_SECRET || profile.apiKeyRef === undefined
           ? existing?.apiKeyRef
           : profile.apiKeyRef || undefined,
       headers: profile.headers ?? existing?.headers ?? {},
       enabled: profile.enabled ?? existing?.enabled ?? true,
-      isDefault: profile.isDefault ?? existing?.isDefault ?? false
+      isDefault: profile.isDefault ?? existing?.isDefault ?? false,
     };
   });
 }
@@ -322,7 +362,7 @@ export function serializeConfigDocument(document: ConfigDocument): string {
       api_key_ref: profile.apiKeyRef,
       headers: profile.headers,
       enabled: profile.enabled,
-      is_default: profile.isDefault
+      is_default: profile.isDefault,
     });
     if (encoded) {
       providerTable[profile.profileId] = encoded;
@@ -333,17 +373,17 @@ export function serializeConfigDocument(document: ConfigDocument): string {
     general: stripEmptyRecord({
       codex_home: document.general?.codexHome,
       state_dir: document.general?.stateDir,
-      ui_language: document.general?.uiLanguage
+      ui_language: document.general?.uiLanguage,
     }),
     rename: stripEmptyRecord({
-      auto_apply: document.rename?.autoApply
+      auto_apply: document.rename?.autoApply,
     }),
     watch: stripEmptyRecord({
       scan_interval_seconds: document.watch?.scanIntervalSeconds,
       candidate_idle_seconds: document.watch?.candidateIdleSeconds,
       finalize_idle_seconds: document.watch?.finalizeIdleSeconds,
       rename_cooldown_seconds: document.watch?.renameCooldownSeconds,
-      max_auto_renames_per_session: document.watch?.maxAutoRenamesPerSession
+      max_auto_renames_per_session: document.watch?.maxAutoRenamesPerSession,
     }),
     naming: stripEmptyRecord({
       preset: document.naming?.preset,
@@ -357,23 +397,23 @@ export function serializeConfigDocument(document: ConfigDocument): string {
         item.type === "separator"
           ? stripEmptyRecord({
               type: item.type,
-              value: item.value
+              value: item.value,
             })
           : stripEmptyRecord({
               type: item.type,
               component: item.component,
-              format: item.format
-            })
+              format: item.format,
+            }),
       ),
       tags: document.naming?.tags?.map((tag) =>
         stripEmptyRecord({
           id: tag.id,
           label: tag.label,
           description: tag.description,
-          prompt_hint: tag.promptHint
-        })
+          prompt_hint: tag.promptHint,
+        }),
       ),
-      custom_prompt: document.naming?.customPrompt
+      custom_prompt: document.naming?.customPrompt,
     }),
     ai: stripEmptyRecord({
       backend: document.ai?.backend,
@@ -381,14 +421,14 @@ export function serializeConfigDocument(document: ConfigDocument): string {
       profile: document.ai?.profile,
       timeout_seconds: document.ai?.timeoutSeconds,
       temperature: document.ai?.temperature,
-      max_concurrency: document.ai?.maxConcurrency
+      max_concurrency: document.ai?.maxConcurrency,
     }),
     maintenance: stripEmptyRecord({
       suggest_compact_index_above_mb: document.maintenance?.suggestCompactIndexAboveMb,
       suggest_compact_index_above_lines: document.maintenance?.suggestCompactIndexAboveLines,
-      backup_before_compact: document.maintenance?.backupBeforeCompact
+      backup_before_compact: document.maintenance?.backupBeforeCompact,
     }),
-    provider: Object.keys(providerTable).length > 0 ? providerTable : undefined
+    provider: Object.keys(providerTable).length > 0 ? providerTable : undefined,
   });
 
   return ensureTrailingNewline(TOML.stringify((payload ?? {}) as TOML.JsonMap));
@@ -399,7 +439,7 @@ export function redactConfigDocument(document: ConfigDocument): ConfigDocument {
     ...document,
     providerProfiles: document.providerProfiles?.map((profile) => ({
       ...profile,
-      apiKey: profile.apiKey ? REDACTED_SECRET : undefined
-    }))
+      apiKey: profile.apiKey ? REDACTED_SECRET : undefined,
+    })),
   };
 }

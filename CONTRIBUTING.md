@@ -22,6 +22,16 @@ Recommended validation command:
 npm run validate:full
 ```
 
+Primary code-quality commands:
+
+```bash
+npm run lint
+npm run lint:fix
+npm run format
+```
+
+`npm run lint` / `npm run lint:fix` / `npm run format` are powered by Biome.
+
 Useful local entry points while developing:
 
 ```bash
@@ -94,6 +104,7 @@ GitHub pull requests are welcome. Internally the repo may also be maintained wit
 
 - Prefer clear, boring code over clever abstractions.
 - Reuse the shared core/backend model instead of duplicating logic in Web/TUI/CLI.
+- Use Biome as the single lint / format entrypoint; do not reintroduce ESLint or Prettier-only flows.
 - Keep local paths and runtime assumptions explicit.
 - Avoid silently changing writeback semantics.
 

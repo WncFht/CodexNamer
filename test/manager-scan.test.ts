@@ -17,17 +17,21 @@ describe("manager scan coalescing", () => {
     const workspace = await createTempWorkspace();
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
     managers.push(manager);
 
-    let resolveScan: ((value: { scannedRollouts: number; updatedSessions: number }) => void) | undefined;
-    const deferredScan = new Promise<{ scannedRollouts: number; updatedSessions: number }>((resolve) => {
-      resolveScan = resolve;
-    });
-    const performScanSpy = vi.spyOn(manager as never, "performScan").mockReturnValue(
-      deferredScan as never
+    let resolveScan:
+      | ((value: { scannedRollouts: number; updatedSessions: number }) => void)
+      | undefined;
+    const deferredScan = new Promise<{ scannedRollouts: number; updatedSessions: number }>(
+      (resolve) => {
+        resolveScan = resolve;
+      },
     );
+    const performScanSpy = vi
+      .spyOn(manager as never, "performScan")
+      .mockReturnValue(deferredScan as never);
 
     const first = manager.scan();
     const second = manager.scan();
@@ -35,21 +39,21 @@ describe("manager scan coalescing", () => {
 
     resolveScan?.({
       scannedRollouts: 12,
-      updatedSessions: 3
+      updatedSessions: 3,
     });
 
     await expect(first).resolves.toEqual({
       scannedRollouts: 12,
-      updatedSessions: 3
+      updatedSessions: 3,
     });
     await expect(second).resolves.toEqual({
       scannedRollouts: 12,
-      updatedSessions: 3
+      updatedSessions: 3,
     });
 
     await expect(manager.scan()).resolves.toEqual({
       scannedRollouts: 12,
-      updatedSessions: 3
+      updatedSessions: 3,
     });
     expect(performScanSpy).toHaveBeenCalledTimes(1);
   });

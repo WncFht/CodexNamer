@@ -12,7 +12,14 @@ export type RenameContextStrategy =
   | "user-transcript-last-assistant"
   | "paired-user-turns";
 export type NamingCompositionMode = "structured" | "prompt-override";
-export type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
+export type NamingComponent =
+  | "timestamp"
+  | "workspace"
+  | "project"
+  | "tag"
+  | "kind"
+  | "scope"
+  | "summary";
 export type NamingTimestampPreset =
   | "%Y/%m/%d"
   | "%Y-%m-%d"
@@ -32,9 +39,22 @@ export type RenameContextSegmentSource =
 export type RenameSource = "heuristic" | "ai" | "hybrid" | "manual" | "batch" | "recovered";
 export type RenameHistoryKind = "auto" | "manual" | "batch" | "compact-rewrite";
 export type RenameStatus = "applied" | "skipped" | "failed" | "preview_only";
-export type SessionStatusEstimate = "discovered" | "active" | "candidate_ready" | "finalize_ready" | "applied" | "idle" | "archived_hint" | "missing";
+export type SessionStatusEstimate =
+  | "discovered"
+  | "active"
+  | "candidate_ready"
+  | "finalize_ready"
+  | "applied"
+  | "idle"
+  | "archived_hint"
+  | "missing";
 export type SessionTranscriptRole = "user" | "assistant" | "tool" | "system";
-export type SessionTranscriptKind = "message" | "tool_call" | "tool_output" | "reasoning" | "status";
+export type SessionTranscriptKind =
+  | "message"
+  | "tool_call"
+  | "tool_output"
+  | "reasoning"
+  | "status";
 
 export interface RenameContextSegment {
   role: "user" | "assistant";

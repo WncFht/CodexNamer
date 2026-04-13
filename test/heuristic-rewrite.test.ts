@@ -14,8 +14,8 @@ describe("heuristic names are treated as pending AI rewrite", () => {
         providerSource: "codex-config",
         profile: "default",
         timeoutSeconds: 45,
-        temperature: 0.2
-      }
+        temperature: 0.2,
+      },
     });
 
     try {
@@ -24,7 +24,7 @@ describe("heuristic names are treated as pending AI rewrite", () => {
         threadId,
         userMessage: "把旧 heuristic 命名改成 AI 正式命名",
         lastAgentMessage: "已经确认 heuristic 名字后续要重新交给 AI",
-        updatedAt: "2026-04-04T12:00:00.000Z"
+        updatedAt: "2026-04-04T12:00:00.000Z",
       });
       await manager.scan();
 
@@ -39,7 +39,7 @@ describe("heuristic names are treated as pending AI rewrite", () => {
         appliedAt: "2026-04-04T12:00:00.000Z",
         appliedRevision: rawDetail?.revision,
         autoApply: false,
-        operator: "test"
+        operator: "test",
       });
 
       const sessions = await manager.listSessions();

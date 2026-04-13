@@ -50,8 +50,21 @@ export type RenameContextStrategy =
   | "assistant-only-transcript"
   | "user-transcript-last-assistant"
   | "paired-user-turns";
-export type NamingComponent = "timestamp" | "workspace" | "project" | "tag" | "kind" | "scope" | "summary";
-export type NamingTimestampPreset = "%Y/%m/%d" | "%Y-%m-%d" | "%m/%d" | "%m-%d" | "%Y/%m/%d %H:%M" | "%H:%M";
+export type NamingComponent =
+  | "timestamp"
+  | "workspace"
+  | "project"
+  | "tag"
+  | "kind"
+  | "scope"
+  | "summary";
+export type NamingTimestampPreset =
+  | "%Y/%m/%d"
+  | "%Y-%m-%d"
+  | "%m/%d"
+  | "%m-%d"
+  | "%Y/%m/%d %H:%M"
+  | "%H:%M";
 export type NamingBuilderItem =
   | {
       type: "component";
@@ -69,13 +82,13 @@ export type DraftUpdateOptions = {
 
 export type DraftStateUpdater = (
   updater: (current: SettingsDraft) => SettingsDraft,
-  options?: DraftUpdateOptions
+  options?: DraftUpdateOptions,
 ) => void;
 
 export type DraftFieldUpdater = <K extends keyof SettingsDraft>(
   field: K,
   value: SettingsDraft[K],
-  options?: DraftUpdateOptions
+  options?: DraftUpdateOptions,
 ) => void;
 
 export type SettingsTagDraft = SettingsDraft["namingTags"][number];
@@ -84,7 +97,7 @@ export const DEFAULT_NAMING_BUILDER: NamingBuilderItem[] = [
   { type: "separator", value: " · " },
   { type: "component", component: "kind" },
   { type: "separator", value: " · " },
-  { type: "component", component: "summary" }
+  { type: "component", component: "summary" },
 ];
 export const DEFAULT_TIMESTAMP_PRESET: NamingTimestampPreset = "%Y-%m-%d";
 export const QUICK_SEPARATOR_OPTIONS = [
@@ -96,7 +109,7 @@ export const QUICK_SEPARATOR_OPTIONS = [
   { value: " · [", label: "· [" },
   { value: "] ", label: "]" },
   { value: " (", label: "(" },
-  { value: ") ", label: ")" }
+  { value: ") ", label: ")" },
 ] as const;
 export const TIMESTAMP_PRESET_OPTIONS: Array<{ value: NamingTimestampPreset; label: string }> = [
   { value: "%Y/%m/%d", label: "YYYY/MM/DD" },
@@ -104,7 +117,7 @@ export const TIMESTAMP_PRESET_OPTIONS: Array<{ value: NamingTimestampPreset; lab
   { value: "%m/%d", label: "MM/DD" },
   { value: "%m-%d", label: "MM-DD" },
   { value: "%Y/%m/%d %H:%M", label: "YYYY/MM/DD HH:mm" },
-  { value: "%H:%M", label: "HH:mm" }
+  { value: "%H:%M", label: "HH:mm" },
 ];
 const TAG_TONE_CLASSES = [
   "settings-tag-tone-0",
@@ -112,7 +125,7 @@ const TAG_TONE_CLASSES = [
   "settings-tag-tone-2",
   "settings-tag-tone-3",
   "settings-tag-tone-4",
-  "settings-tag-tone-5"
+  "settings-tag-tone-5",
 ] as const;
 
 export function asRecord(value: unknown): Record<string, unknown> {
@@ -137,24 +150,31 @@ function normalizeNamingBuilder(raw: unknown): NamingBuilderItem[] {
   }
 
   const builder = raw
-    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+    .filter((value): value is Record<string, unknown> =>
+      Boolean(value && typeof value === "object"),
+    )
     .map((record) => {
       if (record.type === "separator" && typeof record.value === "string") {
         return {
           type: "separator" as const,
-          value: record.value
+          value: record.value,
         };
       }
       if (record.type === "component" && typeof record.component === "string") {
         const component = record.component as NamingComponent;
-        if (!["timestamp", "workspace", "project", "tag", "kind", "scope", "summary"].includes(component)) {
+        if (
+          !["timestamp", "workspace", "project", "tag", "kind", "scope", "summary"].includes(
+            component,
+          )
+        ) {
           return undefined;
         }
-        const format = typeof record.format === "string" ? (record.format as NamingTimestampPreset) : undefined;
+        const format =
+          typeof record.format === "string" ? (record.format as NamingTimestampPreset) : undefined;
         return {
           type: "component" as const,
           component,
-          ...(component === "timestamp" ? { format: format ?? DEFAULT_TIMESTAMP_PRESET } : {})
+          ...(component === "timestamp" ? { format: format ?? DEFAULT_TIMESTAMP_PRESET } : {}),
         };
       }
       return undefined;
@@ -170,12 +190,14 @@ function normalizeNamingTags(raw: unknown): SettingsDraft["namingTags"] {
   }
 
   return raw
-    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+    .filter((value): value is Record<string, unknown> =>
+      Boolean(value && typeof value === "object"),
+    )
     .map((record) => ({
       id: asString(record.id),
       label: asString(record.label),
       description: asString(record.description),
-      promptHint: asString(record.promptHint || record.prompt_hint)
+      promptHint: asString(record.promptHint || record.prompt_hint),
     }))
     .filter((tag) => tag.id.trim().length > 0);
 }
@@ -197,7 +219,11 @@ function normalizeProfile(raw: unknown): ProviderProfile {
   const record = asRecord(raw);
   return {
     profileId: asString(record.profileId, "default"),
-    requestType: (asString(record.requestType || record.request_type, "responses") as ProviderProfile["requestType"]) ?? "responses",
+    requestType:
+      (asString(
+        record.requestType || record.request_type,
+        "responses",
+      ) as ProviderProfile["requestType"]) ?? "responses",
     displayName: asString(record.displayName || record.display_name),
     providerRef: asString(record.providerRef || record.provider_ref),
     baseUrl: asString(record.baseUrl || record.base_url),
@@ -206,7 +232,7 @@ function normalizeProfile(raw: unknown): ProviderProfile {
     apiKeyRef: asString(record.apiKeyRef || record.api_key_ref),
     headers: (record.headers as Record<string, string> | undefined) ?? {},
     enabled: asBoolean(record.enabled, true),
-    isDefault: asBoolean(record.isDefault || record.is_default, false)
+    isDefault: asBoolean(record.isDefault || record.is_default, false),
   };
 }
 
@@ -217,36 +243,61 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
   const watch = asRecord(effective.watch);
   const ai = asRecord(effective.ai);
   const maintenance = asRecord(effective.maintenance);
-  const providerProfilesRaw = Array.isArray(effective.providerProfiles) ? effective.providerProfiles : [];
+  const providerProfilesRaw = Array.isArray(effective.providerProfiles)
+    ? effective.providerProfiles
+    : [];
   const providerProfiles = providerProfilesRaw.map(normalizeProfile);
   const selectedProfileId = asString(
     ai.profile,
-    providerProfiles.find((item) => item.isDefault)?.profileId ?? providerProfiles[0]?.profileId ?? "default"
+    providerProfiles.find((item) => item.isDefault)?.profileId ??
+      providerProfiles[0]?.profileId ??
+      "default",
   );
 
   return {
     uiLanguage: asString(asRecord(effective.general).uiLanguage, "en-US") as "en-US" | "zh-CN",
     namingPreset: asString(naming.preset, "conventional"),
-    namingTemplate: asString(naming.template, "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"),
+    namingTemplate: asString(
+      naming.template,
+      "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
+    ),
     namingLanguage: asString(naming.language, "zh-CN"),
     namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
-    namingContextStrategy: asString(naming.contextStrategy || naming.context_strategy, "summary-signals"),
-    namingContextMaxChars: asNumberString(naming.contextMaxChars || naming.context_max_chars, "8000"),
+    namingContextStrategy: asString(
+      naming.contextStrategy || naming.context_strategy,
+      "summary-signals",
+    ),
+    namingContextMaxChars: asNumberString(
+      naming.contextMaxChars || naming.context_max_chars,
+      "8000",
+    ),
     namingCompositionMode: asString(
       naming.compositionMode || naming.composition_mode,
-      "structured"
+      "structured",
     ) as NamingCompositionMode,
     namingBuilder: normalizeNamingBuilder(naming.builder),
     namingTags: normalizeNamingTags(naming.tags),
     namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
-    scanIntervalSeconds: asNumberString(watch.scanIntervalSeconds || watch.scan_interval_seconds, "300"),
-    candidateIdleSeconds: asNumberString(watch.candidateIdleSeconds || watch.candidate_idle_seconds, "120"),
-    finalizeIdleSeconds: asNumberString(watch.finalizeIdleSeconds || watch.finalize_idle_seconds, "600"),
-    renameCooldownSeconds: asNumberString(watch.renameCooldownSeconds || watch.rename_cooldown_seconds, "900"),
+    scanIntervalSeconds: asNumberString(
+      watch.scanIntervalSeconds || watch.scan_interval_seconds,
+      "300",
+    ),
+    candidateIdleSeconds: asNumberString(
+      watch.candidateIdleSeconds || watch.candidate_idle_seconds,
+      "120",
+    ),
+    finalizeIdleSeconds: asNumberString(
+      watch.finalizeIdleSeconds || watch.finalize_idle_seconds,
+      "600",
+    ),
+    renameCooldownSeconds: asNumberString(
+      watch.renameCooldownSeconds || watch.rename_cooldown_seconds,
+      "900",
+    ),
     maxAutoRenamesPerSession: asNumberString(
       watch.maxAutoRenamesPerSession || watch.max_auto_renames_per_session,
-      "2"
+      "2",
     ),
     aiBackend: asString(ai.backend, "responses"),
     aiProviderSource: asString(ai.providerSource || ai.provider_source, "codex-config"),
@@ -256,18 +307,18 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
     aiMaxConcurrency: asNumberString(ai.maxConcurrency || ai.max_concurrency, "1"),
     maintenanceCompactMb: asNumberString(
       maintenance.suggestCompactIndexAboveMb || maintenance.suggest_compact_index_above_mb,
-      "5"
+      "5",
     ),
     maintenanceCompactLines: asNumberString(
       maintenance.suggestCompactIndexAboveLines || maintenance.suggest_compact_index_above_lines,
-      "20000"
+      "20000",
     ),
     maintenanceBackupBeforeCompact: asBoolean(
       maintenance.backupBeforeCompact || maintenance.backup_before_compact,
-      true
+      true,
     ),
     providerProfiles,
-    selectedProfileId
+    selectedProfileId,
   };
 }
 
@@ -309,47 +360,51 @@ export function isDraftDirty(draft: SettingsDraft, baseline: ConfigDocument): bo
 export function encodeDraft(draft: SettingsDraft): ConfigDocument {
   return {
     general: {
-      uiLanguage: draft.uiLanguage
+      uiLanguage: draft.uiLanguage,
     },
     rename: {
-      autoApply: draft.renameAutoApply as RenameAutoApply
+      autoApply: draft.renameAutoApply as RenameAutoApply,
     },
     watch: {
       scanIntervalSeconds: parseNumber(draft.scanIntervalSeconds),
       candidateIdleSeconds: parseNumber(draft.candidateIdleSeconds),
       finalizeIdleSeconds: parseNumber(draft.finalizeIdleSeconds),
       renameCooldownSeconds: parseNumber(draft.renameCooldownSeconds),
-      maxAutoRenamesPerSession: parseNumber(draft.maxAutoRenamesPerSession)
+      maxAutoRenamesPerSession: parseNumber(draft.maxAutoRenamesPerSession),
     },
     naming: {
       preset: stripEmptyString(draft.namingPreset),
       template: stripEmptyString(draft.namingTemplate),
       language: stripEmptyString(draft.namingLanguage),
       maxLength: parseNumber(draft.namingMaxLength),
-      contextStrategy: stripEmptyString(draft.namingContextStrategy) as RenameContextStrategy | undefined,
+      contextStrategy: stripEmptyString(draft.namingContextStrategy) as
+        | RenameContextStrategy
+        | undefined,
       contextMaxChars: parseNumber(draft.namingContextMaxChars),
       compositionMode: draft.namingCompositionMode,
       builder: draft.namingBuilder.map((item) =>
         item.type === "separator"
           ? {
               type: "separator" as const,
-              value: item.value
+              value: item.value,
             }
           : {
               type: "component" as const,
               component: item.component,
-              ...(item.component === "timestamp" ? { format: item.format ?? DEFAULT_TIMESTAMP_PRESET } : {})
-            }
+              ...(item.component === "timestamp"
+                ? { format: item.format ?? DEFAULT_TIMESTAMP_PRESET }
+                : {}),
+            },
       ),
       tags: draft.namingTags
         .map((tag) => ({
           id: tag.id.trim(),
           label: stripEmptyString(tag.label),
           description: stripEmptyString(tag.description),
-          promptHint: stripEmptyString(tag.promptHint)
+          promptHint: stripEmptyString(tag.promptHint),
         }))
         .filter((tag) => tag.id.length > 0),
-      customPrompt: stripEmptyString(draft.namingCustomPrompt)
+      customPrompt: stripEmptyString(draft.namingCustomPrompt),
     },
     ai: {
       backend: draft.aiBackend as AiBackend,
@@ -357,12 +412,12 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
       profile: stripEmptyString(draft.aiProfile),
       timeoutSeconds: parseNumber(draft.aiTimeoutSeconds),
       temperature: parseNumber(draft.aiTemperature),
-      maxConcurrency: parseNumber(draft.aiMaxConcurrency)
+      maxConcurrency: parseNumber(draft.aiMaxConcurrency),
     },
     maintenance: {
       suggestCompactIndexAboveMb: parseNumber(draft.maintenanceCompactMb),
       suggestCompactIndexAboveLines: parseNumber(draft.maintenanceCompactLines),
-      backupBeforeCompact: draft.maintenanceBackupBeforeCompact
+      backupBeforeCompact: draft.maintenanceBackupBeforeCompact,
     },
     providerProfiles: draft.providerProfiles.map((profile) => ({
       profileId: profile.profileId,
@@ -375,17 +430,19 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
       apiKeyRef: stripEmptyString(profile.apiKeyRef ?? ""),
       headers: profile.headers,
       enabled: profile.enabled,
-      isDefault: profile.isDefault
-    }))
+      isDefault: profile.isDefault,
+    })),
   };
 }
 
 export function updateSelectedProfile(
   profiles: ProviderProfile[],
   profileId: string,
-  patch: Partial<ProviderProfile>
+  patch: Partial<ProviderProfile>,
 ): ProviderProfile[] {
-  return profiles.map((profile) => (profile.profileId === profileId ? { ...profile, ...patch } : profile));
+  return profiles.map((profile) =>
+    profile.profileId === profileId ? { ...profile, ...patch } : profile,
+  );
 }
 
 export function blankTagDraft(): SettingsTagDraft {
@@ -393,7 +450,7 @@ export function blankTagDraft(): SettingsTagDraft {
     id: "",
     label: "",
     description: "",
-    promptHint: ""
+    promptHint: "",
   };
 }
 
@@ -419,7 +476,7 @@ function formatPreviewTimestamp(format: NamingTimestampPreset): string {
     "%m": String(sample.getUTCMonth() + 1).padStart(2, "0"),
     "%d": String(sample.getUTCDate()).padStart(2, "0"),
     "%H": String(sample.getUTCHours()).padStart(2, "0"),
-    "%M": String(sample.getUTCMinutes()).padStart(2, "0")
+    "%M": String(sample.getUTCMinutes()).padStart(2, "0"),
   };
   let output: string = format;
   for (const [token, value] of Object.entries(replacements)) {
@@ -428,11 +485,20 @@ function formatPreviewTimestamp(format: NamingTimestampPreset): string {
   return output;
 }
 
-export function renderNamingStructurePreview(draft: SettingsDraft, uiLanguage: "en-US" | "zh-CN"): string {
-  const previewTag = draft.namingTags[0] ? `#${renderTagLabel(draft.namingTags[0], uiLanguage)}` : uiLanguage === "zh-CN" ? "#标签" : "#tag";
+export function renderNamingStructurePreview(
+  draft: SettingsDraft,
+  uiLanguage: "en-US" | "zh-CN",
+): string {
+  const previewTag = draft.namingTags[0]
+    ? `#${renderTagLabel(draft.namingTags[0], uiLanguage)}`
+    : uiLanguage === "zh-CN"
+      ? "#标签"
+      : "#tag";
   const timestampBuilderItem = draft.namingBuilder.find(
-    (item): item is { type: "component"; component: NamingComponent; format?: NamingTimestampPreset } =>
-      item.type === "component" && item.component === "timestamp"
+    (
+      item,
+    ): item is { type: "component"; component: NamingComponent; format?: NamingTimestampPreset } =>
+      item.type === "component" && item.component === "timestamp",
   );
   const componentMap: Record<NamingComponent, string> = {
     timestamp: formatPreviewTimestamp(timestampBuilderItem?.format ?? DEFAULT_TIMESTAMP_PRESET),
@@ -441,7 +507,10 @@ export function renderNamingStructurePreview(draft: SettingsDraft, uiLanguage: "
     tag: previewTag,
     kind: "fix",
     scope: "settings",
-    summary: uiLanguage === "zh-CN" ? "修复设置保存与语言切换" : "fix settings save and language switching"
+    summary:
+      uiLanguage === "zh-CN"
+        ? "修复设置保存与语言切换"
+        : "fix settings save and language switching",
   };
   return draft.namingBuilder
     .map((item) => (item.type === "separator" ? item.value : componentMap[item.component]))
@@ -513,9 +582,9 @@ export function useSettingsDraft(configView: ConfigView | null) {
     updateDraftState(
       (current) => ({
         ...current,
-        [field]: value
+        [field]: value,
       }),
-      options
+      options,
     );
   };
 
@@ -525,10 +594,13 @@ export function useSettingsDraft(configView: ConfigView | null) {
     setDirty,
     draftRef,
     updateDraftState,
-    updateDraftField
+    updateDraftField,
   };
 }
 
 export function summarizeProfileLabel(profile: ProviderProfile): string {
-  return firstNonEmptyString(profile.displayName, profile.profileId, profile.model, profile.baseUrl) ?? profile.profileId;
+  return (
+    firstNonEmptyString(profile.displayName, profile.profileId, profile.model, profile.baseUrl) ??
+    profile.profileId
+  );
 }

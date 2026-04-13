@@ -1,14 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import fg from "fast-glob";
 import type {
   MaterializedSession,
   SessionTranscript,
-  SessionTranscriptPage,
   SessionTranscriptEntry,
-  SessionTranscriptRole
+  SessionTranscriptPage,
+  SessionTranscriptRole,
 } from "@codexnamer/shared";
+import fg from "fast-glob";
 
 import { basenameSafe, excerpt, normalizeWhitespace, stripControl } from "./util.js";
 
@@ -49,14 +48,17 @@ function normalizeTranscriptText(input: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function shouldHideTranscriptMessage(role: SessionTranscriptRole, content: string): {
+function shouldHideTranscriptMessage(
+  role: SessionTranscriptRole,
+  content: string,
+): {
   hidden: boolean;
   reason?: string;
 } {
   if (role === "system") {
     return {
       hidden: true,
-      reason: "system_bootstrap"
+      reason: "system_bootstrap",
     };
   }
 
@@ -68,19 +70,16 @@ function shouldHideTranscriptMessage(role: SessionTranscriptRole, content: strin
   ) {
     return {
       hidden: true,
-      reason: "bootstrap_context"
+      reason: "bootstrap_context",
     };
   }
 
   return {
-    hidden: false
+    hidden: false,
   };
 }
 
-function flattenContentItems(
-  content: unknown,
-  allowedTypes?: string[]
-): string | undefined {
+function flattenContentItems(content: unknown, allowedTypes?: string[]): string | undefined {
   if (!Array.isArray(content)) {
     return undefined;
   }
@@ -90,7 +89,7 @@ function flattenContentItems(
     .filter((item) =>
       allowedTypes
         ? typeof item.type === "string" && allowedTypes.includes(item.type)
-        : typeof item.text === "string"
+        : typeof item.text === "string",
     )
     .map((item) => normalizeTranscriptText(item.text))
     .filter((value): value is string => Boolean(value))
@@ -100,7 +99,10 @@ function flattenContentItems(
   return values.length > 0 ? values : undefined;
 }
 
-function summarizeFunctionArguments(name: string | undefined, rawArguments: unknown): string | undefined {
+function summarizeFunctionArguments(
+  name: string | undefined,
+  rawArguments: unknown,
+): string | undefined {
   if (typeof rawArguments !== "string" || rawArguments.trim().length === 0) {
     return name ? `${name}()` : undefined;
   }
@@ -112,7 +114,10 @@ function summarizeFunctionArguments(name: string | undefined, rawArguments: unkn
       const workdir = normalizeTranscriptText(parsed.workdir);
       return [command, workdir ? `cwd: ${workdir}` : undefined].filter(Boolean).join("\n");
     }
-    return normalizeTranscriptText(JSON.stringify(parsed, null, 2)) ?? normalizeTranscriptText(rawArguments);
+    return (
+      normalizeTranscriptText(JSON.stringify(parsed, null, 2)) ??
+      normalizeTranscriptText(rawArguments)
+    );
   } catch {
     return normalizeTranscriptText(rawArguments);
   }
@@ -124,18 +129,15 @@ function transcriptEntryId(index: number, fallback: string): string {
 
 function pushTranscriptEntry(
   items: SessionTranscriptEntry[],
-  entry: Omit<SessionTranscriptEntry, "id">
+  entry: Omit<SessionTranscriptEntry, "id">,
 ): void {
   items.push({
     id: transcriptEntryId(items.length + 1, entry.callId ?? entry.kind),
-    ...entry
+    ...entry,
   });
 }
 
-function extractContentText(
-  content: unknown,
-  allowedTypes: string[]
-): string | undefined {
+function extractContentText(content: unknown, allowedTypes: string[]): string | undefined {
   if (!Array.isArray(content)) {
     return undefined;
   }
@@ -160,7 +162,7 @@ function shouldIgnoreFallbackUserMessage(value: string): boolean {
 
 function mergeEventIntoSession(
   session: MaterializedSession,
-  event: RolloutEvent
+  event: RolloutEvent,
 ): { taskCompleteDelta: number; lastAgentChanged: boolean; lastUserChanged: boolean } {
   const timestamp = event.timestamp;
   const payload = event.payload ?? {};
@@ -194,7 +196,8 @@ function mergeEventIntoSession(
       session.updatedAt = session.updatedAt ?? session.createdAt;
       session.cwd = (payload.cwd as string | undefined) ?? session.cwd;
       session.projectName = basenameSafe(session.cwd);
-      session.modelProvider = (payload.model_provider as string | undefined) ?? session.modelProvider;
+      session.modelProvider =
+        (payload.model_provider as string | undefined) ?? session.modelProvider;
       break;
     }
     case "turn_context": {
@@ -245,7 +248,7 @@ function mergeEventIntoSession(
       if (role === "assistant") {
         const text = excerpt(
           stripControl(extractContentText(payload.content, ["output_text"])),
-          240
+          240,
         );
         if (text && text !== session.lastAgentMessage) {
           session.lastAgentMessage = text;
@@ -253,7 +256,7 @@ function mergeEventIntoSession(
       } else if (role === "user" && !session.firstUserMessage) {
         const text = excerpt(
           stripControl(extractContentText(payload.content, ["input_text"])),
-          200
+          200,
         );
         if (text && !shouldIgnoreFallbackUserMessage(text)) {
           session.firstUserMessage = text;
@@ -270,7 +273,7 @@ function mergeEventIntoSession(
   return {
     taskCompleteDelta,
     lastAgentChanged,
-    lastUserChanged
+    lastUserChanged,
   };
 }
 
@@ -279,7 +282,7 @@ export async function discoverRolloutFiles(codexHome: string): Promise<string[]>
   const files = await fg("**/rollout-*.jsonl", {
     cwd: sessionsRoot,
     absolute: true,
-    onlyFiles: true
+    onlyFiles: true,
   });
 
   return files.sort();
@@ -329,7 +332,7 @@ export async function ingestRolloutFile(params: {
         threadId: "",
         rolloutPath: params.rolloutPath,
         taskCompleteCount: 0,
-        tokenTotal: 0
+        tokenTotal: 0,
       };
 
   let taskCompleteDelta = 0;
@@ -378,12 +381,12 @@ export async function ingestRolloutFile(params: {
       lastOffset: shouldReprocessWholeFile ? stat.size : nextOffset === 0 ? stat.size : nextOffset,
       lastSize: stat.size,
       lastMtime: stat.mtime.toISOString(),
-      lastScanAt: new Date().toISOString()
+      lastScanAt: new Date().toISOString(),
     },
     growthBytes,
     taskCompleteDelta,
     lastAgentChanged,
-    lastUserChanged
+    lastUserChanged,
   };
 }
 
@@ -413,7 +416,9 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           role === "assistant" ? "assistant" : role === "user" ? "user" : "system";
         const content = flattenContentItems(
           payload.content,
-          transcriptRole === "assistant" ? ["output_text", "input_text"] : ["input_text", "output_text"]
+          transcriptRole === "assistant"
+            ? ["output_text", "input_text"]
+            : ["input_text", "output_text"],
         );
         if (!content) {
           continue;
@@ -426,7 +431,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           content,
           phase: typeof payload.phase === "string" ? payload.phase : undefined,
           hidden: hidden.hidden,
-          hiddenReason: hidden.reason
+          hiddenReason: hidden.reason,
         });
         continue;
       }
@@ -434,7 +439,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
       if (itemType === "function_call") {
         const content = summarizeFunctionArguments(
           payload.name as string | undefined,
-          payload.arguments
+          payload.arguments,
         );
         if (!content) {
           continue;
@@ -445,7 +450,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           kind: "tool_call",
           name: (payload.name as string | undefined) ?? "tool",
           callId: (payload.call_id as string | undefined) ?? undefined,
-          content
+          content,
         });
         continue;
       }
@@ -460,7 +465,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           role: "tool",
           kind: "tool_output",
           callId: (payload.call_id as string | undefined) ?? undefined,
-          content
+          content,
         });
         continue;
       }
@@ -472,7 +477,11 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
                 if (typeof item === "string") {
                   return item;
                 }
-                if (item && typeof item === "object" && typeof (item as Record<string, unknown>).text === "string") {
+                if (
+                  item &&
+                  typeof item === "object" &&
+                  typeof (item as Record<string, unknown>).text === "string"
+                ) {
                   return (item as Record<string, unknown>).text as string;
                 }
                 return undefined;
@@ -489,7 +498,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           kind: "reasoning",
           content: summary,
           hidden: true,
-          hiddenReason: "reasoning"
+          hiddenReason: "reasoning",
         });
       }
 
@@ -505,7 +514,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           kind: "status",
           content: "Task started",
           hidden: true,
-          hiddenReason: "task_status"
+          hiddenReason: "task_status",
         });
         continue;
       }
@@ -518,7 +527,7 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
           kind: "status",
           content,
           hidden: true,
-          hiddenReason: "task_status"
+          hiddenReason: "task_status",
         });
       }
     }
@@ -530,8 +539,8 @@ export async function readSessionTranscript(rolloutPath: string): Promise<Sessio
       total: items.length,
       visible: items.filter((item) => !item.hidden).length,
       hidden: items.filter((item) => item.hidden).length,
-      tools: items.filter((item) => item.role === "tool").length
-    }
+      tools: items.filter((item) => item.role === "tool").length,
+    },
   };
 }
 
@@ -576,6 +585,6 @@ export async function readSessionTranscriptPage(params: {
     totalPages,
     page: currentPage,
     pageSize,
-    hasMore: currentPage < totalPages
+    hasMore: currentPage < totalPages,
   };
 }

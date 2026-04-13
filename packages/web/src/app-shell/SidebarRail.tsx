@@ -1,4 +1,4 @@
-import * as React from "react";
+import type * as React from "react";
 
 import type { TabId } from "../control-deck-model.js";
 import type { WorkspaceSummary } from "../types.js";
@@ -24,7 +24,7 @@ export function SidebarRail(props: {
     { id: "settings", label: props.tt("settings") },
     { id: "maintenance", label: props.tt("renameOps") },
     { id: "requeue", label: props.tt("requeue") },
-    { id: "daemon", label: props.tt("daemon") }
+    { id: "daemon", label: props.tt("daemon") },
   ];
 
   return (
@@ -66,7 +66,11 @@ export function SidebarRail(props: {
           </div>
           <div className="project-group-items">
             <button
-              className={props.selectedWorkspaceId === props.allWorkspacesId ? "project-item active" : "project-item"}
+              className={
+                props.selectedWorkspaceId === props.allWorkspacesId
+                  ? "project-item active"
+                  : "project-item"
+              }
               onClick={() => props.onSelectWorkspace(props.allWorkspacesId)}
               type="button"
             >
@@ -75,7 +79,11 @@ export function SidebarRail(props: {
             </button>
             {props.workspaces.map((workspace) => (
               <button
-                className={props.selectedWorkspaceId === workspace.workspaceId ? "project-item active" : "project-item"}
+                className={
+                  props.selectedWorkspaceId === workspace.workspaceId
+                    ? "project-item active"
+                    : "project-item"
+                }
                 key={workspace.workspaceId}
                 onClick={() => props.onSelectWorkspace(workspace.workspaceId)}
                 type="button"

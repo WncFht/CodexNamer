@@ -161,7 +161,7 @@ const COPY = {
     thisWeek: "This Week",
     thisMonth: "This Month",
     earlier: "Earlier",
-    nA: "n/a"
+    nA: "n/a",
   },
   "zh-CN": {
     allWorkspaces: "全部工作区",
@@ -321,8 +321,8 @@ const COPY = {
     thisWeek: "本周",
     thisMonth: "本月",
     earlier: "更早",
-    nA: "无"
-  }
+    nA: "无",
+  },
 } as const;
 
 export function normalizeUiLanguage(configView?: ConfigView | null): UiLanguage {
@@ -332,7 +332,7 @@ export function normalizeUiLanguage(configView?: ConfigView | null): UiLanguage 
   return raw?.uiLanguage === "zh-CN" ? "zh-CN" : "en-US";
 }
 
-export function t(language: UiLanguage, key: keyof typeof COPY["en-US"]): string {
+export function t(language: UiLanguage, key: keyof (typeof COPY)["en-US"]): string {
   return COPY[language][key];
 }
 
@@ -344,7 +344,7 @@ export function formatUiWhen(value: string | undefined | null, language: UiLangu
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -363,7 +363,7 @@ export function sessionStatusLabel(status: string | undefined, language: UiLangu
           applied: "已应用",
           idle: "空闲",
           archived_hint: "疑似归档",
-          missing: "缺失"
+          missing: "缺失",
         }
       : {
           discovered: "Discovered",
@@ -373,7 +373,7 @@ export function sessionStatusLabel(status: string | undefined, language: UiLangu
           applied: "Applied",
           idle: "Idle",
           archived_hint: "Archive Hint",
-          missing: "Missing"
+          missing: "Missing",
         };
   return map[status as keyof typeof map] ?? status ?? "unknown";
 }
@@ -400,7 +400,7 @@ export function autoRenameReasonLabel(reason: string, language: UiLanguage): str
           applied: "已经应用",
           idle: "空闲中",
           archived_hint: "疑似归档",
-          missing: "会话缺失"
+          missing: "会话缺失",
         }
       : {
           frozen: "Frozen",
@@ -413,7 +413,7 @@ export function autoRenameReasonLabel(reason: string, language: UiLanguage): str
           applied: "Already Applied",
           idle: "Idle",
           archived_hint: "Archive Hint",
-          missing: "Missing"
+          missing: "Missing",
         };
   return map[reason as keyof typeof map] ?? reason;
 }
@@ -434,14 +434,14 @@ export function timeGroupLabel(label: string, language: UiLanguage): string {
           Yesterday: COPY["zh-CN"].yesterday,
           "This Week": COPY["zh-CN"].thisWeek,
           "This Month": COPY["zh-CN"].thisMonth,
-          Earlier: COPY["zh-CN"].earlier
+          Earlier: COPY["zh-CN"].earlier,
         }
       : {
           Today: COPY["en-US"].today,
           Yesterday: COPY["en-US"].yesterday,
           "This Week": COPY["en-US"].thisWeek,
           "This Month": COPY["en-US"].thisMonth,
-          Earlier: COPY["en-US"].earlier
+          Earlier: COPY["en-US"].earlier,
         };
   return map[label as keyof typeof map] ?? label;
 }

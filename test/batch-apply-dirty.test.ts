@@ -1,9 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import { afterEach, describe, expect, it } from "vitest";
-
 import { readSessionIndex } from "@codexnamer/core";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { createManagerForTest, createTempWorkspace, writeRolloutFixture } from "./helpers.js";
 
@@ -23,13 +21,13 @@ describe("batch dirty apply", () => {
       codexHome: workspace.codexHome,
       threadId: "thread-a",
       userMessage: "实现 session rename",
-      lastAgentMessage: "完成第一版 session rename 设计"
+      lastAgentMessage: "完成第一版 session rename 设计",
     });
     await fs.writeFile(path.join(workspace.codexHome, "session_index.jsonl"), "", "utf8");
 
     const manager = await createManagerForTest({
       codexHome: workspace.codexHome,
-      stateDir: workspace.stateDir
+      stateDir: workspace.stateDir,
     });
     managers.push(manager);
 
@@ -43,7 +41,9 @@ describe("batch dirty apply", () => {
     const second = await manager.batchApplyDirty();
     expect(second).toHaveLength(0);
 
-    const secondSnapshot = await readSessionIndex(path.join(workspace.codexHome, "session_index.jsonl"));
+    const secondSnapshot = await readSessionIndex(
+      path.join(workspace.codexHome, "session_index.jsonl"),
+    );
     expect(secondSnapshot.stats.totalLines).toBe(1);
   });
 });

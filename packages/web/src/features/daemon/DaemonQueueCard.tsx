@@ -1,4 +1,5 @@
-import { runtimeDaemonStatusLabel, type RuntimeDaemonStatusDisplay, type RuntimeExecutionDisplay } from "../../runtime-display.js";
+import type { RuntimeDaemonStatusDisplay, RuntimeExecutionDisplay } from "../../runtime-display.js";
+import { runtimeDaemonStatusLabel } from "../../runtime-display.js";
 import type { OverviewResponse } from "../../types.js";
 
 export function DaemonQueueCard(props: {

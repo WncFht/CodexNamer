@@ -1,12 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import {
-  sessionIndexEntryWireSchema,
-  type CompactIndexResult,
-  type SessionIndexEntry,
-  type SessionIndexSnapshot
+import type {
+  CompactIndexResult,
+  SessionIndexEntry,
+  SessionIndexSnapshot,
 } from "@codexnamer/shared";
+import { sessionIndexEntryWireSchema } from "@codexnamer/shared";
 
 import { ensureTrailingNewline, toUtcIso } from "./util.js";
 
@@ -14,7 +13,7 @@ function serializeEntry(entry: SessionIndexEntry): string {
   return JSON.stringify({
     id: entry.id,
     thread_name: entry.threadName,
-    updated_at: entry.updatedAt
+    updated_at: entry.updatedAt,
   });
 }
 
@@ -60,8 +59,8 @@ export async function readSessionIndex(filePath: string): Promise<SessionIndexSn
       totalLines: entries.length,
       uniqueThreadIds: latestByThreadId.size,
       duplicateThreadIds: entries.length - latestByThreadId.size,
-      sizeBytes
-    }
+      sizeBytes,
+    },
   };
 }
 
@@ -82,7 +81,7 @@ export async function appendSessionIndexRename(params: {
   const entry: SessionIndexEntry = {
     id: params.threadId,
     threadName,
-    updatedAt: params.updatedAt ?? toUtcIso()
+    updatedAt: params.updatedAt ?? toUtcIso(),
   };
 
   if (current?.threadName === threadName) {
@@ -122,7 +121,7 @@ export async function compactSessionIndex(params: {
       originalLines: snapshot.entries.length,
       compactedLines: compactedEntries.length,
       originalSizeBytes: snapshot.stats.sizeBytes,
-      compactedSizeBytes
+      compactedSizeBytes,
     };
   }
 
@@ -135,7 +134,7 @@ export async function compactSessionIndex(params: {
     await fs.mkdir(params.backupDir, { recursive: true });
     backupPath = path.join(
       params.backupDir,
-      `session_index-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`
+      `session_index-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`,
     );
     try {
       await fs.copyFile(params.filePath, backupPath);
@@ -158,7 +157,6 @@ export async function compactSessionIndex(params: {
     originalSizeBytes: snapshot.stats.sizeBytes,
     compactedSizeBytes,
     outputPath: params.filePath,
-    backupPath
+    backupPath,
   };
 }
-

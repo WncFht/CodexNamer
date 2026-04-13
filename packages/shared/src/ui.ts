@@ -15,7 +15,7 @@ export function formatUiWhen(value: string | undefined | null, language: UiLangu
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -34,7 +34,7 @@ export function sessionStatusLabel(status: string | undefined, language: UiLangu
     idle: "空闲",
     archived_hint: "疑似归档",
     missing: "缺失",
-    unknown: "未知"
+    unknown: "未知",
   };
   const enMap: Record<string, string> = {
     discovered: "Discovered",
@@ -45,7 +45,7 @@ export function sessionStatusLabel(status: string | undefined, language: UiLangu
     idle: "Idle",
     archived_hint: "Archive Hint",
     missing: "Missing",
-    unknown: "Unknown"
+    unknown: "Unknown",
   };
 
   return (language === "zh-CN" ? zhMap : enMap)[key] ?? key;
@@ -55,12 +55,12 @@ export function autoRenameStatusLabel(status: string, language: UiLanguage): str
   const zhMap: Record<string, string> = {
     skip: "跳过",
     suggest: "建议",
-    apply: "应用"
+    apply: "应用",
   };
   const enMap: Record<string, string> = {
     skip: "Skip",
     suggest: "Suggest",
-    apply: "Apply"
+    apply: "Apply",
   };
   return (language === "zh-CN" ? zhMap : enMap)[status] ?? status;
 }
@@ -77,7 +77,7 @@ export function autoRenameReasonLabel(reason: string, language: UiLanguage): str
     applied: "当前已命名",
     idle: "空闲中",
     archived_hint: "疑似归档",
-    missing: "会话缺失"
+    missing: "会话缺失",
   };
   const enMap: Record<string, string> = {
     frozen: "Frozen",
@@ -90,12 +90,16 @@ export function autoRenameReasonLabel(reason: string, language: UiLanguage): str
     applied: "Already Applied",
     idle: "Idle",
     archived_hint: "Archive Hint",
-    missing: "Missing"
+    missing: "Missing",
   };
   return (language === "zh-CN" ? zhMap : enMap)[reason] ?? reason;
 }
 
-export function booleanLabel(value: boolean, language: UiLanguage, labels?: { yes: string; no: string }): string {
+export function booleanLabel(
+  value: boolean,
+  language: UiLanguage,
+  labels?: { yes: string; no: string },
+): string {
   if (labels) {
     return value ? labels.yes : labels.no;
   }

@@ -8,7 +8,7 @@ export function setMaintenanceState(db: Database.Database, key: string, value: u
   db.prepare(
     `INSERT INTO maintenance_state (key, value_json)
      VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`
+     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
   ).run(key, JSON.stringify(value));
 }
 

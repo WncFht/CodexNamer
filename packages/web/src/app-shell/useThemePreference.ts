@@ -70,9 +70,9 @@ export function useThemePreference() {
       new CustomEvent(THEME_CHANGE_EVENT, {
         detail: {
           mode,
-          resolvedTheme
-        }
-      })
+          resolvedTheme,
+        },
+      }),
     );
   }, [mode, resolvedTheme]);
 
@@ -93,6 +93,6 @@ export function useThemePreference() {
     mode,
     resolvedTheme,
     setMode,
-    cycleMode
+    cycleMode,
   };
 }

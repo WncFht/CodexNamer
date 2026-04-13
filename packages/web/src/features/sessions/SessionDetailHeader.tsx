@@ -37,7 +37,9 @@ export function SessionDetailHeader(props: {
             <span>
               {props.detail.tokenTotal} {props.uiLanguage === "zh-CN" ? "tokens" : "tokens"}
             </span>
-            {props.detail.lastAppliedAt ? <span>{formatWhen(props.detail.lastAppliedAt, props.uiLanguage)}</span> : null}
+            {props.detail.lastAppliedAt ? (
+              <span>{formatWhen(props.detail.lastAppliedAt, props.uiLanguage)}</span>
+            ) : null}
           </div>
         </div>
         <div className="chat-header-right">
@@ -52,19 +54,45 @@ export function SessionDetailHeader(props: {
               >
                 <span aria-hidden="true">⤢</span>
               </button>
-              <button className="btn-sm" onClick={props.onToggleSessionPane} title={props.sessionPaneToggleLabel} type="button">
+              <button
+                className="btn-sm"
+                onClick={props.onToggleSessionPane}
+                title={props.sessionPaneToggleLabel}
+                type="button"
+              >
                 {props.sessionPaneToggleLabel}
               </button>
             </>
           ) : null}
-          {props.detail.frozen ? <span className="session-header-flag frozen">{props.tt("frozen")}</span> : null}
-          <button className="btn-sm" disabled={props.actioning} onClick={props.onSuggest} type="button">
-            {props.actioning && props.actionLabel?.includes("Suggest") ? props.tt("suggesting") : props.tt("suggest")}
+          {props.detail.frozen ? (
+            <span className="session-header-flag frozen">{props.tt("frozen")}</span>
+          ) : null}
+          <button
+            className="btn-sm"
+            disabled={props.actioning}
+            onClick={props.onSuggest}
+            type="button"
+          >
+            {props.actioning && props.actionLabel?.includes("Suggest")
+              ? props.tt("suggesting")
+              : props.tt("suggest")}
           </button>
-          <button className="btn-sm" disabled={props.actioning} onClick={props.onApply} type="button">
-            {props.actioning && props.actionLabel?.includes("Applying") ? props.tt("applying") : props.tt("apply")}
+          <button
+            className="btn-sm"
+            disabled={props.actioning}
+            onClick={props.onApply}
+            type="button"
+          >
+            {props.actioning && props.actionLabel?.includes("Applying")
+              ? props.tt("applying")
+              : props.tt("apply")}
           </button>
-          <button className="btn-sm" disabled={props.actioning} onClick={props.onToggleFreeze} type="button">
+          <button
+            className="btn-sm"
+            disabled={props.actioning}
+            onClick={props.onToggleFreeze}
+            type="button"
+          >
             {props.actioning && actionLabelLower?.includes("freez")
               ? props.detail.frozen
                 ? props.tt("unfreezing")

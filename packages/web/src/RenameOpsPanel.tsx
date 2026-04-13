@@ -1,16 +1,6 @@
 import * as React from "react";
 
 import { fetchAiRequestLogs } from "./api.js";
-import { t, type UiLanguage } from "./i18n.js";
-import { deriveRuntimeDisplay } from "./runtime-display.js";
-import type {
-  AiRequestLogDetailResponse,
-  AiRequestLogResponse,
-  AutoRenamePreviewResponse,
-  DaemonControlStatus,
-  DoctorResponse,
-  OverviewResponse
-} from "./types.js";
 import type { AiRequestLogsSectionProps } from "./features/maintenance/AiRequestLogsSection.js";
 import {
   buildFlowOption,
@@ -18,14 +8,27 @@ import {
   buildRenameActivityOption,
   buildRuleCoverageOption,
   buildSweepActionOption,
-  buildSweepTrendOption
+  buildSweepTrendOption,
 } from "./features/maintenance/chart-options.js";
 import { OpsActionSection } from "./features/maintenance/OpsActionSection.js";
 import { OpsOverviewSection } from "./features/maintenance/OpsOverviewSection.js";
 import { OpsPrimaryChartsSection } from "./features/maintenance/OpsPrimaryChartsSection.js";
+import type { UiLanguage } from "./i18n.js";
+import { t } from "./i18n.js";
+import { deriveRuntimeDisplay } from "./runtime-display.js";
+import type {
+  AiRequestLogDetailResponse,
+  AiRequestLogResponse,
+  AutoRenamePreviewResponse,
+  DaemonControlStatus,
+  DoctorResponse,
+  OverviewResponse,
+} from "./types.js";
 
 const OpsAdvancedSection = React.lazy(() =>
-  import("./features/maintenance/OpsAdvancedSection.js").then((module) => ({ default: module.OpsAdvancedSection }))
+  import("./features/maintenance/OpsAdvancedSection.js").then((module) => ({
+    default: module.OpsAdvancedSection,
+  })),
 );
 
 export function RenameOpsPanel(props: {
@@ -40,7 +43,10 @@ export function RenameOpsPanel(props: {
   selectedRequestLogId?: number;
   onSelectRequestLog: (id?: number) => void;
   onRefreshRuntime: () => void | Promise<void>;
-  onRefreshPreview: (options?: { includeCandidateNames?: boolean; urgent?: boolean }) => void | Promise<void>;
+  onRefreshPreview: (options?: {
+    includeCandidateNames?: boolean;
+    urgent?: boolean;
+  }) => void | Promise<void>;
   onOpenRequeue: () => void;
 }) {
   const {
@@ -56,16 +62,22 @@ export function RenameOpsPanel(props: {
     preview,
     previewRefreshing,
     selectedRequestLogId,
-    uiLanguage
+    uiLanguage,
   } = props;
   const LOGS_PER_PAGE = 10;
   const [logQuery, setLogQuery] = React.useState("");
   const [logProjectFilter, setLogProjectFilter] = React.useState("all");
-  const [logStatusFilter, setLogStatusFilter] = React.useState<"all" | "running" | "succeeded" | "failed">("all");
-  const [logTransportFilter, setLogTransportFilter] = React.useState<"all" | "responses" | "openai-compatible">("all");
+  const [logStatusFilter, setLogStatusFilter] = React.useState<
+    "all" | "running" | "succeeded" | "failed"
+  >("all");
+  const [logTransportFilter, setLogTransportFilter] = React.useState<
+    "all" | "responses" | "openai-compatible"
+  >("all");
   const [logPage, setLogPage] = React.useState(1);
   const [logPageInput, setLogPageInput] = React.useState("1");
-  const [requestLogReport, setRequestLogReport] = React.useState<AiRequestLogResponse | null>(initialAiRequestLogs);
+  const [requestLogReport, setRequestLogReport] = React.useState<AiRequestLogResponse | null>(
+    initialAiRequestLogs,
+  );
   const [requestLogLoading, setRequestLogLoading] = React.useState(false);
   const [advancedOpen, setAdvancedOpen] = React.useState(() => Boolean(selectedRequestLogId));
   const [advancedLoaded, setAdvancedLoaded] = React.useState(() => Boolean(selectedRequestLogId));
@@ -87,10 +99,11 @@ export function RenameOpsPanel(props: {
   const lastSweepSummary = overview?.runtime.lastSweepSummary;
   const recentSweeps = React.useMemo(
     () => (overview?.runtime.recentSweeps ?? []).slice().reverse(),
-    [overview?.runtime.recentSweeps]
+    [overview?.runtime.recentSweeps],
   );
   const latestAiRequest = aiRequestLogs?.items[0];
-  const ruleBacklogCount = (overview?.ruleCoverage.outdated ?? 0) + (overview?.ruleCoverage.unknown ?? 0);
+  const ruleBacklogCount =
+    (overview?.ruleCoverage.outdated ?? 0) + (overview?.ruleCoverage.unknown ?? 0);
 
   React.useEffect(() => {
     if (!advancedLoaded) {
@@ -113,7 +126,7 @@ export function RenameOpsPanel(props: {
               ? "__none__"
               : logProjectFilter,
         status: logStatusFilter === "all" ? undefined : logStatusFilter,
-        transport: logTransportFilter === "all" ? undefined : logTransportFilter
+        transport: logTransportFilter === "all" ? undefined : logTransportFilter,
       });
       if (requestId !== requestLogRequestIdRef.current) {
         return;
@@ -148,7 +161,9 @@ export function RenameOpsPanel(props: {
     if (!aiRequestLogs || !selectedRequestLogId) {
       return;
     }
-    const stillVisible = (aiRequestLogs.items ?? []).some((item) => item.id === selectedRequestLogId);
+    const stillVisible = (aiRequestLogs.items ?? []).some(
+      (item) => item.id === selectedRequestLogId,
+    );
     if (!stillVisible) {
       onSelectRequestLog(undefined);
     }
@@ -178,14 +193,17 @@ export function RenameOpsPanel(props: {
     return (aiRequestLogs?.projects ?? [])
       .map((project) => ({
         value: project.trim() ? project : "__none__",
-        label: project.trim() ? project : noDataLabel
+        label: project.trim() ? project : noDataLabel,
       }))
       .sort((left, right) => left.label.localeCompare(right.label, uiLanguage));
   }, [aiRequestLogs?.projects, noDataLabel, uiLanguage]);
 
   const visibleAiRequests = React.useMemo(() => aiRequestLogs?.items ?? [], [aiRequestLogs?.items]);
   const totalFilteredAiRequests = aiRequestLogs?.total ?? 0;
-  const totalLogPages = Math.max(1, aiRequestLogs?.totalPages ?? (Math.ceil(totalFilteredAiRequests / LOGS_PER_PAGE) || 1));
+  const totalLogPages = Math.max(
+    1,
+    aiRequestLogs?.totalPages ?? (Math.ceil(totalFilteredAiRequests / LOGS_PER_PAGE) || 1),
+  );
   const filteredRunningCount = aiRequestLogs?.statusCounts.running ?? 0;
   const filteredFailedCount = aiRequestLogs?.statusCounts.failed ?? 0;
   const filteredSucceededCount = aiRequestLogs?.statusCounts.succeeded ?? 0;
@@ -196,53 +214,53 @@ export function RenameOpsPanel(props: {
         overview,
         appliedLabel,
         previewLabel,
-        skippedLabel
+        skippedLabel,
       }),
-    [appliedLabel, overview, previewLabel, skippedLabel]
+    [appliedLabel, overview, previewLabel, skippedLabel],
   );
   const pipelineOption = React.useMemo(
     () =>
       buildPipelineOption({
         overview,
         inline,
-        uiLanguage
+        uiLanguage,
       }),
-    [inline, overview, uiLanguage]
+    [inline, overview, uiLanguage],
   );
   const flowOption = React.useMemo(
     () =>
       buildFlowOption({
         previewItems,
-        uiLanguage
+        uiLanguage,
       }),
-    [previewItems, uiLanguage]
+    [previewItems, uiLanguage],
   );
   const sweepTrendOption = React.useMemo(
     () =>
       buildSweepTrendOption({
         recentSweeps,
         inline,
-        uiLanguage
+        uiLanguage,
       }),
-    [inline, recentSweeps, uiLanguage]
+    [inline, recentSweeps, uiLanguage],
   );
   const sweepActionOption = React.useMemo(
     () =>
       buildSweepActionOption({
         recentSweeps,
         inline,
-        uiLanguage
+        uiLanguage,
       }),
-    [inline, recentSweeps, uiLanguage]
+    [inline, recentSweeps, uiLanguage],
   );
   const ruleCoverageOption = React.useMemo(
     () =>
       buildRuleCoverageOption({
         overview,
         inline,
-        uiLanguage
+        uiLanguage,
       }),
-    [inline, overview, uiLanguage]
+    [inline, overview, uiLanguage],
   );
 
   const aiRequestLogsSectionProps: AiRequestLogsSectionProps = {
@@ -279,16 +297,19 @@ export function RenameOpsPanel(props: {
     totalFilteredAiRequests,
     totalLogPages,
     uiLanguage,
-    visibleAiRequests
+    visibleAiRequests,
   };
 
-  const handleAdvancedToggle = React.useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
-    const nextOpen = event.currentTarget.open;
-    setAdvancedOpen(nextOpen);
-    if (nextOpen) {
-      setAdvancedLoaded(true);
-    }
-  }, []);
+  const handleAdvancedToggle = React.useCallback(
+    (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+      const nextOpen = event.currentTarget.open;
+      setAdvancedOpen(nextOpen);
+      if (nextOpen) {
+        setAdvancedLoaded(true);
+      }
+    },
+    [],
+  );
   const openAdvanced = React.useCallback(() => {
     setAdvancedLoaded(true);
     setAdvancedOpen(true);
@@ -319,7 +340,7 @@ export function RenameOpsPanel(props: {
         onRefreshPreview={() =>
           onRefreshPreview({
             includeCandidateNames: true,
-            urgent: true
+            urgent: true,
           })
         }
         onRefreshRuntime={onRefreshRuntime}
@@ -338,7 +359,7 @@ export function RenameOpsPanel(props: {
             <p className="settings-copy">
               {inline(
                 "图表保留给二级分析：先做动作判断，再展开看 sweep 趋势和规则覆盖。",
-                "Charts stay in the secondary layer: decide on the next action first, then expand sweep and coverage trends."
+                "Charts stay in the secondary layer: decide on the next action first, then expand sweep and coverage trends.",
               )}
             </p>
           </div>
@@ -346,7 +367,11 @@ export function RenameOpsPanel(props: {
         <details className="settings-disclosure ops-disclosure">
           <summary>{inline("展开趋势与覆盖图", "Show trend and coverage charts")}</summary>
           <div className="ops-disclosure-grid">
-            <OpsPrimaryChartsSection inline={inline} ruleCoverageOption={ruleCoverageOption} sweepTrendOption={sweepTrendOption} />
+            <OpsPrimaryChartsSection
+              inline={inline}
+              ruleCoverageOption={ruleCoverageOption}
+              sweepTrendOption={sweepTrendOption}
+            />
           </div>
         </details>
       </section>
@@ -356,13 +381,24 @@ export function RenameOpsPanel(props: {
           <div>
             <p className="panel-kicker">{inline("高级", "Advanced")}</p>
             <h3>{inline("请求日志与深度诊断", "Request logs and deep diagnostics")}</h3>
-            <p className="settings-copy">{inline("查看请求日志、图表和原始诊断。", "View request logs, charts, and raw diagnostics.")}</p>
+            <p className="settings-copy">
+              {inline(
+                "查看请求日志、图表和原始诊断。",
+                "View request logs, charts, and raw diagnostics.",
+              )}
+            </p>
           </div>
         </div>
-        <details className="settings-disclosure ops-disclosure" onToggle={handleAdvancedToggle} open={advancedOpen}>
+        <details
+          className="settings-disclosure ops-disclosure"
+          onToggle={handleAdvancedToggle}
+          open={advancedOpen}
+        >
           <summary>{inline("展开更多分析与诊断", "Show more analysis and diagnostics")}</summary>
           {advancedLoaded ? (
-            <React.Suspense fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}>
+            <React.Suspense
+              fallback={<div className="loading-state app-panel-loading">{tt("loading")}</div>}
+            >
               <OpsAdvancedSection
                 activityOption={activityOption}
                 aiRequestLogsSectionProps={aiRequestLogsSectionProps}

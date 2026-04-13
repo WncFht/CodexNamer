@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
-
 import type { ApiEventRecord } from "@codexnamer/shared";
-
+import { useCallback, useEffect, useRef } from "react";
+import type { DataResource, TabId } from "./control-deck-model.js";
 import {
   eventRefreshResourcesForTab,
   liveRefreshResourcesForTab,
   mergeResources,
   panelResourcesForTab,
-  type DataResource,
-  type TabId
 } from "./control-deck-model.js";
 import { usePanelResourceStore } from "./resources/usePanelResourceStore.js";
 import { useRefreshCoordinator } from "./resources/useRefreshCoordinator.js";
@@ -35,23 +32,23 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     selectedRequestLogId,
     onSelectSession,
     onSelectWorkspace,
-    onFailure
+    onFailure,
   } = options;
   const eventCursorRef = useRef(0);
   const latestUiStateRef = useRef({
     tab,
-    selectedId
+    selectedId,
   });
   const latestCallbacksRef = useRef({
-    onFailure
+    onFailure,
   });
 
   latestUiStateRef.current = {
     tab,
-    selectedId
+    selectedId,
   };
   latestCallbacksRef.current = {
-    onFailure
+    onFailure,
   };
   const reportFailure = useCallback((error: unknown) => {
     latestCallbacksRef.current.onFailure(error);
@@ -64,13 +61,13 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     selectedId,
     onSelectSession,
     onSelectWorkspace,
-    onFailure
+    onFailure,
   });
   const panels = usePanelResourceStore({
     tab,
     selectedId,
     selectedRequestLogId,
-    onFailure
+    onFailure,
   });
   const {
     sessions: sessionItems,
@@ -85,7 +82,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     patchSelectedSession,
     refreshSessions,
     refreshDetail,
-    setLastSyncAt
+    setLastSyncAt,
   } = sessions;
   const {
     providers,
@@ -107,7 +104,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     refreshDaemon,
     refreshAiRequestLogs,
     refreshPreview,
-    refreshPromptPreview
+    refreshPromptPreview,
   } = panels;
 
   const loadResources = useCallback(
@@ -117,7 +114,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         threadId?: string;
         urgentPreview?: boolean;
         urgentPromptPreview?: boolean;
-      }
+      },
     ) => {
       const tasks: Array<Promise<void>> = [];
 
@@ -146,16 +143,16 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         tasks.push(
           refreshPreview({
             includeCandidateNames: false,
-            urgent: resourceOptions?.urgentPreview
-          })
+            urgent: resourceOptions?.urgentPreview,
+          }),
         );
       }
       if (resources.includes("prompt-preview")) {
         tasks.push(
           refreshPromptPreview({
             threadId: resourceOptions?.threadId,
-            urgent: resourceOptions?.urgentPromptPreview
-          })
+            urgent: resourceOptions?.urgentPromptPreview,
+          }),
         );
       }
 
@@ -174,8 +171,8 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       refreshPreview,
       refreshPromptPreview,
       refreshProviders,
-      refreshSessions
-    ]
+      refreshSessions,
+    ],
   );
 
   useEffect(() => {
@@ -190,7 +187,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
     void loadResources(resources, {
       threadId: latestUiStateRef.current.selectedId,
-      urgentPromptPreview: tab === "settings"
+      urgentPromptPreview: tab === "settings",
     }).catch((error) => {
       reportFailure(error);
     });
@@ -215,28 +212,23 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
   }, [refreshConfigView, reportFailure, setLastSyncAt]);
 
   const refreshCurrentView = useCallback(
-    (
-      refreshOptions?: {
-        threadId?: string;
-        includePromptPreview?: boolean;
-      }
-    ) => {
+    (refreshOptions?: { threadId?: string; includePromptPreview?: boolean }) => {
       const nextTab = latestUiStateRef.current.tab;
       const nextThreadId = refreshOptions?.threadId ?? latestUiStateRef.current.selectedId;
       const resources = liveRefreshResourcesForTab(nextTab, {
-        includePromptPreview: refreshOptions?.includePromptPreview
+        includePromptPreview: refreshOptions?.includePromptPreview,
       });
       const tasks: Array<Promise<unknown>> = [
         loadResources(resources, {
-          threadId: nextThreadId
-        })
+          threadId: nextThreadId,
+        }),
       ];
       if (nextTab === "sessions" && nextThreadId) {
         tasks.push(refreshDetail(nextThreadId));
       }
       void Promise.all(tasks).catch(() => undefined);
     },
-    [loadResources, refreshDetail]
+    [loadResources, refreshDetail],
   );
 
   const refreshForEvents = useCallback(
@@ -244,7 +236,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       const nextTab = latestUiStateRef.current.tab;
       const nextThreadId = latestUiStateRef.current.selectedId;
       const resources = eventRefreshResourcesForTab(nextTab, events, {
-        includePromptPreview: nextTab === "settings"
+        includePromptPreview: nextTab === "settings",
       });
       const tasks: Array<Promise<unknown>> = [];
 
@@ -252,8 +244,8 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
         tasks.push(
           loadResources(resources, {
             threadId: nextThreadId,
-            urgentPromptPreview: nextTab === "settings" && resources.includes("prompt-preview")
-          })
+            urgentPromptPreview: nextTab === "settings" && resources.includes("prompt-preview"),
+          }),
         );
       }
 
@@ -268,7 +260,9 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
           ) {
             return true;
           }
-          return typeof event.payload.threadId === "string" && event.payload.threadId === nextThreadId;
+          return (
+            typeof event.payload.threadId === "string" && event.payload.threadId === nextThreadId
+          );
         });
 
       if (shouldRefreshDetail && nextThreadId) {
@@ -281,7 +275,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
 
       void Promise.all(tasks).catch(() => undefined);
     },
-    [loadResources, refreshDetail]
+    [loadResources, refreshDetail],
   );
 
   useRefreshCoordinator({
@@ -290,7 +284,7 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
     refreshForEvents,
     refreshFallback: () => {
       refreshCurrentView();
-    }
+    },
   });
 
   return {
@@ -324,27 +318,27 @@ export function useControlDeckResources(options: UseControlDeckResourcesOptions)
       refreshPromptPreview({
         threadId: latestUiStateRef.current.selectedId,
         urgent: refreshOptions?.urgent ?? true,
-        userConfig
+        userConfig,
       }),
     refreshSettings: () =>
       loadResources(panelResourcesForTab("settings"), {
         threadId: latestUiStateRef.current.selectedId,
-        urgentPromptPreview: true
+        urgentPromptPreview: true,
       }),
     refreshMaintenance: () =>
       loadResources(panelResourcesForTab("maintenance"), {
-        threadId: latestUiStateRef.current.selectedId
+        threadId: latestUiStateRef.current.selectedId,
       }),
     refreshRequeue: () =>
       loadResources(panelResourcesForTab("requeue"), {
-        threadId: latestUiStateRef.current.selectedId
+        threadId: latestUiStateRef.current.selectedId,
       }),
     refreshDaemon: () =>
       loadResources(panelResourcesForTab("daemon"), {
-        threadId: latestUiStateRef.current.selectedId
+        threadId: latestUiStateRef.current.selectedId,
       }),
     loadResources,
     mergeCurrentTabResources: (...groups: readonly DataResource[][]) =>
-      mergeResources(...groups, panelResourcesForTab(latestUiStateRef.current.tab))
+      mergeResources(...groups, panelResourcesForTab(latestUiStateRef.current.tab)),
   };
 }

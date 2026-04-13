@@ -27,7 +27,7 @@ export function providerFingerprint(config: EffectiveConfig): string {
     model: diagnostics.model,
     requestType: diagnostics.requestType,
     credentialKind: diagnostics.credentialKind,
-    credentialSource: diagnostics.credentialSource
+    credentialSource: diagnostics.credentialSource,
   });
 }
 
@@ -41,22 +41,27 @@ export function rememberProviderTest(
     diagnostics: Record<string, unknown>;
     responseText?: string;
     error?: string;
-  }
+  },
 ): void {
   const snapshot = db.getMaintenanceState<ProviderTestSnapshot>("provider_tests");
   db.setMaintenanceState("provider_tests", {
     latestByFingerprint: {
       ...(snapshot?.latestByFingerprint ?? {}),
-      [providerFingerprint(config)]: result
-    }
+      [providerFingerprint(config)]: result,
+    },
   } satisfies ProviderTestSnapshot);
 }
 
 export function getLastProviderTest(db: StateDatabase, config: EffectiveConfig) {
-  return db.getMaintenanceState<ProviderTestSnapshot>("provider_tests")?.latestByFingerprint?.[providerFingerprint(config)];
+  return db.getMaintenanceState<ProviderTestSnapshot>("provider_tests")?.latestByFingerprint?.[
+    providerFingerprint(config)
+  ];
 }
 
-export async function requireSuccessfulProviderTest(db: StateDatabase, config: EffectiveConfig): Promise<void> {
+export async function requireSuccessfulProviderTest(
+  db: StateDatabase,
+  config: EffectiveConfig,
+): Promise<void> {
   const latest = getLastProviderTest(db, config);
   if (latest?.ok) {
     return;
@@ -68,9 +73,11 @@ export async function requireSuccessfulProviderTest(db: StateDatabase, config: E
     latencyMs: result.latencyMs,
     diagnostics: result.diagnostics as unknown as Record<string, unknown>,
     responseText: result.responseText,
-    error: result.error
+    error: result.error,
   });
   if (!result.ok) {
-    throw new Error("Provider has not passed connectivity test yet. Test it in Settings before rename.");
+    throw new Error(
+      "Provider has not passed connectivity test yet. Test it in Settings before rename.",
+    );
   }
 }

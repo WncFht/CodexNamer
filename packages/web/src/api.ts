@@ -1,26 +1,26 @@
 import type {
   AiRequestLogDetailResponse,
   AiRequestLogResponse,
-  AutoRenamePreviewResponse,
   ApiEventsResponse,
+  AutoRenamePreviewResponse,
   ConfigDocument,
   ConfigUpdateResponse,
   ConfigView,
   DaemonControlStatus,
   DoctorResponse,
   OverviewResponse,
+  ParseCodexProviderResponse,
   PromptPreviewResponse,
   ProviderResponse,
   ProviderTestResponse,
-  ParseCodexProviderResponse,
   RenameApplyResponse,
-  RenameReplayPreviewResult,
   RenameFreezeResponse,
+  RenameReplayPreviewResult,
   RenameReplayResult,
   RenameSuggestResponse,
   SessionDetail,
+  SessionsResponse,
   SessionTranscriptPage,
-  SessionsResponse
 } from "./types.js";
 
 const inflightJsonRequests = new Map<string, Promise<unknown>>();
@@ -46,7 +46,7 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
     const response = await fetch(input, {
       ...init,
       headers,
-      cache: init?.cache ?? "no-store"
+      cache: init?.cache ?? "no-store",
     });
 
     if (!response.ok) {
@@ -100,7 +100,7 @@ export async function fetchSessionTranscript(
     includeHidden?: boolean;
     role?: "all" | "user" | "assistant" | "tool" | "system";
     query?: string;
-  }
+  },
 ): Promise<SessionTranscriptPage> {
   const url = new URL(`/api/v1/sessions/${threadId}/transcript`, window.location.origin);
   if (params?.page) {
@@ -123,20 +123,26 @@ export async function fetchSessionTranscript(
 
 export async function suggestSession(threadId: string): Promise<RenameSuggestResponse> {
   return requestJson<RenameSuggestResponse>(`/api/v1/sessions/${threadId}/suggest`, {
-    method: "POST"
+    method: "POST",
   });
 }
 
 export async function applySession(threadId: string): Promise<RenameApplyResponse> {
   return requestJson<RenameApplyResponse>(`/api/v1/sessions/${threadId}/apply`, {
-    method: "POST"
+    method: "POST",
   });
 }
 
-export async function freezeSession(threadId: string, frozen: boolean): Promise<RenameFreezeResponse> {
-  return requestJson<RenameFreezeResponse>(`/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`, {
-    method: "POST"
-  });
+export async function freezeSession(
+  threadId: string,
+  frozen: boolean,
+): Promise<RenameFreezeResponse> {
+  return requestJson<RenameFreezeResponse>(
+    `/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function fetchProviders(): Promise<ProviderResponse> {
@@ -150,7 +156,7 @@ export async function fetchConfig(): Promise<ConfigView> {
 export async function updateConfig(userConfig: ConfigDocument): Promise<ConfigUpdateResponse> {
   return requestJson<ConfigUpdateResponse>("/api/v1/config", {
     method: "PUT",
-    body: JSON.stringify({ userConfig })
+    body: JSON.stringify({ userConfig }),
   });
 }
 
@@ -169,13 +175,13 @@ export async function fetchDaemonStatus(): Promise<DaemonControlStatus> {
 export async function startDaemon(intervalSeconds?: number): Promise<DaemonControlStatus> {
   return requestJson<DaemonControlStatus>("/api/v1/daemon/start", {
     method: "POST",
-    body: JSON.stringify(typeof intervalSeconds === "number" ? { intervalSeconds } : {})
+    body: JSON.stringify(typeof intervalSeconds === "number" ? { intervalSeconds } : {}),
   });
 }
 
 export async function stopDaemon(): Promise<DaemonControlStatus> {
   return requestJson<DaemonControlStatus>("/api/v1/daemon/stop", {
-    method: "POST"
+    method: "POST",
   });
 }
 
@@ -195,15 +201,15 @@ export async function fetchAutoRenamePreview(params?: {
 
 export async function fetchPromptPreview(
   threadId?: string,
-  userConfig?: ConfigDocument
+  userConfig?: ConfigDocument,
 ): Promise<PromptPreviewResponse> {
   if (userConfig) {
     return requestJson<PromptPreviewResponse>("/api/v1/ai/prompt-preview", {
       method: "POST",
       body: JSON.stringify({
         threadId,
-        userConfig
-      })
+        userConfig,
+      }),
     });
   }
   const url = new URL("/api/v1/ai/prompt-preview", window.location.origin);
@@ -251,13 +257,13 @@ export async function fetchAiRequestLogDetail(id: number): Promise<AiRequestLogD
 export async function testProvider(userConfig?: ConfigDocument): Promise<ProviderTestResponse> {
   return requestJson<ProviderTestResponse>("/api/v1/providers/test", {
     method: "POST",
-    body: JSON.stringify(userConfig ? { userConfig } : {})
+    body: JSON.stringify(userConfig ? { userConfig } : {}),
   });
 }
 
 export async function parseCodexProvider(): Promise<ParseCodexProviderResponse> {
   return requestJson<ParseCodexProviderResponse>("/api/v1/providers/parse-codex", {
-    method: "POST"
+    method: "POST",
   });
 }
 
@@ -267,7 +273,7 @@ export async function requeueRenamesSince(params: {
 }): Promise<RenameReplayResult> {
   return requestJson<RenameReplayResult>("/api/v1/maintenance/requeue-renames", {
     method: "POST",
-    body: JSON.stringify(params)
+    body: JSON.stringify(params),
   });
 }
 
@@ -277,7 +283,7 @@ export async function previewRequeueRenamesSince(params: {
 }): Promise<RenameReplayPreviewResult> {
   return requestJson<RenameReplayPreviewResult>("/api/v1/maintenance/requeue-preview", {
     method: "POST",
-    body: JSON.stringify(params)
+    body: JSON.stringify(params),
   });
 }
 

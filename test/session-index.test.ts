@@ -1,13 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
+import { appendSessionIndexRename, compactSessionIndex, readSessionIndex } from "@codexnamer/core";
 import { describe, expect, it } from "vitest";
-
-import {
-  appendSessionIndexRename,
-  compactSessionIndex,
-  readSessionIndex
-} from "@codexnamer/core";
 
 import { createTempWorkspace } from "./helpers.js";
 
@@ -19,8 +13,8 @@ describe("session index", () => {
       indexPath,
       [
         '{"id":"t1","thread_name":"alpha","updated_at":"2026-04-04T00:00:00Z"}',
-        '{"id":"t1","thread_name":"beta","updated_at":"2026-04-04T01:00:00Z"}'
-      ].join("\n") + "\n"
+        '{"id":"t1","thread_name":"beta","updated_at":"2026-04-04T01:00:00Z"}',
+      ].join("\n") + "\n",
     );
 
     const snapshot = await readSessionIndex(indexPath);
@@ -30,7 +24,7 @@ describe("session index", () => {
     const result = await appendSessionIndexRename({
       filePath: indexPath,
       threadId: "t1",
-      threadName: "gamma"
+      threadName: "gamma",
     });
     expect(result.written).toBe(true);
 
@@ -47,8 +41,8 @@ describe("session index", () => {
       [
         '{"id":"t1","thread_name":"alpha","updated_at":"2026-04-04T00:00:00Z"}',
         '{"id":"t2","thread_name":"other","updated_at":"2026-04-04T00:10:00Z"}',
-        '{"id":"t1","thread_name":"beta","updated_at":"2026-04-04T01:00:00Z"}'
-      ].join("\n") + "\n"
+        '{"id":"t1","thread_name":"beta","updated_at":"2026-04-04T01:00:00Z"}',
+      ].join("\n") + "\n",
     );
 
     const dryRun = await compactSessionIndex({ filePath: indexPath, dryRun: true });
@@ -57,7 +51,7 @@ describe("session index", () => {
 
     const applied = await compactSessionIndex({
       filePath: indexPath,
-      backupDir: path.join(workspace.stateDir, "backups")
+      backupDir: path.join(workspace.stateDir, "backups"),
     });
     expect(applied.compactedLines).toBe(2);
 
@@ -66,4 +60,3 @@ describe("session index", () => {
     expect(snapshot.stats.totalLines).toBe(2);
   });
 });
-

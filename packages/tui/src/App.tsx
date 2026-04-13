@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LocalApiClient } from "./api.js";
+import { DaemonScreen } from "./DaemonScreen.js";
+import type { UiLanguage } from "./i18n.js";
 import {
   autoRenameReasonLabel,
   autoRenameStatusLabel,
@@ -10,22 +13,24 @@ import {
   normalizeUiLanguage,
   sessionStatusLabel,
   t,
-  type UiLanguage
 } from "./i18n.js";
-import { computeTerminalLayout, measureDisplayWidth, truncateDisplayText, wrapDisplayText } from "./layout.js";
-import { DaemonScreen } from "./DaemonScreen.js";
+import {
+  computeTerminalLayout,
+  measureDisplayWidth,
+  truncateDisplayText,
+  wrapDisplayText,
+} from "./layout.js";
 import { MaintenanceScreen } from "./MaintenanceScreen.js";
 import { deriveRuntimeDisplay } from "./runtime-display.js";
+import type { SettingKey, SettingsDraft } from "./settings-model.js";
 import {
   buildSettingsDraft,
   buildSettingsFields,
   cycleSettingsFieldValue,
   encodeSettingsDraft,
   isSettingsDraftDirty,
-  type SettingKey,
-  type SettingsDraft,
+  updateSelectedProfile,
   validateSettingsDraft,
-  updateSelectedProfile
 } from "./settings-model.js";
 import type {
   AiRequestLogResponse,
@@ -37,16 +42,22 @@ import type {
   OverviewResponse,
   ParseCodexProviderResponse,
   PromptPreviewResponse,
+  ProviderProfile,
   ProviderResponse,
   ProviderTestResponse,
-  ProviderProfile,
   SessionDetail,
   SessionSummary,
   SessionTranscriptEntry,
-  SessionTranscriptPage
+  SessionTranscriptPage,
 } from "./types.js";
 
-type InputMode = "normal" | "search" | "transcript-search" | "rename" | "edit-setting" | "replay-since";
+type InputMode =
+  | "normal"
+  | "search"
+  | "transcript-search"
+  | "rename"
+  | "edit-setting"
+  | "replay-since";
 type FocusPane = "sessions" | "transcript";
 type TranscriptRoleFilter = "all" | "user" | "assistant" | "tool" | "system";
 type ScreenMode = "browser" | "maintenance" | "daemon" | "settings";
@@ -66,7 +77,7 @@ const THEME = {
   danger: "#d26a55",
   manual: "#c58e73",
   bgAccent: "#d28b6a",
-  bgDark: "#141413"
+  bgDark: "#141413",
 } as const;
 
 function compactWhitespace(value: string | undefined): string {
@@ -82,7 +93,10 @@ function defaultReplaySinceValue(): string {
   return value.toISOString().slice(0, 16);
 }
 
-function transcriptRoleLabel(role: SessionTranscriptEntry["role"] | "all", language: UiLanguage): string {
+function transcriptRoleLabel(
+  role: SessionTranscriptEntry["role"] | "all",
+  language: UiLanguage,
+): string {
   const map =
     language === "zh-CN"
       ? {
@@ -90,14 +104,14 @@ function transcriptRoleLabel(role: SessionTranscriptEntry["role"] | "all", langu
           user: "用户",
           assistant: "助手",
           tool: "工具",
-          system: "系统"
+          system: "系统",
         }
       : {
           all: "all",
           user: "user",
           assistant: "assistant",
           tool: "tool",
-          system: "system"
+          system: "system",
         };
   return map[role];
 }
@@ -110,19 +124,23 @@ function transcriptKindLabel(kind: SessionTranscriptEntry["kind"], language: UiL
           tool_call: "工具调用",
           tool_output: "工具输出",
           reasoning: "思考",
-          status: "状态"
+          status: "状态",
         }
       : {
           message: "message",
           tool_call: "tool_call",
           tool_output: "tool_output",
           reasoning: "reasoning",
-          status: "status"
+          status: "status",
         };
   return map[kind];
 }
 
-function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: number): Array<{ item: T; index: number }> {
+function windowItemsAround<T>(
+  items: T[],
+  selectedIndex: number,
+  maxItems: number,
+): Array<{ item: T; index: number }> {
   if (items.length === 0 || maxItems <= 0) {
     return [];
   }
@@ -138,16 +156,19 @@ function windowItemsAround<T>(items: T[], selectedIndex: number, maxItems: numbe
 
   return items.slice(start, end).map((item, offset) => ({
     item,
-    index: start + offset
+    index: start + offset,
   }));
 }
 
 function useTerminalMetrics() {
   const { stdout } = useStdout();
-  const readMetrics = () => ({
-    columns: process.stdout.columns ?? stdout.columns ?? 120,
-    rows: process.stdout.rows ?? stdout.rows ?? 40
-  });
+  const readMetrics = useCallback(
+    () => ({
+      columns: process.stdout.columns ?? stdout.columns ?? 120,
+      rows: process.stdout.rows ?? stdout.rows ?? 40,
+    }),
+    [stdout],
+  );
   const [metrics, setMetrics] = useState(readMetrics);
 
   useEffect(() => {
@@ -173,7 +194,7 @@ function useTerminalMetrics() {
       }
       process.off("SIGWINCH", update);
     };
-  }, [stdout]);
+  }, [readMetrics, stdout]);
 
   return metrics;
 }
@@ -214,11 +235,13 @@ function SessionRow(props: {
         ? inLanguage(props.uiLanguage, "dirty", "dirty")
         : inLanguage(props.uiLanguage, "clean", "clean"),
       props.session.frozen ? inLanguage(props.uiLanguage, "冻结", "frozen") : null,
-      props.session.statusEstimate ? sessionStatusLabel(props.session.statusEstimate, props.uiLanguage) : null
+      props.session.statusEstimate
+        ? sessionStatusLabel(props.session.statusEstimate, props.uiLanguage)
+        : null,
     ]
       .filter(Boolean)
       .join(" · "),
-    props.width
+    props.width,
   );
 
   return (
@@ -252,11 +275,12 @@ function TranscriptRow(props: {
   const header = [
     transcriptRoleLabel(props.entry.role, props.uiLanguage),
     transcriptKindLabel(props.entry.kind, props.uiLanguage),
-    props.entry.name ?? props.entry.phase ?? props.entry.hiddenReason ?? null
+    props.entry.name ?? props.entry.phase ?? props.entry.hiddenReason ?? null,
   ]
     .filter(Boolean)
     .join(" · ");
-  const content = compactWhitespace(props.entry.content) || inLanguage(props.uiLanguage, "(空)", "(empty)");
+  const content =
+    compactWhitespace(props.entry.content) || inLanguage(props.uiLanguage, "(空)", "(empty)");
   const truncatedContent = truncateDisplayText(content, props.width);
 
   return (
@@ -269,7 +293,10 @@ function TranscriptRow(props: {
         >
           {fitDisplayLine(header, Math.max(12, props.width - 14), "")}
         </Text>
-        <Text color={props.active ? THEME.bgDark : THEME.muted} backgroundColor={props.active ? THEME.bgAccent : undefined}>
+        <Text
+          color={props.active ? THEME.bgDark : THEME.muted}
+          backgroundColor={props.active ? THEME.bgAccent : undefined}
+        >
           {fitDisplayLine(formatUiWhen(props.entry.timestamp, props.uiLanguage), 11, "")}
         </Text>
       </Box>
@@ -281,7 +308,7 @@ function TranscriptRow(props: {
         {renderHighlightedText({
           content: truncatedContent,
           query: props.query,
-          active: props.active
+          active: props.active,
         })}
       </Text>
     </Box>
@@ -319,7 +346,7 @@ function renderHighlightedText(props: {
         backgroundColor={props.active ? THEME.warning : THEME.warning}
       >
         {props.content.slice(matchAt, matchAt + normalizedQuery.length)}
-      </Text>
+      </Text>,
     );
     cursor = matchAt + normalizedQuery.length;
   }
@@ -327,12 +354,20 @@ function renderHighlightedText(props: {
   return fragments;
 }
 
-function PreviewRow(props: { item: AutoRenamePreviewResponse["items"][number]; width: number; uiLanguage: UiLanguage }) {
+function PreviewRow(props: {
+  item: AutoRenamePreviewResponse["items"][number];
+  width: number;
+  uiLanguage: UiLanguage;
+}) {
   const tone =
-    props.item.status === "apply" ? THEME.success : props.item.status === "suggest" ? THEME.warning : THEME.muted;
+    props.item.status === "apply"
+      ? THEME.success
+      : props.item.status === "suggest"
+        ? THEME.warning
+        : THEME.muted;
   const content = `${truncateDisplayText(props.item.threadId, 12)} | ${autoRenameStatusLabel(
     props.item.status,
-    props.uiLanguage
+    props.uiLanguage,
   )} | ${truncateDisplayText(props.item.candidateName ?? autoRenameReasonLabel(props.item.reason, props.uiLanguage), Math.max(18, props.width - 24))}`;
   return (
     <Box width={props.width}>
@@ -343,12 +378,7 @@ function PreviewRow(props: { item: AutoRenamePreviewResponse["items"][number]; w
   );
 }
 
-function SettingRow(props: {
-  label: string;
-  value: string;
-  selected: boolean;
-  width: number;
-}) {
+function SettingRow(props: { label: string; value: string; selected: boolean; width: number }) {
   const content = truncateDisplayText(`${props.label}: ${props.value || "(empty)"}`, props.width);
   return (
     <Text
@@ -408,7 +438,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [expandedTranscriptScroll, setExpandedTranscriptScroll] = useState(0);
   const [configView, setConfigView] = useState<ConfigView | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
-  const [settingsBaseline, setSettingsBaseline] = useState<ReturnType<typeof encodeSettingsDraft> | null>(null);
+  const [settingsBaseline, setSettingsBaseline] = useState<ReturnType<
+    typeof encodeSettingsDraft
+  > | null>(null);
   const [settingsIndex, setSettingsIndex] = useState(0);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
   const [promptPreviewRefreshing, setPromptPreviewRefreshing] = useState(false);
@@ -418,19 +450,25 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
   const [providerDiagnostics, setProviderDiagnostics] = useState<ProviderResponse | null>(null);
   const [providerTestResult, setProviderTestResult] = useState<ProviderTestResponse | null>(null);
-  const [parsedCodexProvider, setParsedCodexProvider] = useState<ParseCodexProviderResponse | null>(null);
+  const [parsedCodexProvider, setParsedCodexProvider] = useState<ParseCodexProviderResponse | null>(
+    null,
+  );
   const [maintenanceRefreshing, setMaintenanceRefreshing] = useState(false);
   const [daemonActioning, setDaemonActioning] = useState<"start" | "stop" | null>(null);
-  const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">("session-updated-at");
+  const [replayBasis, setReplayBasis] = useState<"session-updated-at" | "last-applied-at">(
+    "session-updated-at",
+  );
   const eventCursorRef = useRef(0);
   const metrics = useTerminalMetrics();
   const layout = computeTerminalLayout(metrics, {
     screenMode,
     viewMode: browserViewMode,
-    showPreview: screenMode === "browser" && showPreviewPanel
+    showPreview: screenMode === "browser" && showPreviewPanel,
   });
 
   const selected = sessions[selectedIndex];
+  const selectedThreadIdRef = useRef<string | undefined>(undefined);
+  selectedThreadIdRef.current = selected?.threadId;
   const visibleSessions = windowItemsAround(sessions, selectedIndex, layout.visibleSessionCount);
   const historyReserveLines = expandedTranscript
     ? 0
@@ -441,14 +479,23 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       : 2;
   const visibleTranscriptCount = Math.max(
     1,
-    Math.floor(Math.max(3, layout.detailHeight - (layout.compact ? 12 : 15) - historyReserveLines) / 3)
+    Math.floor(
+      Math.max(3, layout.detailHeight - (layout.compact ? 12 : 15) - historyReserveLines) / 3,
+    ),
   );
-  const visibleTranscript = windowItemsAround(transcriptItems, transcriptIndex, visibleTranscriptCount);
+  const visibleTranscript = windowItemsAround(
+    transcriptItems,
+    transcriptIndex,
+    visibleTranscriptCount,
+  );
 
   const selectedProfile = settingsDraft?.providerProfiles.find(
-    (profile) => profile.profileId === settingsDraft.selectedProfileId
+    (profile) => profile.profileId === settingsDraft.selectedProfileId,
   );
-  const settingsDraftConfig = useMemo(() => (settingsDraft ? encodeSettingsDraft(settingsDraft) : null), [settingsDraft]);
+  const settingsDraftConfig = useMemo(
+    () => (settingsDraft ? encodeSettingsDraft(settingsDraft) : null),
+    [settingsDraft],
+  );
   const settingsDirty = useMemo(() => {
     if (!settingsDraft || !settingsBaseline) {
       return false;
@@ -456,17 +503,16 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     return isSettingsDraftDirty(settingsDraft, settingsBaseline);
   }, [settingsBaseline, settingsDraft]);
   const uiLanguage = normalizeUiLanguage(configView);
-  const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
+  const tt = useCallback((key: Parameters<typeof t>[1]) => t(uiLanguage, key), [uiLanguage]);
   const previewSuggestCount = preview.filter((item) => item.status === "suggest").length;
   const previewApplyCount = preview.filter((item) => item.status === "apply").length;
   const previewSkipCount = preview.filter((item) => item.status === "skip").length;
   const selectedWorkspace =
     selectedWorkspaceId === ALL_WORKSPACES_ID
       ? null
-      : workspaces.find((item) => item.workspaceId === selectedWorkspaceId) ?? null;
+      : (workspaces.find((item) => item.workspaceId === selectedWorkspaceId) ?? null);
   const selectedWorkspaceLabel =
-    selectedWorkspace?.workspaceLabel ??
-    inLanguage(uiLanguage, "全部工作区", "All workspaces");
+    selectedWorkspace?.workspaceLabel ?? inLanguage(uiLanguage, "全部工作区", "All workspaces");
   const runtimeDisplay = deriveRuntimeDisplay(overview, daemonStatus);
   const screenModeLabel =
     screenMode === "browser"
@@ -475,7 +521,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         ? inLanguage(uiLanguage, "Rename Ops", "rename-ops")
         : screenMode === "daemon"
           ? inLanguage(uiLanguage, "Daemon", "daemon")
-        : tt("settings");
+          : tt("settings");
 
   const settingsFields = useMemo(
     () =>
@@ -484,9 +530,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         selectedProfile,
         uiLanguage,
         tt,
-        inline: (zh, en) => inLanguage(uiLanguage, zh, en)
+        inline: (zh, en) => inLanguage(uiLanguage, zh, en),
       }),
-    [selectedProfile, settingsDraft, tt, uiLanguage]
+    [selectedProfile, settingsDraft, tt, uiLanguage],
   );
 
   const activeSetting = settingsFields[settingsIndex];
@@ -499,18 +545,21 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     timer.unref?.();
   };
 
-  const syncSettingsFromConfig = (payload: ConfigView, options?: { preserveDirty?: boolean }) => {
-    const nextDraft = buildSettingsDraft(payload);
-    const nextBaseline = encodeSettingsDraft(nextDraft);
-    setConfigView(payload);
-    setSettingsBaseline(nextBaseline);
-    setSettingsDraft((current) => {
-      if (!options?.preserveDirty || !current) {
-        return nextDraft;
-      }
-      return isSettingsDraftDirty(current, nextBaseline) ? current : nextDraft;
-    });
-  };
+  const syncSettingsFromConfig = useCallback(
+    (payload: ConfigView, options?: { preserveDirty?: boolean }) => {
+      const nextDraft = buildSettingsDraft(payload);
+      const nextBaseline = encodeSettingsDraft(nextDraft);
+      setConfigView(payload);
+      setSettingsBaseline(nextBaseline);
+      setSettingsDraft((current) => {
+        if (!options?.preserveDirty || !current) {
+          return nextDraft;
+        }
+        return isSettingsDraftDirty(current, nextBaseline) ? current : nextDraft;
+      });
+    },
+    [],
+  );
 
   const cycleWorkspaceSelection = (direction: 1 | -1) => {
     const orderedIds = [ALL_WORKSPACES_ID, ...workspaces.map((item) => item.workspaceId)];
@@ -522,118 +571,146 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     setSelectedWorkspaceId(orderedIds[nextIndex] ?? ALL_WORKSPACES_ID);
   };
 
-  const reloadSessions = async (nextSelectedId?: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await client.listSessions({
-        dirtyOnly,
-        search,
-        limit: 80,
-        workspace: selectedWorkspaceId !== ALL_WORKSPACES_ID ? selectedWorkspaceId : undefined
-      });
-      const scopedWorkspace =
-        selectedWorkspaceId === ALL_WORKSPACES_ID
-          ? null
-          : payload.workspaces.find((item) => item.workspaceId === selectedWorkspaceId) ?? null;
-      setWorkspaces(payload.workspaces);
-      if (
-        selectedWorkspaceId !== ALL_WORKSPACES_ID &&
-        !payload.workspaces.some((item) => item.workspaceId === selectedWorkspaceId)
-      ) {
-        setSelectedWorkspaceId(ALL_WORKSPACES_ID);
-      }
-      setSessions(payload.items);
-      const nextIndex = nextSelectedId
-        ? payload.items.findIndex((item) => item.threadId === nextSelectedId)
-        : selected
-          ? payload.items.findIndex((item) => item.threadId === selected.threadId)
+  const reloadSessions = useCallback(
+    async (nextSelectedId?: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const payload = await client.listSessions({
+          dirtyOnly,
+          search,
+          limit: 80,
+          workspace: selectedWorkspaceId !== ALL_WORKSPACES_ID ? selectedWorkspaceId : undefined,
+        });
+        const scopedWorkspace =
+          selectedWorkspaceId === ALL_WORKSPACES_ID
+            ? null
+            : (payload.workspaces.find((item) => item.workspaceId === selectedWorkspaceId) ?? null);
+        setWorkspaces(payload.workspaces);
+        if (
+          selectedWorkspaceId !== ALL_WORKSPACES_ID &&
+          !payload.workspaces.some((item) => item.workspaceId === selectedWorkspaceId)
+        ) {
+          setSelectedWorkspaceId(ALL_WORKSPACES_ID);
+        }
+        setSessions(payload.items);
+        const fallbackSelectedId = nextSelectedId ?? selectedThreadIdRef.current;
+        const nextIndex = fallbackSelectedId
+          ? payload.items.findIndex((item) => item.threadId === fallbackSelectedId)
           : 0;
-      setSelectedIndex(nextIndex >= 0 ? nextIndex : 0);
-      setMessage(
-        inLanguage(
-          uiLanguage,
-          selectedWorkspaceId === ALL_WORKSPACES_ID
-            ? `已加载 ${payload.items.length} 个会话（dirty ${payload.counts.dirty} / 冻结 ${payload.counts.frozen}）`
-            : `已加载 ${payload.items.length} 个会话（${scopedWorkspace?.workspaceLabel ?? "当前工作区"}，dirty ${scopedWorkspace?.dirtyCount ?? 0} / 冻结 ${scopedWorkspace?.frozenCount ?? 0}）`,
-          selectedWorkspaceId === ALL_WORKSPACES_ID
-            ? `Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`
-            : `Loaded ${payload.items.length} sessions (${scopedWorkspace?.workspaceLabel ?? "selected workspace"}, ${scopedWorkspace?.dirtyCount ?? 0} dirty / ${scopedWorkspace?.frozenCount ?? 0} frozen)`
-        )
-      );
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
-      setSessions([]);
-      setSelectedIndex(0);
-    } finally {
-      setLoading(false);
-    }
-  };
+        setSelectedIndex(nextIndex >= 0 ? nextIndex : 0);
+        setMessage(
+          inLanguage(
+            uiLanguage,
+            selectedWorkspaceId === ALL_WORKSPACES_ID
+              ? `已加载 ${payload.items.length} 个会话（dirty ${payload.counts.dirty} / 冻结 ${payload.counts.frozen}）`
+              : `已加载 ${payload.items.length} 个会话（${scopedWorkspace?.workspaceLabel ?? "当前工作区"}，dirty ${scopedWorkspace?.dirtyCount ?? 0} / 冻结 ${scopedWorkspace?.frozenCount ?? 0}）`,
+            selectedWorkspaceId === ALL_WORKSPACES_ID
+              ? `Loaded ${payload.items.length} sessions (${payload.counts.dirty} dirty / ${payload.counts.frozen} frozen)`
+              : `Loaded ${payload.items.length} sessions (${scopedWorkspace?.workspaceLabel ?? "selected workspace"}, ${scopedWorkspace?.dirtyCount ?? 0} dirty / ${scopedWorkspace?.frozenCount ?? 0} frozen)`,
+          ),
+        );
+      } catch (nextError) {
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+        );
+        setSessions([]);
+        setSelectedIndex(0);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [client, dirtyOnly, search, selectedWorkspaceId, uiLanguage],
+  );
 
-  const reloadDetail = async (threadId: string | undefined) => {
-    if (!threadId) {
-      setDetail(null);
-      return;
-    }
+  const reloadDetail = useCallback(
+    async (threadId: string | undefined) => {
+      if (!threadId) {
+        setDetail(null);
+        return;
+      }
 
-    try {
-      const payload = await client.getSession(threadId);
-      setDetail(payload);
-      setRenameDraft(payload.candidateName ?? payload.officialName ?? "");
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
-      setDetail(null);
-    }
-  };
+      try {
+        const payload = await client.getSession(threadId);
+        setDetail(payload);
+        setRenameDraft(payload.candidateName ?? payload.officialName ?? "");
+      } catch (nextError) {
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+        );
+        setDetail(null);
+      }
+    },
+    [client, uiLanguage],
+  );
 
-  const reloadTranscript = async (threadId: string | undefined) => {
-    if (!threadId) {
-      setTranscriptPage(null);
-      setTranscriptItems([]);
-      setTranscriptIndex(0);
-      return;
-    }
+  const reloadTranscript = useCallback(
+    async (threadId: string | undefined) => {
+      if (!threadId) {
+        setTranscriptPage(null);
+        setTranscriptItems([]);
+        setTranscriptIndex(0);
+        return;
+      }
 
-    setTranscriptLoading(true);
-    setTranscriptError(null);
-    try {
-      const payload = await client.getSessionTranscript(threadId, {
-        page: 1,
-        pageSize: TRANSCRIPT_PAGE_SIZE,
-        includeHidden: showHiddenTranscript,
-        role: transcriptRole,
-        query: transcriptQuery || undefined
-      });
-      setTranscriptPage(payload);
-      setTranscriptItems(payload.items);
-      setTranscriptIndex(Math.max(0, payload.items.length - 1));
-    } catch (nextError) {
-      setTranscriptError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
-      setTranscriptPage(null);
-      setTranscriptItems([]);
-      setTranscriptIndex(0);
-    } finally {
-      setTranscriptLoading(false);
-    }
-  };
+      setTranscriptLoading(true);
+      setTranscriptError(null);
+      try {
+        const payload = await client.getSessionTranscript(threadId, {
+          page: 1,
+          pageSize: TRANSCRIPT_PAGE_SIZE,
+          includeHidden: showHiddenTranscript,
+          role: transcriptRole,
+          query: transcriptQuery || undefined,
+        });
+        setTranscriptPage(payload);
+        setTranscriptItems(payload.items);
+        setTranscriptIndex(Math.max(0, payload.items.length - 1));
+      } catch (nextError) {
+        setTranscriptError(
+          nextError instanceof Error
+            ? nextError.message
+            : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+        );
+        setTranscriptPage(null);
+        setTranscriptItems([]);
+        setTranscriptIndex(0);
+      } finally {
+        setTranscriptLoading(false);
+      }
+    },
+    [client, showHiddenTranscript, transcriptQuery, transcriptRole, uiLanguage],
+  );
 
-  const reloadConfig = async () => {
+  const reloadConfig = useCallback(async () => {
     try {
       const payload = await client.getConfig();
       syncSettingsFromConfig(payload, { preserveDirty: true });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     }
-  };
+  }, [client, syncSettingsFromConfig, uiLanguage]);
 
-  const reloadProviderDiagnostics = async () => {
+  const reloadProviderDiagnostics = useCallback(async () => {
     try {
       const payload = await client.getProviders();
       setProviderDiagnostics(payload);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     }
-  };
+  }, [client, uiLanguage]);
 
   const testProviderConnection = async () => {
     if (!settingsDraft) {
@@ -641,17 +718,29 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
     setLoading(true);
     setError(null);
-    setMessage(inLanguage(uiLanguage, "正在测试 provider 连通性...", "Testing provider connectivity..."));
+    setMessage(
+      inLanguage(uiLanguage, "正在测试 provider 连通性...", "Testing provider connectivity..."),
+    );
     try {
-      const payload = await client.testProvider(settingsDraftConfig ?? encodeSettingsDraft(settingsDraft));
+      const payload = await client.testProvider(
+        settingsDraftConfig ?? encodeSettingsDraft(settingsDraft),
+      );
       setProviderTestResult(payload);
       setMessage(
         payload.ok
-          ? inLanguage(uiLanguage, `provider 测试成功，耗时 ${payload.latencyMs ?? 0}ms`, `Provider test passed in ${payload.latencyMs ?? 0}ms`)
-          : inLanguage(uiLanguage, "provider 测试失败", "Provider test failed")
+          ? inLanguage(
+              uiLanguage,
+              `provider 测试成功，耗时 ${payload.latencyMs ?? 0}ms`,
+              `Provider test passed in ${payload.latencyMs ?? 0}ms`,
+            )
+          : inLanguage(uiLanguage, "provider 测试失败", "Provider test failed"),
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setLoading(false);
     }
@@ -663,7 +752,13 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
     setLoading(true);
     setError(null);
-    setMessage(inLanguage(uiLanguage, "正在导入 Codex provider 配置...", "Importing Codex provider config..."));
+    setMessage(
+      inLanguage(
+        uiLanguage,
+        "正在导入 Codex provider 配置...",
+        "Importing Codex provider config...",
+      ),
+    );
     try {
       const payload = await client.parseCodexProvider();
       setParsedCodexProvider(payload);
@@ -673,75 +768,103 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         }
         return {
           ...current,
-          providerProfiles: updateSelectedProfile(current.providerProfiles, current.selectedProfileId, {
-            requestType: payload.profile.requestType,
-            providerRef: payload.profile.providerRef,
-            baseUrl: payload.profile.baseUrl,
-            model: payload.profile.model,
-            apiKey: payload.profile.apiKey
-          })
+          providerProfiles: updateSelectedProfile(
+            current.providerProfiles,
+            current.selectedProfileId,
+            {
+              requestType: payload.profile.requestType,
+              providerRef: payload.profile.providerRef,
+              baseUrl: payload.profile.baseUrl,
+              model: payload.profile.model,
+              apiKey: payload.profile.apiKey,
+            },
+          ),
         };
       });
-      setMessage(inLanguage(uiLanguage, "已把 Codex provider 导入到当前 profile 草稿", "Imported Codex provider into current profile draft"));
+      setMessage(
+        inLanguage(
+          uiLanguage,
+          "已把 Codex provider 导入到当前 profile 草稿",
+          "Imported Codex provider into current profile draft",
+        ),
+      );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const reloadPromptPreview = async (
-    threadId?: string,
-    options?: { silent?: boolean; userConfig?: ReturnType<typeof encodeSettingsDraft> }
-  ) => {
-    setPromptPreviewRefreshing(true);
-    try {
-      const payload = await client.getPromptPreview(threadId, options?.userConfig);
-      setPromptPreview(payload);
-      if (!options?.silent) {
-        setMessage(
-          inLanguage(
-            uiLanguage,
-            payload.synthetic ? "已刷新 synthetic prompt 预览" : "已刷新当前会话 prompt 预览",
-            payload.synthetic ? "Refreshed synthetic prompt preview" : "Refreshed prompt preview for selected session"
-          )
+  const reloadPromptPreview = useCallback(
+    async (
+      threadId?: string,
+      options?: { silent?: boolean; userConfig?: ReturnType<typeof encodeSettingsDraft> },
+    ) => {
+      setPromptPreviewRefreshing(true);
+      try {
+        const payload = await client.getPromptPreview(threadId, options?.userConfig);
+        setPromptPreview(payload);
+        if (!options?.silent) {
+          setMessage(
+            inLanguage(
+              uiLanguage,
+              payload.synthetic ? "已刷新 synthetic prompt 预览" : "已刷新当前会话 prompt 预览",
+              payload.synthetic
+                ? "Refreshed synthetic prompt preview"
+                : "Refreshed prompt preview for selected session",
+            ),
+          );
+        }
+      } catch (nextError) {
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : inLanguage(uiLanguage, "未知错误", "Unknown error"),
         );
+      } finally {
+        setPromptPreviewRefreshing(false);
       }
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
-    } finally {
-      setPromptPreviewRefreshing(false);
-    }
-  };
+    },
+    [client, uiLanguage],
+  );
 
-  const reloadMaintenanceData = async () => {
+  const reloadMaintenanceData = useCallback(async () => {
     setMaintenanceRefreshing(true);
     try {
-      const [overviewPayload, doctorPayload, daemonPayload, aiRequestLogPayload, previewPayload] = await Promise.all([
-        client.getOverview(),
-        client.getDoctor(),
-        client.getDaemonStatus(),
-        client.getAiRequestLogs({
-          pageSize: 8
-        }),
-        client.getAutoRenamePreview({
-          includeCandidateNames: true,
-          limit: 12
-        })
-      ]);
+      const [overviewPayload, doctorPayload, daemonPayload, aiRequestLogPayload, previewPayload] =
+        await Promise.all([
+          client.getOverview(),
+          client.getDoctor(),
+          client.getDaemonStatus(),
+          client.getAiRequestLogs({
+            pageSize: 8,
+          }),
+          client.getAutoRenamePreview({
+            includeCandidateNames: true,
+            limit: 12,
+          }),
+        ]);
       setOverview(overviewPayload);
       setDoctor(doctorPayload);
       setDaemonStatus(daemonPayload);
       setAiRequestLogs(aiRequestLogPayload);
       setPreview(previewPayload.items.slice(0, 12));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setMaintenanceRefreshing(false);
     }
-  };
+  }, [client, uiLanguage]);
 
-  const reloadDaemonData = async () => {
+  const reloadDaemonData = useCallback(async () => {
     setMaintenanceRefreshing(true);
     try {
       const [overviewPayload, daemonPayload, previewPayload] = await Promise.all([
@@ -749,35 +872,50 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         client.getDaemonStatus(),
         client.getAutoRenamePreview({
           includeCandidateNames: true,
-          limit: 12
-        })
+          limit: 12,
+        }),
       ]);
       setOverview(overviewPayload);
       setDaemonStatus(daemonPayload);
       setPreview(previewPayload.items.slice(0, 12));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setMaintenanceRefreshing(false);
     }
-  };
+  }, [client, uiLanguage]);
 
   const updateDaemonState = async (action: "start" | "stop") => {
     setDaemonActioning(action);
     setError(null);
-    setMessage(action === "start" ? inLanguage(uiLanguage, "正在启动 daemon...", "Starting daemon...") : inLanguage(uiLanguage, "正在停止 daemon...", "Stopping daemon..."));
+    setMessage(
+      action === "start"
+        ? inLanguage(uiLanguage, "正在启动 daemon...", "Starting daemon...")
+        : inLanguage(uiLanguage, "正在停止 daemon...", "Stopping daemon..."),
+    );
     try {
-      const result =
-        action === "start" ? await client.startDaemon() : await client.stopDaemon();
+      const result = action === "start" ? await client.startDaemon() : await client.stopDaemon();
       setDaemonStatus(result);
       await reloadDaemonData();
       setMessage(
         action === "start"
-          ? inLanguage(uiLanguage, `daemon 已启动${result.pid ? `（pid ${result.pid}）` : ""}`, `Daemon started${result.pid ? ` (pid ${result.pid})` : ""}.`)
-          : inLanguage(uiLanguage, "daemon 已停止", "Daemon stopped.")
+          ? inLanguage(
+              uiLanguage,
+              `daemon 已启动${result.pid ? `（pid ${result.pid}）` : ""}`,
+              `Daemon started${result.pid ? ` (pid ${result.pid})` : ""}.`,
+            )
+          : inLanguage(uiLanguage, "daemon 已停止", "Daemon stopped."),
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setDaemonActioning(null);
     }
@@ -787,33 +925,45 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     const normalized = rawValue.trim();
     const parsed = new Date(normalized);
     if (Number.isNaN(parsed.getTime())) {
-      setError(inLanguage(uiLanguage, "请输入合法的 ISO 时间，例如 2026-04-01T12:00", "Enter a valid ISO timestamp like 2026-04-01T12:00"));
+      setError(
+        inLanguage(
+          uiLanguage,
+          "请输入合法的 ISO 时间，例如 2026-04-01T12:00",
+          "Enter a valid ISO timestamp like 2026-04-01T12:00",
+        ),
+      );
       return;
     }
 
     setLoading(true);
     setError(null);
-    setMessage(inLanguage(uiLanguage, "正在重新入队命名 backlog...", "Re-queueing rename backlog..."));
+    setMessage(
+      inLanguage(uiLanguage, "正在重新入队命名 backlog...", "Re-queueing rename backlog..."),
+    );
     try {
       const result = await client.requeueRenamesSince({
         since: parsed.toISOString(),
-        basis: replayBasis
+        basis: replayBasis,
       });
       await Promise.all([
         reloadSessions(selected?.threadId),
         reloadDetail(selected?.threadId),
         reloadPromptPreview(selected?.threadId, { silent: true }),
-        reloadMaintenanceData()
+        reloadMaintenanceData(),
       ]);
       setMessage(
         inLanguage(
           uiLanguage,
           `已重新入队 ${result.queued} 个会话，清空 ${result.clearedCandidates} 个旧候选名`,
-          `Queued ${result.queued} sessions and cleared ${result.clearedCandidates} stale candidates`
-        )
+          `Queued ${result.queued} sessions and cleared ${result.clearedCandidates} stale candidates`,
+        ),
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setLoading(false);
     }
@@ -832,7 +982,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         pageSize: transcriptPage.pageSize,
         includeHidden: showHiddenTranscript,
         role: transcriptRole,
-        query: transcriptQuery || undefined
+        query: transcriptQuery || undefined,
       });
       setTranscriptItems((previous) => [...payload.items, ...previous]);
       setTranscriptPage(payload);
@@ -841,11 +991,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         inLanguage(
           uiLanguage,
           `已加载更早的 ${payload.items.length} 条 transcript 事件`,
-          `Loaded ${payload.items.length} earlier transcript events`
-        )
+          `Loaded ${payload.items.length} earlier transcript events`,
+        ),
       );
     } catch (nextError) {
-      setTranscriptError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setTranscriptError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setTranscriptLoading(false);
     }
@@ -866,7 +1020,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       await reloadPromptPreview(selected.threadId, { silent: true });
       setMessage(successMessage);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setLoading(false);
     }
@@ -874,10 +1032,12 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
   const refreshPreview = async () => {
     try {
-      setMessage(inLanguage(uiLanguage, "正在刷新自动命名预览...", "Refreshing auto-rename preview..."));
+      setMessage(
+        inLanguage(uiLanguage, "正在刷新自动命名预览...", "Refreshing auto-rename preview..."),
+      );
       const payload = await client.getAutoRenamePreview({
         includeCandidateNames: true,
-        limit: 12
+        limit: 12,
       });
       setPreview(payload.items.slice(0, 12));
       setShowPreviewPanel(true);
@@ -887,11 +1047,15 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         inLanguage(
           uiLanguage,
           `预览已刷新：建议 ${suggestCount} / 应用 ${applyCount}`,
-          `Preview refreshed: ${suggestCount} suggest / ${applyCount} apply`
-        )
+          `Preview refreshed: ${suggestCount} suggest / ${applyCount} apply`,
+        ),
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     }
   };
 
@@ -918,10 +1082,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 ? { apiKeyRef: value }
                 : key === "providerRef"
                   ? { providerRef: value }
-              : { requestType: value as ProviderProfile["requestType"] };
+                  : { requestType: value as ProviderProfile["requestType"] };
       setSettingsDraft({
         ...settingsDraft,
-        providerProfiles: updateSelectedProfile(settingsDraft.providerProfiles, settingsDraft.selectedProfileId, patch)
+        providerProfiles: updateSelectedProfile(
+          settingsDraft.providerProfiles,
+          settingsDraft.selectedProfileId,
+          patch,
+        ),
       });
       return;
     }
@@ -929,14 +1097,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     if (key === "maintenanceBackupBeforeCompact") {
       setSettingsDraft({
         ...settingsDraft,
-        maintenanceBackupBeforeCompact: value.trim().toLowerCase() === "true"
+        maintenanceBackupBeforeCompact: value.trim().toLowerCase() === "true",
       });
       return;
     }
 
     setSettingsDraft({
       ...settingsDraft,
-      [key]: value
+      [key]: value,
     });
   };
 
@@ -953,24 +1121,39 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
     const validationError = validateSettingsDraft(settingsDraft);
     if (validationError) {
-      setError(inLanguage(uiLanguage, `设置校验失败：${validationError}`, `Settings validation failed: ${validationError}`));
+      setError(
+        inLanguage(
+          uiLanguage,
+          `设置校验失败：${validationError}`,
+          `Settings validation failed: ${validationError}`,
+        ),
+      );
       return;
     }
     setLoading(true);
     setError(null);
     setMessage(inLanguage(uiLanguage, "正在保存设置...", "Saving settings..."));
     try {
-      const payload = await client.updateConfig(settingsDraftConfig ?? encodeSettingsDraft(settingsDraft));
+      const payload = await client.updateConfig(
+        settingsDraftConfig ?? encodeSettingsDraft(settingsDraft),
+      );
       syncSettingsFromConfig(payload.config);
       await reloadProviderDiagnostics();
-      await reloadPromptPreview(selected?.threadId, { silent: true, userConfig: settingsDraftConfig ?? undefined });
+      await reloadPromptPreview(selected?.threadId, {
+        silent: true,
+        userConfig: settingsDraftConfig ?? undefined,
+      });
       setMessage(
         payload.restartRequired
           ? inLanguage(uiLanguage, "设置已保存（需要重启）。", "Saved settings (restart required).")
-          : inLanguage(uiLanguage, "设置已保存。", "Saved settings.")
+          : inLanguage(uiLanguage, "设置已保存。", "Saved settings."),
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+      );
     } finally {
       setLoading(false);
     }
@@ -979,19 +1162,19 @@ export function App(props: { apiBase: string; interactive: boolean }) {
   useEffect(() => {
     void reloadSessions();
     void reloadConfig();
-  }, [dirtyOnly, search, selectedWorkspaceId]);
+  }, [reloadConfig, reloadSessions]);
 
   useEffect(() => {
     void reloadDetail(selected?.threadId);
-  }, [selected?.threadId]);
+  }, [reloadDetail, selected?.threadId]);
 
   useEffect(() => {
     void reloadTranscript(selected?.threadId);
-  }, [selected?.threadId, showHiddenTranscript, transcriptRole, transcriptQuery]);
+  }, [reloadTranscript, selected?.threadId]);
 
   useEffect(() => {
     void reloadPromptPreview(selected?.threadId, { silent: true });
-  }, [selected?.threadId]);
+  }, [reloadPromptPreview, selected?.threadId]);
 
   useEffect(() => {
     if (screenMode !== "settings" || !settingsDraft) {
@@ -1000,20 +1183,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     const timeoutId = setTimeout(() => {
       void reloadPromptPreview(selected?.threadId, {
         silent: true,
-        userConfig: settingsDraftConfig ?? undefined
+        userConfig: settingsDraftConfig ?? undefined,
       });
     }, 180);
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [screenMode, selected?.threadId, settingsDraftConfig, settingsDraft]);
+  }, [reloadPromptPreview, screenMode, selected?.threadId, settingsDraftConfig, settingsDraft]);
 
   useEffect(() => {
     if (screenMode !== "settings") {
       return;
     }
     void reloadProviderDiagnostics();
-  }, [screenMode]);
+  }, [reloadProviderDiagnostics, screenMode]);
 
   useEffect(() => {
     setExpandedTranscript(false);
@@ -1025,14 +1208,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       return;
     }
     void reloadMaintenanceData();
-  }, [screenMode]);
+  }, [reloadMaintenanceData, screenMode]);
 
   useEffect(() => {
     if (screenMode !== "daemon") {
       return;
     }
     void reloadDaemonData();
-  }, [screenMode]);
+  }, [reloadDaemonData, screenMode]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -1078,15 +1261,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     };
   }, [
     client,
+    reloadDaemonData,
+    reloadDetail,
+    reloadMaintenanceData,
+    reloadPromptPreview,
+    reloadSessions,
+    reloadTranscript,
     screenMode,
     selected?.threadId,
-    dirtyOnly,
-    search,
-    selectedWorkspaceId,
-    screenMode,
-    showHiddenTranscript,
-    transcriptRole,
-    transcriptQuery
   ]);
 
   useInput((input, key) => {
@@ -1147,7 +1329,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             ? "daemon"
             : current === "daemon"
               ? "settings"
-              : "browser"
+              : "browser",
       );
       return;
     }
@@ -1168,7 +1350,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       }
       if (input === "b") {
         setReplayBasis((current) =>
-          current === "session-updated-at" ? "last-applied-at" : "session-updated-at"
+          current === "session-updated-at" ? "last-applied-at" : "session-updated-at",
         );
         return;
       }
@@ -1230,7 +1412,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       }
       if (input === "p") {
         void reloadPromptPreview(selected?.threadId, {
-          userConfig: settingsDraftConfig ?? undefined
+          userConfig: settingsDraftConfig ?? undefined,
         });
         return;
       }
@@ -1440,8 +1622,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         inLanguage(
           uiLanguage,
           `已建议 ${truncateDisplayText(selected.threadId, 12)}`,
-          `Suggested ${truncateDisplayText(selected.threadId, 12)}`
-        )
+          `Suggested ${truncateDisplayText(selected.threadId, 12)}`,
+        ),
       );
       return;
     }
@@ -1452,8 +1634,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         inLanguage(
           uiLanguage,
           `已应用 ${truncateDisplayText(selected.threadId, 12)}`,
-          `Applied ${truncateDisplayText(selected.threadId, 12)}`
-        )
+          `Applied ${truncateDisplayText(selected.threadId, 12)}`,
+        ),
       );
       return;
     }
@@ -1464,8 +1646,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         inLanguage(
           uiLanguage,
           `${detail.frozen ? "已解冻" : "已冻结"} ${truncateDisplayText(detail.threadId, 12)}`,
-          `${detail.frozen ? "Unfroze" : "Froze"} ${truncateDisplayText(detail.threadId, 12)}`
-        )
+          `${detail.frozen ? "Unfroze" : "Froze"} ${truncateDisplayText(detail.threadId, 12)}`,
+        ),
       );
       return;
     }
@@ -1483,15 +1665,19 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             inLanguage(
               uiLanguage,
               `批量应用完成：已应用 ${payload.items.filter((item) => item.action === "applied").length} 个候选名`,
-              `Batch apply finished: ${payload.items.filter((item) => item.action === "applied").length} applied candidates`
-            )
+              `Batch apply finished: ${payload.items.filter((item) => item.action === "applied").length} applied candidates`,
+            ),
           );
           await reloadSessions(selected?.threadId);
           await reloadDetail(selected?.threadId);
           await reloadPromptPreview(selected?.threadId, { silent: true });
         })
         .catch((nextError) => {
-          setError(nextError instanceof Error ? nextError.message : inLanguage(uiLanguage, "未知错误", "Unknown error"));
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : inLanguage(uiLanguage, "未知错误", "Unknown error"),
+          );
         })
         .finally(() => {
           setLoading(false);
@@ -1505,11 +1691,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     }
     return `${transcriptItems.length}/${transcriptPage.totalItems} ${inLanguage(uiLanguage, "已加载", "loaded")} · ${transcriptRoleLabel(
       transcriptRole,
-      uiLanguage
+      uiLanguage,
     )} · ${
-      showHiddenTranscript ? inLanguage(uiLanguage, "隐藏:开", "hidden:on") : inLanguage(uiLanguage, "隐藏:关", "hidden:off")
+      showHiddenTranscript
+        ? inLanguage(uiLanguage, "隐藏:开", "hidden:on")
+        : inLanguage(uiLanguage, "隐藏:关", "hidden:off")
     } · ${transcriptQuery ? `${inLanguage(uiLanguage, "检索", "query")}:${truncateDisplayText(transcriptQuery, 14)}` : inLanguage(uiLanguage, "检索:无", "query:none")}`;
-  }, [showHiddenTranscript, transcriptItems.length, transcriptPage, transcriptQuery, transcriptRole, uiLanguage]);
+  }, [
+    showHiddenTranscript,
+    transcriptItems.length,
+    transcriptPage,
+    transcriptQuery,
+    transcriptRole,
+    uiLanguage,
+  ]);
 
   const selectedTranscript = transcriptItems[transcriptIndex];
   const expandedTranscriptLines = useMemo(() => {
@@ -1519,18 +1714,24 @@ export function App(props: { apiBase: string; interactive: boolean }) {
     return wrapDisplayText(selectedTranscript.content, layout.detailInnerWidth);
   }, [layout.detailInnerWidth, selectedTranscript]);
   const expandedTranscriptVisibleCount = Math.max(3, layout.detailHeight - 12);
-  const expandedTranscriptMaxScroll = Math.max(0, expandedTranscriptLines.length - expandedTranscriptVisibleCount);
-  const normalizedExpandedTranscriptScroll = Math.min(expandedTranscriptScroll, expandedTranscriptMaxScroll);
+  const expandedTranscriptMaxScroll = Math.max(
+    0,
+    expandedTranscriptLines.length - expandedTranscriptVisibleCount,
+  );
+  const normalizedExpandedTranscriptScroll = Math.min(
+    expandedTranscriptScroll,
+    expandedTranscriptMaxScroll,
+  );
   const visibleExpandedTranscriptLines = expandedTranscriptLines.slice(
     normalizedExpandedTranscriptScroll,
-    normalizedExpandedTranscriptScroll + expandedTranscriptVisibleCount
+    normalizedExpandedTranscriptScroll + expandedTranscriptVisibleCount,
   );
   const detailTitle = detail
-    ? detail.officialName ?? detail.candidateName ?? detail.threadId
+    ? (detail.officialName ?? detail.candidateName ?? detail.threadId)
     : inLanguage(uiLanguage, "当前未选中会话", "No session selected");
   const detailTitleLines = useMemo(
     () => wrapDisplayText(detailTitle, layout.detailInnerWidth).slice(0, 2),
-    [detailTitle, layout.detailInnerWidth]
+    [detailTitle, layout.detailInnerWidth],
   );
   const resolvedProviderSummary = (() => {
     const effective = (configView?.effectiveConfig as Record<string, unknown> | undefined) ?? {};
@@ -1545,7 +1746,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         ? inLanguage(uiLanguage, "正在加载 prompt 预览...", "Loading prompt preview...")
         : tt("noPreviewLoaded"));
     return wrapDisplayText(promptText, layout.detailInnerWidth).slice(0, settingsPromptLineBudget);
-  }, [layout.detailInnerWidth, promptPreview?.prompt, promptPreviewRefreshing, settingsPromptLineBudget, tt, uiLanguage]);
+  }, [
+    layout.detailInnerWidth,
+    promptPreview?.prompt,
+    promptPreviewRefreshing,
+    settingsPromptLineBudget,
+    tt,
+    uiLanguage,
+  ]);
 
   useEffect(() => {
     if (expandedTranscriptScroll > expandedTranscriptMaxScroll) {
@@ -1558,7 +1766,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       <Box justifyContent="space-between" width={layout.listWidth}>
         <Text color={focusPane === "sessions" ? THEME.accent : THEME.muted}>
           {focusPane === "sessions" ? inLanguage(uiLanguage, "归档 / ", "Archive / ") : ""}
-          {inLanguage(uiLanguage, "会话", "Sessions")} [{sessions.length}] · {truncateDisplayText(selectedWorkspaceLabel, 18)}
+          {inLanguage(uiLanguage, "会话", "Sessions")} [{sessions.length}] ·{" "}
+          {truncateDisplayText(selectedWorkspaceLabel, 18)}
         </Text>
         <Text color={THEME.muted}>
           {browserViewMode} {layout.columns}x{layout.rows}
@@ -1575,7 +1784,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       >
         {sessions.length === 0 ? (
           <Text color={THEME.muted}>
-            {inLanguage(uiLanguage, "当前筛选下没有匹配会话。", "No sessions matched the current filter.")}
+            {inLanguage(
+              uiLanguage,
+              "当前筛选下没有匹配会话。",
+              "No sessions matched the current filter.",
+            )}
           </Text>
         ) : null}
         {visibleSessions.map(({ item, index }) => (
@@ -1620,9 +1833,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               detail?.workspaceLabel ?? selectedWorkspaceLabel,
               detail?.projectName ?? detail?.cwd ?? "n/a",
               detail?.provider ?? "n/a",
-              detail?.model ?? "n/a"
+              detail?.model ?? "n/a",
             ].join(" | "),
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
@@ -1630,12 +1843,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             [
               `${inLanguage(uiLanguage, "更新于", "updated")} ${formatUiWhen(detail?.updatedAt, uiLanguage)}`,
               `${detail?.tokenTotal ?? 0} tokens`,
-              detail?.dirty ? inLanguage(uiLanguage, "dirty", "dirty") : inLanguage(uiLanguage, "clean", "clean"),
-              detail?.frozen ? inLanguage(uiLanguage, "冻结", "frozen") : null
+              detail?.dirty
+                ? inLanguage(uiLanguage, "dirty", "dirty")
+                : inLanguage(uiLanguage, "clean", "clean"),
+              detail?.frozen ? inLanguage(uiLanguage, "冻结", "frozen") : null,
             ]
               .filter(Boolean)
               .join(" | "),
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Text color={THEME.manual} wrap="truncate-end">
@@ -1643,19 +1858,22 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             detail?.candidateName
               ? `${inLanguage(uiLanguage, "候选名", "candidate")}: ${truncateDisplayText(detail.candidateName, Math.max(12, layout.detailInnerWidth - 11))}`
               : `${inLanguage(uiLanguage, "候选名", "candidate")}: ${tt("nA")}`,
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         {detail?.renameHistory?.[0] ? (
           <Text color={THEME.muted} wrap="truncate-end">
             {fitDisplayLine(
               `${inLanguage(uiLanguage, "最近一次命名", "last rename")}: ${detail.renameHistory[0].newName} | ${detail.renameHistory[0].kind}/${detail.renameHistory[0].source} | ${formatUiWhen(detail.renameHistory[0].appliedAt, uiLanguage)}`,
-              layout.detailInnerWidth
+              layout.detailInnerWidth,
             )}
           </Text>
         ) : (
           <Text color={THEME.muted}>
-            {fitDisplayLine(inLanguage(uiLanguage, "最近一次命名: 无", "last rename: none"), layout.detailInnerWidth)}
+            {fitDisplayLine(
+              inLanguage(uiLanguage, "最近一次命名: 无", "last rename: none"),
+              layout.detailInnerWidth,
+            )}
           </Text>
         )}
         <Box marginTop={1} width={layout.detailInnerWidth}>
@@ -1674,7 +1892,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         ) : null}
         {!expandedTranscript && visibleTranscript.length === 0 && !transcriptLoading ? (
           <Text color={THEME.muted}>
-            {inLanguage(uiLanguage, "当前筛选下没有匹配的 transcript 事件。", "No transcript events matched the current filter.")}
+            {inLanguage(
+              uiLanguage,
+              "当前筛选下没有匹配的 transcript 事件。",
+              "No transcript events matched the current filter.",
+            )}
           </Text>
         ) : null}
         {expandedTranscript
@@ -1701,10 +1923,14 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 selectedTranscript
                   ? `${transcriptRoleLabel(selectedTranscript.role, uiLanguage)}/${transcriptKindLabel(selectedTranscript.kind, uiLanguage)} · ${inLanguage(uiLanguage, "行", "lines")} ${normalizedExpandedTranscriptScroll + 1}-${Math.min(
                       normalizedExpandedTranscriptScroll + expandedTranscriptVisibleCount,
-                      expandedTranscriptLines.length
+                      expandedTranscriptLines.length,
                     )}/${expandedTranscriptLines.length} · ${inLanguage(uiLanguage, "回车/esc 关闭", "enter/esc close")}`
-                  : inLanguage(uiLanguage, "当前没有选中的 transcript 条目", "No transcript selected"),
-                layout.detailInnerWidth
+                  : inLanguage(
+                      uiLanguage,
+                      "当前没有选中的 transcript 条目",
+                      "No transcript selected",
+                    ),
+                layout.detailInnerWidth,
               )}
             </Text>
           </Box>
@@ -1716,26 +1942,41 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                   selectedTranscript
                     ? `${inLanguage(uiLanguage, "选中", "selected")}: ${transcriptRoleLabel(selectedTranscript.role, uiLanguage)}/${transcriptKindLabel(selectedTranscript.kind, uiLanguage)} · ${formatUiWhen(selectedTranscript.timestamp, uiLanguage)} · ${inLanguage(uiLanguage, "回车展开", "enter expand")}`
                     : transcriptPage?.hasMore
-                      ? inLanguage(uiLanguage, "按 o 加载更早 transcript 事件。", "Press o to load earlier transcript events.")
-                      : inLanguage(uiLanguage, "没有更多 transcript 事件了。", "No more transcript events."),
-                  layout.detailInnerWidth
+                      ? inLanguage(
+                          uiLanguage,
+                          "按 o 加载更早 transcript 事件。",
+                          "Press o to load earlier transcript events.",
+                        )
+                      : inLanguage(
+                          uiLanguage,
+                          "没有更多 transcript 事件了。",
+                          "No more transcript events.",
+                        ),
+                  layout.detailInnerWidth,
                 )}
               </Text>
             </Box>
             <Box marginTop={1}>
-              <Text color={THEME.accent}>{inLanguage(uiLanguage, "命名历史", "Rename history")}</Text>
-            </Box>
-            {(detail?.renameHistory ?? []).slice(0, browserViewMode === "detail" ? 4 : 2).map((entry, index) => (
-              <Text key={`history-${index}`} color={THEME.muted} wrap="truncate-end">
-                {fitDisplayLine(
-                  `${formatUiWhen(entry.appliedAt, uiLanguage)} | ${entry.kind}/${entry.source}/${autoRenameStatusLabel(entry.status, uiLanguage)} | ${entry.newName}`,
-                  layout.detailInnerWidth
-                )}
+              <Text color={THEME.accent}>
+                {inLanguage(uiLanguage, "命名历史", "Rename history")}
               </Text>
-            ))}
+            </Box>
+            {(detail?.renameHistory ?? [])
+              .slice(0, browserViewMode === "detail" ? 4 : 2)
+              .map((entry, index) => (
+                <Text key={`history-${index}`} color={THEME.muted} wrap="truncate-end">
+                  {fitDisplayLine(
+                    `${formatUiWhen(entry.appliedAt, uiLanguage)} | ${entry.kind}/${entry.source}/${autoRenameStatusLabel(entry.status, uiLanguage)} | ${entry.newName}`,
+                    layout.detailInnerWidth,
+                  )}
+                </Text>
+              ))}
             {(detail?.renameHistory ?? []).length === 0 ? (
               <Text color={THEME.muted} wrap="truncate-end">
-                {fitDisplayLine(inLanguage(uiLanguage, "还没有命名历史。", "No rename history yet."), layout.detailInnerWidth)}
+                {fitDisplayLine(
+                  inLanguage(uiLanguage, "还没有命名历史。", "No rename history yet."),
+                  layout.detailInnerWidth,
+                )}
               </Text>
             ) : null}
           </>
@@ -1759,7 +2000,11 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         height={Math.max(6, layout.topSectionHeight - 1)}
         overflow="hidden"
       >
-        {windowItemsAround(settingsFields, settingsIndex, Math.max(8, layout.visibleSessionCount + 3)).map(({ item, index }) => (
+        {windowItemsAround(
+          settingsFields,
+          settingsIndex,
+          Math.max(8, layout.visibleSessionCount + 3),
+        ).map(({ item, index }) => (
           <SettingRow
             key={`${item.key}-${index}`}
             label={item.label}
@@ -1788,24 +2033,39 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         overflow="hidden"
       >
         <Text color={THEME.accent} wrap="truncate-end">
-          {truncateDisplayText(`${tt("selectedProfile")}: ${selectedProfile?.profileId ?? tt("nA")}`, layout.detailInnerWidth)}
+          {truncateDisplayText(
+            `${tt("selectedProfile")}: ${selectedProfile?.profileId ?? tt("nA")}`,
+            layout.detailInnerWidth,
+          )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`baseUrl: ${selectedProfile?.baseUrl ?? tt("nA")}`, layout.detailInnerWidth)}
+          {truncateDisplayText(
+            `baseUrl: ${selectedProfile?.baseUrl ?? tt("nA")}`,
+            layout.detailInnerWidth,
+          )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`model: ${selectedProfile?.model ?? tt("nA")}`, layout.detailInnerWidth)}
+          {truncateDisplayText(
+            `model: ${selectedProfile?.model ?? tt("nA")}`,
+            layout.detailInnerWidth,
+          )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`requestType: ${selectedProfile?.requestType ?? tt("nA")}`, layout.detailInnerWidth)}
+          {truncateDisplayText(
+            `requestType: ${selectedProfile?.requestType ?? tt("nA")}`,
+            layout.detailInnerWidth,
+          )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
-          {truncateDisplayText(`${tt("resolved")}: ${resolvedProviderSummary}`, layout.detailInnerWidth)}
+          {truncateDisplayText(
+            `${tt("resolved")}: ${resolvedProviderSummary}`,
+            layout.detailInnerWidth,
+          )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
           {truncateDisplayText(
             `${inLanguage(uiLanguage, "Provider 解析", "Provider route")}: ${JSON.stringify(providerDiagnostics?.resolvedProvider ?? {}) || tt("nA")}`,
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Text color={providerTestResult?.ok ? THEME.success : THEME.warning} wrap="truncate-end">
@@ -1813,7 +2073,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             providerTestResult
               ? `${inLanguage(uiLanguage, "连通性测试", "Connectivity")}: ${providerTestResult.ok ? inLanguage(uiLanguage, "成功", "ok") : inLanguage(uiLanguage, "失败", "failed")} | ${providerTestResult.latencyMs ?? 0}ms | ${formatUiWhen(providerTestResult.testedAt, uiLanguage)}`
               : inLanguage(uiLanguage, "连通性测试: 尚未执行", "Connectivity: not tested"),
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
@@ -1821,27 +2081,27 @@ export function App(props: { apiBase: string; interactive: boolean }) {
             parsedCodexProvider
               ? `${inLanguage(uiLanguage, "Codex 导入", "Codex import")}: ${parsedCodexProvider.profile.requestType ?? "n/a"} | ${parsedCodexProvider.profile.baseUrl ?? "n/a"} | ${parsedCodexProvider.profile.model ?? "n/a"}`
               : inLanguage(uiLanguage, "Codex 导入: 尚未读取", "Codex import: not loaded"),
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Box marginTop={1}>
           <Text color={THEME.accent} wrap="truncate-end">
             {fitDisplayLine(
               `${tt("promptPreview")} · ${promptPreviewRefreshing ? tt("refreshing") : promptPreview?.synthetic ? tt("promptSynthetic") : tt("promptSelected")}`,
-              layout.detailInnerWidth
+              layout.detailInnerWidth,
             )}
           </Text>
         </Box>
         <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
             `${inLanguage(uiLanguage, "线程", "thread")}: ${promptPreview?.threadId ?? tt("nA")} | ${inLanguage(uiLanguage, "请求策略", "requested")}: ${promptPreview?.renameContext.requestedStrategy ?? tt("nA")}`,
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
             `${inLanguage(uiLanguage, "解析策略", "resolved")}: ${promptPreview?.renameContext.strategy ?? tt("nA")} | ${inLanguage(uiLanguage, "回退", "fallback")}: ${promptPreview?.renameContext.fallbackReason ?? tt("nA")}`,
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         {settingsPromptLines.map((line, index) => (
@@ -1852,7 +2112,7 @@ export function App(props: { apiBase: string; interactive: boolean }) {
         <Text color={THEME.muted} wrap="truncate-end">
           {fitDisplayLine(
             `${autoRenameStatusLabel("suggest", uiLanguage)} ${previewSuggestCount} · ${autoRenameStatusLabel("apply", uiLanguage)} ${previewApplyCount} · ${autoRenameStatusLabel("skip", uiLanguage)} ${previewSkipCount}`,
-            layout.detailInnerWidth
+            layout.detailInnerWidth,
           )}
         </Text>
         <Box marginTop={1}>
@@ -1861,9 +2121,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               inLanguage(
                 uiLanguage,
                 "e 编辑字段  space 枚举切换  s 保存  p 刷新 prompt  T 测试 provider  I 导入 Codex  R 重载  , 返回浏览",
-                "e edit field  space cycle enum  s save  p refresh prompt  T test provider  I import Codex  R reload  , back to browser"
+                "e edit field  space cycle enum  s save  p refresh prompt  T test provider  I import Codex  R reload  , back to browser",
               ),
-              layout.detailInnerWidth
+              layout.detailInnerWidth,
             )}
           </Text>
         </Box>
@@ -1908,7 +2168,9 @@ export function App(props: { apiBase: string; interactive: boolean }) {
 
       {inputMode === "transcript-search" ? (
         <Box marginTop={1}>
-          <Text color={THEME.accent}>{`${inLanguage(uiLanguage, "Transcript 检索", "Transcript query")}: `}</Text>
+          <Text
+            color={THEME.accent}
+          >{`${inLanguage(uiLanguage, "Transcript 检索", "Transcript query")}: `}</Text>
           <TextInput
             value={transcriptQueryDraft}
             onChange={setTranscriptQueryDraft}
@@ -1937,8 +2199,8 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 inLanguage(
                   uiLanguage,
                   `已重命名 ${truncateDisplayText(detail.threadId, 12)}`,
-                  `Renamed ${truncateDisplayText(detail.threadId, 12)}`
-                )
+                  `Renamed ${truncateDisplayText(detail.threadId, 12)}`,
+                ),
               );
             }}
           />
@@ -1990,14 +2252,32 @@ export function App(props: { apiBase: string; interactive: boolean }) {
           </Box>
 
           {showPreviewPanel ? (
-            <Box marginTop={1} flexDirection="column" height={Math.max(5, layout.previewHeight || 8)}>
+            <Box
+              marginTop={1}
+              flexDirection="column"
+              height={Math.max(5, layout.previewHeight || 8)}
+            >
               <Text color={THEME.accent}>
                 {`${tt("batchPreview")} · ${autoRenameStatusLabel("suggest", uiLanguage)} ${previewSuggestCount} · ${autoRenameStatusLabel("apply", uiLanguage)} ${previewApplyCount}`}
               </Text>
-              <Box borderStyle="round" borderColor={THEME.border} flexDirection="column" paddingX={1} height={Math.max(4, Math.max(5, layout.previewHeight || 8) - 1)} overflow="hidden">
-                {preview.length === 0 ? <Text color={THEME.muted}>{tt("noPreviewLoaded")}</Text> : null}
+              <Box
+                borderStyle="round"
+                borderColor={THEME.border}
+                flexDirection="column"
+                paddingX={1}
+                height={Math.max(4, Math.max(5, layout.previewHeight || 8) - 1)}
+                overflow="hidden"
+              >
+                {preview.length === 0 ? (
+                  <Text color={THEME.muted}>{tt("noPreviewLoaded")}</Text>
+                ) : null}
                 {preview.slice(0, Math.max(3, layout.visiblePreviewCount)).map((item, index) => (
-                  <PreviewRow key={`${index}-${item.threadId}`} item={item} width={layout.previewInnerWidth} uiLanguage={uiLanguage} />
+                  <PreviewRow
+                    key={`${index}-${item.threadId}`}
+                    item={item}
+                    width={layout.previewInnerWidth}
+                    uiLanguage={uiLanguage}
+                  />
                 ))}
               </Box>
             </Box>
@@ -2028,15 +2308,32 @@ export function App(props: { apiBase: string; interactive: boolean }) {
       ) : layout.compact ? (
         <Box marginTop={1} flexDirection="column" gap={1} height={layout.topSectionHeight}>
           {settingsPanel}
-          <Box borderStyle="round" borderColor={THEME.border} flexDirection="column" paddingX={1} height={Math.max(5, Math.min(10, layout.rows - layout.topSectionHeight - 6))}>
+          <Box
+            borderStyle="round"
+            borderColor={THEME.border}
+            flexDirection="column"
+            paddingX={1}
+            height={Math.max(5, Math.min(10, layout.rows - layout.topSectionHeight - 6))}
+          >
             <Text color={THEME.accent} wrap="truncate-end">
-              {fitDisplayLine(activeSetting ? `${activeSetting.label}: ${activeSetting.value}` : tt("noSettingSelected"), layout.previewInnerWidth)}
+              {fitDisplayLine(
+                activeSetting
+                  ? `${activeSetting.label}: ${activeSetting.value}`
+                  : tt("noSettingSelected"),
+                layout.previewInnerWidth,
+              )}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine(`profile ${selectedProfile?.profileId ?? tt("nA")} | model ${selectedProfile?.model ?? tt("nA")}`, layout.previewInnerWidth)}
+              {fitDisplayLine(
+                `profile ${selectedProfile?.profileId ?? tt("nA")} | model ${selectedProfile?.model ?? tt("nA")}`,
+                layout.previewInnerWidth,
+              )}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
-              {fitDisplayLine(`baseUrl ${selectedProfile?.baseUrl ?? tt("nA")}`, layout.previewInnerWidth)}
+              {fitDisplayLine(
+                `baseUrl ${selectedProfile?.baseUrl ?? tt("nA")}`,
+                layout.previewInnerWidth,
+              )}
             </Text>
             {settingsPromptLines.slice(0, 2).map((line, index) => (
               <Text color={THEME.text} key={`compact-settings-prompt-${index}`} wrap="truncate-end">
@@ -2048,15 +2345,20 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 inLanguage(
                   uiLanguage,
                   "e 编辑  space 切换  s 保存  p prompt  T 测试  I 导入 Codex  R 重载  , 返回",
-                  "e edit  space cycle  s save  p prompt  T test  I import Codex  R reload  , back"
+                  "e edit  space cycle  s save  p prompt  T test  I import Codex  R reload  , back",
                 ),
-                layout.previewInnerWidth
+                layout.previewInnerWidth,
               )}
             </Text>
           </Box>
         </Box>
       ) : (
-        <Box marginTop={1} gap={1} flexDirection={layout.stacked ? "column" : "row"} height={layout.topSectionHeight}>
+        <Box
+          marginTop={1}
+          gap={1}
+          flexDirection={layout.stacked ? "column" : "row"}
+          height={layout.topSectionHeight}
+        >
           {settingsPanel}
           {settingsInfoPanel}
         </Box>
@@ -2070,10 +2372,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 inLanguage(
                   uiLanguage,
                   ", 设置  z 聚焦  enter 展开  h/l 面板  tab 切换  j/k 移动  g/G 首尾  [ ] 工作区  o 更早  H 隐藏  1-5 角色",
-                  ", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  [ ] workspace  o older  H hidden  1-5 role"
+                  ", settings  z full-focus  enter expand  h/l pane  tab pane  j/k move  g/G ends  [ ] workspace  o older  H hidden  1-5 role",
                 ),
                 layout.columns - 2,
-                ""
+                "",
               )}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
@@ -2081,10 +2383,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 inLanguage(
                   uiLanguage,
                   "/ 会话搜索  ? transcript 搜索  r 重命名  s 建议  a 应用  f 冻结  p 预览  A 批量应用  q 退出",
-                  "/ session search  ? transcript search  r rename  s suggest  a apply  f freeze  p preview  A batch  q quit"
+                  "/ session search  ? transcript search  r rename  s suggest  a apply  f freeze  p preview  A batch  q quit",
                 ),
                 layout.columns - 2,
-                ""
+                "",
               )}
             </Text>
           </>
@@ -2095,17 +2397,17 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 inLanguage(
                   uiLanguage,
                   ", 下个页面  R 刷新运行态  p 刷新预览  b 切换 replay 基准  y 重新入队  esc 返回浏览",
-                  ", next screen  R refresh runtime  p refresh preview  b toggle replay basis  y requeue  esc back"
+                  ", next screen  R refresh runtime  p refresh preview  b toggle replay basis  y requeue  esc back",
                 ),
                 layout.columns - 2,
-                ""
+                "",
               )}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(
                 `${inLanguage(uiLanguage, "执行态", "runtime")}: ${runtimeDisplay.execution} | ${inLanguage(uiLanguage, "Daemon", "daemon")}: ${runtimeDisplay.daemonStatus}`,
                 layout.columns - 2,
-                ""
+                "",
               )}
             </Text>
           </>
@@ -2116,17 +2418,17 @@ export function App(props: { apiBase: string; interactive: boolean }) {
                 inLanguage(
                   uiLanguage,
                   ", 下个页面  s 启动 daemon  x 停止 daemon  R 刷新状态  esc 返回浏览",
-                  ", next screen  s start daemon  x stop daemon  R refresh  esc back"
+                  ", next screen  s start daemon  x stop daemon  R refresh  esc back",
                 ),
                 layout.columns - 2,
-                ""
+                "",
               )}
             </Text>
             <Text color={THEME.muted} wrap="truncate-end">
               {fitDisplayLine(
                 `${inLanguage(uiLanguage, "控制器", "controller")}: ${daemonStatus?.running ? inLanguage(uiLanguage, "运行中", "running") : inLanguage(uiLanguage, "未启动", "stopped")} | ${inLanguage(uiLanguage, "运行态", "runtime")}: ${runtimeDisplay.daemonStatus}`,
                 layout.columns - 2,
-                ""
+                "",
               )}
             </Text>
           </>
@@ -2136,10 +2438,10 @@ export function App(props: { apiBase: string; interactive: boolean }) {
               inLanguage(
                 uiLanguage,
                 ", 下个页面  j/k 字段  e 编辑  space 切换  s 保存  p 刷新 prompt  T 测试 provider  I 导入 Codex  R 重载  esc 返回浏览  q 退出",
-                ", next screen  j/k field  e edit  space cycle  s save  p refresh prompt  T test provider  I import Codex  R reload  esc back  q quit"
+                ", next screen  j/k field  e edit  space cycle  s save  p refresh prompt  T test provider  I import Codex  R reload  esc back  q quit",
               ),
               layout.columns - 2,
-              ""
+              "",
             )}
           </Text>
         )}

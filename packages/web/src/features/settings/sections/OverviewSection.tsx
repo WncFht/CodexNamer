@@ -2,10 +2,11 @@ import { formatUiNumber } from "../../../i18n.js";
 import {
   deriveRuntimeDisplay,
   runtimeDaemonStatusLabel,
-  runtimeExecutionLabel
+  runtimeExecutionLabel,
 } from "../../../runtime-display.js";
 import type { DaemonControlStatus, OverviewResponse } from "../../../types.js";
-import { SettingsSectionFrame, type TextTools } from "../shared.js";
+import type { TextTools } from "../shared.js";
+import { SettingsSectionFrame } from "../shared.js";
 
 export function OverviewSection(props: {
   overview: OverviewResponse | null;
@@ -21,7 +22,7 @@ export function OverviewSection(props: {
       title={props.text.inline("命名系统总览", "Naming system overview")}
       copy={props.text.inline(
         "查看队列、命名和运行态。",
-        "Review queue, naming, and runtime state."
+        "Review queue, naming, and runtime state.",
       )}
     >
       <div className="settings-stage-grid settings-stage-grid-wide">
@@ -56,25 +57,38 @@ export function OverviewSection(props: {
           <div className="settings-card-header">
             <div>
               <p className="panel-kicker">{props.text.inline("Naming", "Naming")}</p>
-              <h4>{props.text.inline("正式命名与平均标题字数", "Official names and average title length")}</h4>
+              <h4>
+                {props.text.inline(
+                  "正式命名与平均标题字数",
+                  "Official names and average title length",
+                )}
+              </h4>
             </div>
           </div>
           <dl className="settings-runtime-grid compact">
             <div>
               <dt>{props.text.inline("AI 已应用", "AI applied")}</dt>
-              <dd>{formatUiNumber(props.overview?.renameHistory.aiApplied, props.text.uiLanguage)}</dd>
+              <dd>
+                {formatUiNumber(props.overview?.renameHistory.aiApplied, props.text.uiLanguage)}
+              </dd>
             </div>
             <div>
               <dt>{props.text.inline("手动应用", "Manual applied")}</dt>
-              <dd>{formatUiNumber(props.overview?.renameHistory.manualApplied, props.text.uiLanguage)}</dd>
+              <dd>
+                {formatUiNumber(props.overview?.renameHistory.manualApplied, props.text.uiLanguage)}
+              </dd>
             </div>
             <div>
               <dt>{props.text.inline("自动应用", "Auto applied")}</dt>
-              <dd>{formatUiNumber(props.overview?.renameHistory.autoApplied, props.text.uiLanguage)}</dd>
+              <dd>
+                {formatUiNumber(props.overview?.renameHistory.autoApplied, props.text.uiLanguage)}
+              </dd>
             </div>
             <div>
               <dt>{props.text.inline("平均标题字数", "Average title length")}</dt>
-              <dd>{formatUiNumber(props.overview?.workload.averageTitleLength, props.text.uiLanguage)}</dd>
+              <dd>
+                {formatUiNumber(props.overview?.workload.averageTitleLength, props.text.uiLanguage)}
+              </dd>
             </div>
           </dl>
         </article>
@@ -97,7 +111,9 @@ export function OverviewSection(props: {
             </div>
             <div>
               <dt>{props.text.inline("Daemon", "Daemon")}</dt>
-              <dd>{runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.text.uiLanguage)}</dd>
+              <dd>
+                {runtimeDaemonStatusLabel(runtimeDisplay.daemonStatus, props.text.uiLanguage)}
+              </dd>
             </div>
             <div>
               <dt>{props.text.inline("最近 sweep", "Last sweep")}</dt>

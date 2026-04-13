@@ -1,4 +1,5 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Readable } from "node:stream";
@@ -74,12 +75,12 @@ export class DaemonProcessController {
         cwd: this.repoRoot,
         executable: process.execPath,
         scriptPath: this.scriptPath,
-        args: this.intervalSeconds ? ["--interval", String(this.intervalSeconds)] : []
+        args: this.intervalSeconds ? ["--interval", String(this.intervalSeconds)] : [],
       },
       recentLogs: [...this.recentLogs],
       lastExitCode: this.lastExitCode,
       lastExitSignal: this.lastExitSignal,
-      lastError: this.lastError
+      lastError: this.lastError,
     };
   }
 
@@ -89,7 +90,9 @@ export class DaemonProcessController {
     }
 
     if (!existsSync(this.scriptPath)) {
-      throw new Error(`Daemon script not found: ${this.scriptPath}. Build runtime packages before starting it.`);
+      throw new Error(
+        `Daemon script not found: ${this.scriptPath}. Build runtime packages before starting it.`,
+      );
     }
 
     const resolvedInterval = Number.isFinite(intervalSeconds)
@@ -99,7 +102,7 @@ export class DaemonProcessController {
     const child = spawn(process.execPath, args, {
       cwd: this.repoRoot,
       env: process.env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     this.child = child;
@@ -111,7 +114,10 @@ export class DaemonProcessController {
     this.lastExitCode = undefined;
     this.lastExitSignal = undefined;
     this.lastError = undefined;
-    this.pushLog("stdout", `[controller] spawned daemon pid=${child.pid ?? "unknown"} interval=${resolvedInterval}s`);
+    this.pushLog(
+      "stdout",
+      `[controller] spawned daemon pid=${child.pid ?? "unknown"} interval=${resolvedInterval}s`,
+    );
 
     child.stdout.on("data", (chunk: Buffer | string) => {
       this.stdoutBuffer = this.consumeStream("stdout", this.stdoutBuffer, chunk);
@@ -130,7 +136,7 @@ export class DaemonProcessController {
       this.stoppedAt = new Date().toISOString();
       this.pushLog(
         code === 0 ? "stdout" : "stderr",
-        `[controller] daemon exited code=${code ?? "null"} signal=${signal ?? "null"}`
+        `[controller] daemon exited code=${code ?? "null"} signal=${signal ?? "null"}`,
       );
       this.child = undefined;
     });
@@ -177,7 +183,11 @@ export class DaemonProcessController {
     await this.stop();
   }
 
-  private consumeStream(stream: "stdout" | "stderr", buffer: string, chunk: Buffer | string): string {
+  private consumeStream(
+    stream: "stdout" | "stderr",
+    buffer: string,
+    chunk: Buffer | string,
+  ): string {
     const text = `${buffer}${typeof chunk === "string" ? chunk : chunk.toString("utf8")}`;
     const lines = text.split(/\r?\n/);
     const remainder = lines.pop() ?? "";
@@ -207,7 +217,7 @@ export class DaemonProcessController {
     this.recentLogs.push({
       at: new Date().toISOString(),
       stream,
-      line
+      line,
     });
     if (this.recentLogs.length > MAX_LOG_LINES) {
       this.recentLogs.splice(0, this.recentLogs.length - MAX_LOG_LINES);

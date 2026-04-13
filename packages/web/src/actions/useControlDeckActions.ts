@@ -7,7 +7,7 @@ import {
   startDaemon,
   stopDaemon,
   suggestSession,
-  updateConfig
+  updateConfig,
 } from "../api.js";
 import type { DataResource, TabId, UiNotice } from "../control-deck-model.js";
 import type {
@@ -18,7 +18,7 @@ import type {
   RenameFreezeResponse,
   RenameSuggestResponse,
   SessionDetail,
-  SessionSummary
+  SessionSummary,
 } from "../types.js";
 
 type ControlDeckActionResources = {
@@ -31,10 +31,13 @@ type ControlDeckActionResources = {
       threadId?: string;
       urgentPreview?: boolean;
       urgentPromptPreview?: boolean;
-    }
+    },
   ) => Promise<void>;
   mergeCurrentTabResources: (...groups: readonly DataResource[][]) => DataResource[];
-  refreshCurrentView: (refreshOptions?: { threadId?: string; includePromptPreview?: boolean }) => void;
+  refreshCurrentView: (refreshOptions?: {
+    threadId?: string;
+    includePromptPreview?: boolean;
+  }) => void;
 };
 
 type ControlDeckActionUi = {
@@ -59,14 +62,14 @@ export function useControlDeckActions(params: {
     ui.setError(message);
     ui.setNotice({
       tone: "error",
-      text: message
+      text: message,
     });
   };
 
   const refreshAfterAction = (threadId: string) => {
     resources.refreshCurrentView({
       threadId,
-      includePromptPreview: true
+      includePromptPreview: true,
     });
   };
 
@@ -84,7 +87,7 @@ export function useControlDeckActions(params: {
     ui.setError(null);
     ui.setNotice({
       tone: "info",
-      text: `${options.actionName}...`
+      text: `${options.actionName}...`,
     });
     try {
       const result = await options.action();
@@ -94,7 +97,7 @@ export function useControlDeckActions(params: {
       }
       ui.setNotice({
         tone: "success",
-        text: success.message
+        text: success.message,
       });
       refreshAfterAction(options.threadId);
     } catch (nextError) {
@@ -110,21 +113,24 @@ export function useControlDeckActions(params: {
     ui.setError(null);
     ui.setNotice({
       tone: "info",
-      text: "Saving settings..."
+      text: "Saving settings...",
     });
     try {
       const result = await updateConfig(userConfig);
       resources.setConfigView(result.config);
-      await resources.loadResources(resources.mergeCurrentTabResources(["config", "sessions", "preview"]), {
-        threadId: ui.selectedId,
-        urgentPreview: true,
-        urgentPromptPreview: ui.tab === "settings"
-      });
+      await resources.loadResources(
+        resources.mergeCurrentTabResources(["config", "sessions", "preview"]),
+        {
+          threadId: ui.selectedId,
+          urgentPreview: true,
+          urgentPromptPreview: ui.tab === "settings",
+        },
+      );
       ui.setNotice({
         tone: "success",
         text: result.restartRequired
           ? `Saved to ${result.writtenTo}. Restart required for some changes.`
-          : `Saved to ${result.writtenTo}.`
+          : `Saved to ${result.writtenTo}.`,
       });
     } catch (nextError) {
       setFailure(nextError);
@@ -140,21 +146,24 @@ export function useControlDeckActions(params: {
     ui.setError(null);
     ui.setNotice({
       tone: "info",
-      text: "Re-queueing rename backlog..."
+      text: "Re-queueing rename backlog...",
     });
     try {
       const result = await requeueRenamesSince(params);
-      await resources.loadResources(resources.mergeCurrentTabResources(["sessions", "overview", "preview"]), {
-        threadId: ui.selectedId,
-        urgentPreview: true,
-        urgentPromptPreview: ui.tab === "settings"
-      });
+      await resources.loadResources(
+        resources.mergeCurrentTabResources(["sessions", "overview", "preview"]),
+        {
+          threadId: ui.selectedId,
+          urgentPreview: true,
+          urgentPromptPreview: ui.tab === "settings",
+        },
+      );
       ui.setNotice({
         tone: "success",
         text:
           result.skipped > 0
             ? `Queued ${result.queued} sessions and skipped ${result.skipped} already-up-to-date or protected sessions.`
-            : `Queued ${result.queued} sessions for rename replay.`
+            : `Queued ${result.queued} sessions for rename replay.`,
       });
       return result;
     } catch (nextError) {
@@ -165,26 +174,29 @@ export function useControlDeckActions(params: {
 
   const updateDaemonState = async (
     action: "start" | "stop",
-    request: () => Promise<DaemonControlStatus>
+    request: () => Promise<DaemonControlStatus>,
   ): Promise<DaemonControlStatus> => {
     setDaemonActioning(action);
     ui.setError(null);
     ui.setNotice({
       tone: "info",
-      text: action === "start" ? "Starting daemon..." : "Stopping daemon..."
+      text: action === "start" ? "Starting daemon..." : "Stopping daemon...",
     });
     try {
       const result = await request();
-      await resources.loadResources(resources.mergeCurrentTabResources(["daemon", "overview", "preview"]), {
-        threadId: ui.selectedId,
-        urgentPreview: true
-      });
+      await resources.loadResources(
+        resources.mergeCurrentTabResources(["daemon", "overview", "preview"]),
+        {
+          threadId: ui.selectedId,
+          urgentPreview: true,
+        },
+      );
       ui.setNotice({
         tone: "success",
         text:
           action === "start"
             ? `Daemon started${result.pid ? ` (pid ${result.pid})` : ""}.`
-            : "Daemon stopped."
+            : "Daemon stopped.",
       });
       return result;
     } catch (nextError) {
@@ -214,9 +226,9 @@ export function useControlDeckActions(params: {
               onSuccess: (result) => ({
                 message: `Candidate ready: ${result.name}`,
                 patch: {
-                  candidateName: result.name
-                }
-              })
+                  candidateName: result.name,
+                },
+              }),
             })
           : Promise.resolve(),
       apply: () =>
@@ -226,13 +238,15 @@ export function useControlDeckActions(params: {
               actionName: "Applying rename",
               action: () => applySession(resources.detail!.threadId),
               onSuccess: (result) => ({
-                message: result.written ? `Applied: ${result.name}` : `Already up to date: ${result.name}`,
+                message: result.written
+                  ? `Applied: ${result.name}`
+                  : `Already up to date: ${result.name}`,
                 patch: {
                   officialName: result.name,
                   candidateName: result.name,
-                  dirty: false
-                }
-              })
+                  dirty: false,
+                },
+              }),
             })
           : Promise.resolve(),
       toggleFreeze: () =>
@@ -244,11 +258,11 @@ export function useControlDeckActions(params: {
               onSuccess: (result) => ({
                 message: result.frozen ? "Session frozen" : "Session unfrozen",
                 patch: {
-                  frozen: result.frozen
-                }
-              })
+                  frozen: result.frozen,
+                },
+              }),
             })
-          : Promise.resolve()
-    }
+          : Promise.resolve(),
+    },
   };
 }

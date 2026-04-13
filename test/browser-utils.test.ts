@@ -4,7 +4,7 @@ import {
   groupSessionsByTime,
   sessionDisplayTitle,
   sessionListSubtitle,
-  sessionListTitle
+  sessionListTitle,
 } from "../packages/web/src/browser-utils.js";
 
 describe("browser-utils", () => {
@@ -26,7 +26,7 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        taskCompleteCount: 1
+        taskCompleteCount: 1,
       },
       {
         threadId: "yesterday",
@@ -35,7 +35,7 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        taskCompleteCount: 1
+        taskCompleteCount: 1,
       },
       {
         threadId: "week",
@@ -44,7 +44,7 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        taskCompleteCount: 1
+        taskCompleteCount: 1,
       },
       {
         threadId: "month",
@@ -53,11 +53,16 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: true,
         frozen: false,
-        taskCompleteCount: 1
-      }
+        taskCompleteCount: 1,
+      },
     ]);
 
-    expect(groups.map((item) => item.label)).toEqual(["Today", "Yesterday", "This Week", "This Month"]);
+    expect(groups.map((item) => item.label)).toEqual([
+      "Today",
+      "Yesterday",
+      "This Week",
+      "This Month",
+    ]);
   });
 
   test("prefers official name over candidate and id", () => {
@@ -70,8 +75,8 @@ describe("browser-utils", () => {
         workspaceLabel: "w",
         dirty: false,
         frozen: false,
-        taskCompleteCount: 0
-      })
+        taskCompleteCount: 0,
+      }),
     ).toBe("Official");
   });
 
@@ -85,7 +90,7 @@ describe("browser-utils", () => {
       workspaceLabel: "w",
       dirty: false,
       frozen: false,
-      taskCompleteCount: 0
+      taskCompleteCount: 0,
     };
 
     expect(sessionListTitle(session)).toBe("fix(settings): persist ui language");
@@ -101,7 +106,7 @@ describe("browser-utils", () => {
       workspaceLabel: "w",
       dirty: false,
       frozen: false,
-      taskCompleteCount: 0
+      taskCompleteCount: 0,
     };
 
     expect(sessionListSubtitle(session)).toBe("");
@@ -115,7 +120,7 @@ describe("browser-utils", () => {
       workspaceLabel: "w",
       dirty: false,
       frozen: false,
-      taskCompleteCount: 0
+      taskCompleteCount: 0,
     };
 
     expect(sessionListTitle(session)).toBe("修复 settings 保存后被重置的问题");

@@ -1,11 +1,9 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-
-import { afterEach, describe, expect, it } from "vitest";
-
 import { loadConfigView, loadEffectiveConfig, writeUserConfig } from "@codexnamer/core";
 import { REDACTED_SECRET } from "@codexnamer/shared";
+import { afterEach, describe, expect, it } from "vitest";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.HOME;
@@ -37,17 +35,17 @@ describe("config loading", () => {
         "[model_providers.OpenAI]",
         'base_url = "http://relay.test/v1"',
         'wire_api = "responses"',
-        "requires_openai_auth = true"
+        "requires_openai_auth = true",
       ].join("\n"),
-      "utf8"
+      "utf8",
     );
     await fs.writeFile(
       path.join(codexHome, "auth.json"),
       JSON.stringify({
         auth_mode: "apikey",
-        OPENAI_API_KEY: "codex-file-key"
+        OPENAI_API_KEY: "codex-file-key",
       }),
-      "utf8"
+      "utf8",
     );
     await fs.writeFile(
       configPath,
@@ -61,14 +59,14 @@ describe("config loading", () => {
         'display_name = "default"',
         'base_url = "http://manual.test/v1"',
         'model = "gpt-manual"',
-        'api_key = "manual-key"'
+        'api_key = "manual-key"',
       ].join("\n"),
-      "utf8"
+      "utf8",
     );
 
     const effective = await loadEffectiveConfig({
       cwd: root,
-      configPath
+      configPath,
     });
 
     expect(effective.inheritedCodex.auth?.authMode).toBe("apikey");
@@ -82,7 +80,10 @@ describe("config loading", () => {
     const configPath = path.join(root, "config.toml");
 
     await fs.mkdir(codexHome, { recursive: true });
-    await fs.writeFile(path.join(codexHome, "config.toml"), 'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n');
+    await fs.writeFile(
+      path.join(codexHome, "config.toml"),
+      'model_provider = "OpenAI"\nmodel = "gpt-5.4"\n',
+    );
     await fs.writeFile(
       configPath,
       [
@@ -95,9 +96,9 @@ describe("config loading", () => {
         'display_name = "default"',
         'base_url = "http://manual.test/v1"',
         'model = "gpt-manual"',
-        'api_key = "keep-me"'
+        'api_key = "keep-me"',
       ].join("\n"),
-      "utf8"
+      "utf8",
     );
 
     await writeUserConfig({
@@ -112,17 +113,17 @@ describe("config loading", () => {
           builder: [
             { type: "component", component: "tag" },
             { type: "separator", value: " / " },
-            { type: "component", component: "summary" }
+            { type: "component", component: "summary" },
           ],
           tags: [
             {
               id: "settings",
               label: "设置",
               description: "配置与设置问题",
-              promptHint: "config settings save"
-            }
+              promptHint: "config settings save",
+            },
           ],
-          customPrompt: "Always classify the session before naming it."
+          customPrompt: "Always classify the session before naming it.",
         },
         providerProfiles: [
           {
@@ -133,20 +134,20 @@ describe("config loading", () => {
             model: "gpt-next",
             apiKey: REDACTED_SECRET,
             enabled: true,
-            isDefault: true
-          }
-        ]
-      }
+            isDefault: true,
+          },
+        ],
+      },
     });
 
     const effective = await loadEffectiveConfig({
       cwd: root,
-      configPath
+      configPath,
     });
     const view = await loadConfigView({
       cwd: root,
       configPath,
-      effectiveConfig: effective
+      effectiveConfig: effective,
     });
     const written = await fs.readFile(configPath, "utf8");
 
@@ -157,7 +158,7 @@ describe("config loading", () => {
     expect(effective.naming.builder).toEqual([
       { type: "component", component: "tag" },
       { type: "separator", value: " / " },
-      { type: "component", component: "summary" }
+      { type: "component", component: "summary" },
     ]);
     expect(effective.naming.tags).toHaveLength(1);
     expect(effective.naming.tags[0]?.id).toBe("settings");
@@ -169,7 +170,7 @@ describe("config loading", () => {
     expect(written).toContain('context_strategy = "user-assistant-transcript"');
     expect(written).toContain("context_max_chars = 4_096");
     expect(written).toContain('composition_mode = "prompt-override"');
-    expect(written).toContain('[[naming.builder]]');
+    expect(written).toContain("[[naming.builder]]");
     expect(written).toContain('component = "tag"');
     expect(written).toContain('value = " / "');
     expect(written).toContain('custom_prompt = "Always classify the session before naming it."');

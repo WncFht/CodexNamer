@@ -1,6 +1,5 @@
-import { useEffect, useRef } from "react";
-
 import type { ApiEventRecord } from "@codexnamer/shared";
+import { useEffect, useRef } from "react";
 
 import { fetchEvents } from "../api.js";
 import type { TabId } from "../control-deck-model.js";
@@ -23,7 +22,7 @@ export function useRefreshCoordinator(params: {
     refreshForEvents,
     refreshFallback,
     eventIntervalMs = DEFAULT_EVENT_INTERVAL_MS,
-    staleRefreshMs = DEFAULT_STALE_REFRESH_MS
+    staleRefreshMs = DEFAULT_STALE_REFRESH_MS,
   } = params;
   const lastTriggeredRefreshAtRef = useRef(Date.now());
 

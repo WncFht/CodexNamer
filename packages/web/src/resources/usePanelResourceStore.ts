@@ -9,7 +9,7 @@ import {
   fetchDoctor,
   fetchOverview,
   fetchPromptPreview,
-  fetchProviders
+  fetchProviders,
 } from "../api.js";
 import type { TabId } from "../control-deck-model.js";
 import type {
@@ -22,7 +22,7 @@ import type {
   DoctorResponse,
   OverviewResponse,
   PromptPreviewResponse,
-  ProviderResponse
+  ProviderResponse,
 } from "../types.js";
 
 type UsePanelResourceStoreOptions = {
@@ -40,7 +40,9 @@ export function usePanelResourceStore(options: UsePanelResourceStoreOptions) {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [daemon, setDaemon] = useState<DaemonControlStatus | null>(null);
   const [aiRequestLogs, setAiRequestLogs] = useState<AiRequestLogResponse | null>(null);
-  const [aiRequestLogDetail, setAiRequestLogDetail] = useState<AiRequestLogDetailResponse | null>(null);
+  const [aiRequestLogDetail, setAiRequestLogDetail] = useState<AiRequestLogDetailResponse | null>(
+    null,
+  );
   const [preview, setPreview] = useState<AutoRenamePreviewResponse | null>(null);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [promptPreview, setPromptPreview] = useState<PromptPreviewResponse | null>(null);
@@ -48,7 +50,7 @@ export function usePanelResourceStore(options: UsePanelResourceStoreOptions) {
   const latestUiStateRef = useRef({
     tab,
     selectedId,
-    selectedRequestLogId
+    selectedRequestLogId,
   });
   const latestCallbacksRef = useRef({ onFailure });
   const configRequestIdRef = useRef(0);
@@ -66,7 +68,7 @@ export function usePanelResourceStore(options: UsePanelResourceStoreOptions) {
   latestUiStateRef.current = {
     tab,
     selectedId,
-    selectedRequestLogId
+    selectedRequestLogId,
   };
   latestCallbacksRef.current = { onFailure };
 
@@ -138,72 +140,73 @@ export function usePanelResourceStore(options: UsePanelResourceStoreOptions) {
     setAiRequestLogDetail(payload);
   }, []);
 
-  const refreshPreview = useCallback(async (options?: {
-    includeCandidateNames?: boolean;
-    urgent?: boolean;
-    limit?: number;
-  }) => {
-    if (options?.urgent) {
-      previewUrgentPendingRef.current += 1;
-      setPreviewRefreshing(true);
-    }
-    const requestId = ++previewRequestIdRef.current;
-    try {
-      const payload = await fetchAutoRenamePreview({
-        includeCandidateNames: options?.includeCandidateNames ?? false,
-        limit:
-          typeof options?.limit === "number"
-            ? options.limit
-            : options?.includeCandidateNames
-              ? 100
-              : latestUiStateRef.current.tab === "maintenance"
-                ? 1000
-                : 50
-      });
-      if (requestId !== previewRequestIdRef.current) {
-        return;
-      }
-      setPreview(payload);
-    } catch {
-      // Keep the last successful preview. Browsing sessions should not block on preview generation.
-    } finally {
+  const refreshPreview = useCallback(
+    async (options?: { includeCandidateNames?: boolean; urgent?: boolean; limit?: number }) => {
       if (options?.urgent) {
-        previewUrgentPendingRef.current = Math.max(0, previewUrgentPendingRef.current - 1);
-        if (previewUrgentPendingRef.current === 0) {
-          setPreviewRefreshing(false);
+        previewUrgentPendingRef.current += 1;
+        setPreviewRefreshing(true);
+      }
+      const requestId = ++previewRequestIdRef.current;
+      try {
+        const payload = await fetchAutoRenamePreview({
+          includeCandidateNames: options?.includeCandidateNames ?? false,
+          limit:
+            typeof options?.limit === "number"
+              ? options.limit
+              : options?.includeCandidateNames
+                ? 100
+                : latestUiStateRef.current.tab === "maintenance"
+                  ? 1000
+                  : 50,
+        });
+        if (requestId !== previewRequestIdRef.current) {
+          return;
+        }
+        setPreview(payload);
+      } catch {
+        // Keep the last successful preview. Browsing sessions should not block on preview generation.
+      } finally {
+        if (options?.urgent) {
+          previewUrgentPendingRef.current = Math.max(0, previewUrgentPendingRef.current - 1);
+          if (previewUrgentPendingRef.current === 0) {
+            setPreviewRefreshing(false);
+          }
         }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
-  const refreshPromptPreview = useCallback(async (request?: {
-    threadId?: string;
-    urgent?: boolean;
-    userConfig?: ConfigDocument;
-  }) => {
-    if (request?.urgent) {
-      promptPreviewUrgentPendingRef.current += 1;
-      setPromptPreviewRefreshing(true);
-    }
-    const requestId = ++promptPreviewRequestIdRef.current;
-    try {
-      const payload = await fetchPromptPreview(
-        request?.threadId ?? latestUiStateRef.current.selectedId,
-        request?.userConfig
-      );
-      if (requestId !== promptPreviewRequestIdRef.current) {
-        return;
-      }
-      setPromptPreview(payload);
-    } finally {
+  const refreshPromptPreview = useCallback(
+    async (request?: { threadId?: string; urgent?: boolean; userConfig?: ConfigDocument }) => {
       if (request?.urgent) {
-        promptPreviewUrgentPendingRef.current = Math.max(0, promptPreviewUrgentPendingRef.current - 1);
-        if (promptPreviewUrgentPendingRef.current === 0) {
-          setPromptPreviewRefreshing(false);
+        promptPreviewUrgentPendingRef.current += 1;
+        setPromptPreviewRefreshing(true);
+      }
+      const requestId = ++promptPreviewRequestIdRef.current;
+      try {
+        const payload = await fetchPromptPreview(
+          request?.threadId ?? latestUiStateRef.current.selectedId,
+          request?.userConfig,
+        );
+        if (requestId !== promptPreviewRequestIdRef.current) {
+          return;
+        }
+        setPromptPreview(payload);
+      } finally {
+        if (request?.urgent) {
+          promptPreviewUrgentPendingRef.current = Math.max(
+            0,
+            promptPreviewUrgentPendingRef.current - 1,
+          );
+          if (promptPreviewUrgentPendingRef.current === 0) {
+            setPromptPreviewRefreshing(false);
+          }
         }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (tab !== "settings") {
@@ -211,7 +214,7 @@ export function usePanelResourceStore(options: UsePanelResourceStoreOptions) {
     }
     void refreshPromptPreview({
       threadId: selectedId,
-      urgent: false
+      urgent: false,
     });
   }, [configView?.effectiveConfig, refreshPromptPreview, selectedId, tab]);
 
@@ -246,6 +249,6 @@ export function usePanelResourceStore(options: UsePanelResourceStoreOptions) {
     refreshAiRequestLogs,
     refreshAiRequestLogDetail,
     refreshPreview,
-    refreshPromptPreview
+    refreshPromptPreview,
   };
 }

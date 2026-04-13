@@ -86,10 +86,7 @@ export function deepMerge<T>(base: T, override: Partial<T>): T {
       typeof current === "object" &&
       !Array.isArray(current)
     ) {
-      result[key] = deepMerge(
-        current as Record<string, unknown>,
-        value as Record<string, unknown>
-      );
+      result[key] = deepMerge(current as Record<string, unknown>, value as Record<string, unknown>);
       continue;
     }
 
@@ -108,5 +105,8 @@ export function stripControl(input?: string): string | undefined {
     return undefined;
   }
 
-  return input.replace(/[\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim();
+  return input
+    .replace(/[\u0000-\u001f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

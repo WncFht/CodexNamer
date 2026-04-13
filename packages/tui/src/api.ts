@@ -19,8 +19,8 @@ import type {
   RenameReplayResult,
   RenameSuggestResponse,
   SessionDetail,
+  SessionsResponse,
   SessionTranscriptPage,
-  SessionsResponse
 } from "./types.js";
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -31,7 +31,7 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
 
   const response = await fetch(input, {
     ...init,
-    headers
+    headers,
   });
 
   if (!response.ok) {
@@ -49,7 +49,12 @@ export class LocalApiClient {
     return new URL(pathname, this.baseUrl).toString();
   }
 
-  listSessions(params: { dirtyOnly: boolean; search?: string; limit?: number; workspace?: string }): Promise<SessionsResponse> {
+  listSessions(params: {
+    dirtyOnly: boolean;
+    search?: string;
+    limit?: number;
+    workspace?: string;
+  }): Promise<SessionsResponse> {
     const url = new URL(this.resolve("/api/v1/sessions"));
     if (params.dirtyOnly) {
       url.searchParams.set("dirty", "true");
@@ -78,7 +83,7 @@ export class LocalApiClient {
       includeHidden?: boolean;
       role?: "all" | "user" | "assistant" | "tool" | "system";
       query?: string;
-    }
+    },
   ): Promise<SessionTranscriptPage> {
     const url = new URL(this.resolve(`/api/v1/sessions/${threadId}/transcript`));
     if (params?.page) {
@@ -100,28 +105,34 @@ export class LocalApiClient {
   }
 
   suggest(threadId: string): Promise<RenameSuggestResponse> {
-    return requestJson<RenameSuggestResponse>(this.resolve(`/api/v1/sessions/${threadId}/suggest`), {
-      method: "POST"
-    });
+    return requestJson<RenameSuggestResponse>(
+      this.resolve(`/api/v1/sessions/${threadId}/suggest`),
+      {
+        method: "POST",
+      },
+    );
   }
 
   apply(threadId: string): Promise<RenameApplyResponse> {
     return requestJson<RenameApplyResponse>(this.resolve(`/api/v1/sessions/${threadId}/apply`), {
-      method: "POST"
+      method: "POST",
     });
   }
 
   rename(threadId: string, name: string): Promise<unknown> {
     return requestJson(this.resolve(`/api/v1/sessions/${threadId}/rename`), {
       method: "POST",
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name }),
     });
   }
 
   freeze(threadId: string, frozen: boolean): Promise<RenameFreezeResponse> {
-    return requestJson<RenameFreezeResponse>(this.resolve(`/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`), {
-      method: "POST"
-    });
+    return requestJson<RenameFreezeResponse>(
+      this.resolve(`/api/v1/sessions/${threadId}/${frozen ? "freeze" : "unfreeze"}`),
+      {
+        method: "POST",
+      },
+    );
   }
 
   batchApplyDirty(previewOnly: boolean): Promise<BatchApplyResponse> {
@@ -129,10 +140,10 @@ export class LocalApiClient {
       method: "POST",
       body: JSON.stringify({
         filter: {
-          dirty: true
+          dirty: true,
         },
-        previewOnly
-      })
+        previewOnly,
+      }),
     });
   }
 
@@ -156,8 +167,8 @@ export class LocalApiClient {
         method: "POST",
         body: JSON.stringify({
           threadId,
-          userConfig
-        })
+          userConfig,
+        }),
       });
     }
     const url = new URL(this.resolve("/api/v1/ai/prompt-preview"));
@@ -174,7 +185,7 @@ export class LocalApiClient {
   updateConfig(userConfig: ConfigDocument): Promise<ConfigUpdateResponse> {
     return requestJson<ConfigUpdateResponse>(this.resolve("/api/v1/config"), {
       method: "PUT",
-      body: JSON.stringify({ userConfig })
+      body: JSON.stringify({ userConfig }),
     });
   }
 
@@ -197,13 +208,13 @@ export class LocalApiClient {
   startDaemon(intervalSeconds?: number): Promise<DaemonControlStatus> {
     return requestJson<DaemonControlStatus>(this.resolve("/api/v1/daemon/start"), {
       method: "POST",
-      body: JSON.stringify(typeof intervalSeconds === "number" ? { intervalSeconds } : {})
+      body: JSON.stringify(typeof intervalSeconds === "number" ? { intervalSeconds } : {}),
     });
   }
 
   stopDaemon(): Promise<DaemonControlStatus> {
     return requestJson<DaemonControlStatus>(this.resolve("/api/v1/daemon/stop"), {
-      method: "POST"
+      method: "POST",
     });
   }
 
@@ -245,13 +256,13 @@ export class LocalApiClient {
   testProvider(userConfig?: ConfigDocument): Promise<ProviderTestResponse> {
     return requestJson<ProviderTestResponse>(this.resolve("/api/v1/providers/test"), {
       method: "POST",
-      body: JSON.stringify(userConfig ? { userConfig } : {})
+      body: JSON.stringify(userConfig ? { userConfig } : {}),
     });
   }
 
   parseCodexProvider(): Promise<ParseCodexProviderResponse> {
     return requestJson<ParseCodexProviderResponse>(this.resolve("/api/v1/providers/parse-codex"), {
-      method: "POST"
+      method: "POST",
     });
   }
 
@@ -261,7 +272,7 @@ export class LocalApiClient {
   }): Promise<RenameReplayResult> {
     return requestJson<RenameReplayResult>(this.resolve("/api/v1/maintenance/requeue-renames"), {
       method: "POST",
-      body: JSON.stringify(params)
+      body: JSON.stringify(params),
     });
   }
 

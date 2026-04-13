@@ -37,7 +37,12 @@ function parseUrlBoolean(value: string | null, fallback: boolean): boolean {
 }
 
 function parseUrlTab(value: string | null): TabId {
-  if (value === "settings" || value === "maintenance" || value === "requeue" || value === "daemon") {
+  if (
+    value === "settings" ||
+    value === "maintenance" ||
+    value === "requeue" ||
+    value === "daemon"
+  ) {
     return value;
   }
   return "sessions";
@@ -53,7 +58,7 @@ function addResourcesForEventType(
   resourceSet: Set<DataResource>,
   tab: TabId,
   type: ApiEventType,
-  options?: { includePromptPreview?: boolean }
+  options?: { includePromptPreview?: boolean },
 ): void {
   switch (type) {
     case "scan.completed":
@@ -99,9 +104,10 @@ export function readUiStateFromUrl(): UrlUiState {
     tab: parseUrlTab(params.get("tab")),
     search: params.get("q") ?? "",
     showHiddenTranscript: parseUrlBoolean(params.get("hidden"), false),
-    selectedWorkspaceId: workspace && workspace !== ALL_WORKSPACES_ID ? workspace : ALL_WORKSPACES_ID,
+    selectedWorkspaceId:
+      workspace && workspace !== ALL_WORKSPACES_ID ? workspace : ALL_WORKSPACES_ID,
     selectedId: params.get("session") ?? undefined,
-    selectedRequestLogId: params.get("requestLog") ? Number(params.get("requestLog")) : undefined
+    selectedRequestLogId: params.get("requestLog") ? Number(params.get("requestLog")) : undefined,
   };
 }
 
@@ -172,7 +178,7 @@ export function liveRefreshResourcesForTab(
   tab: TabId,
   options?: {
     includePromptPreview?: boolean;
-  }
+  },
 ): DataResource[] {
   const resources: DataResource[] = ["sessions", "preview"];
   if (tab === "settings") {
@@ -201,7 +207,7 @@ export function eventRefreshResourcesForTab(
   events: readonly Pick<ApiEventRecord, "type">[],
   options?: {
     includePromptPreview?: boolean;
-  }
+  },
 ): DataResource[] {
   const merged = new Set<DataResource>();
   for (const event of events) {

@@ -79,13 +79,22 @@ async function loadBasicRuntime(): Promise<any> {
       import("echarts/charts"),
       import("echarts/components"),
       import("echarts/core"),
-      import("echarts/renderers")
+      import("echarts/renderers"),
     ]).then(([charts, components, core, renderers]) => {
       const { BarChart, LineChart } = charts as any;
-      const { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } = components as any;
+      const { DataZoomComponent, GridComponent, LegendComponent, TooltipComponent } =
+        components as any;
       const { getInstanceByDom, graphic, init, use: registerCharts } = core as any;
       const { CanvasRenderer } = renderers as any;
-      registerCharts([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, CanvasRenderer]);
+      registerCharts([
+        LineChart,
+        BarChart,
+        GridComponent,
+        TooltipComponent,
+        LegendComponent,
+        DataZoomComponent,
+        CanvasRenderer,
+      ]);
       return { getInstanceByDom, graphic, init };
     });
   }
@@ -98,7 +107,7 @@ async function loadSankeyRuntime(): Promise<any> {
       import("echarts/charts"),
       import("echarts/components"),
       import("echarts/core"),
-      import("echarts/renderers")
+      import("echarts/renderers"),
     ]).then(([charts, components, core, renderers]) => {
       const { SankeyChart } = charts as any;
       const { TooltipComponent } = components as any;
@@ -114,8 +123,13 @@ async function loadSankeyRuntime(): Promise<any> {
 function readChartTheme(): ChartTheme {
   const rootStyle = getComputedStyle(document.documentElement);
   const accentRgbValue = rootStyle.getPropertyValue("--color-accent-rgb").trim() || "251 143 104";
-  const accentRgb = accentRgbValue.includes(",") ? accentRgbValue : accentRgbValue.split(/\s+/).join(", ");
-  const successColor = rootStyle.getPropertyValue("--color-success").trim() || rootStyle.getPropertyValue("--success").trim() || "#4f8b63";
+  const accentRgb = accentRgbValue.includes(",")
+    ? accentRgbValue
+    : accentRgbValue.split(/\s+/).join(", ");
+  const successColor =
+    rootStyle.getPropertyValue("--color-success").trim() ||
+    rootStyle.getPropertyValue("--success").trim() ||
+    "#4f8b63";
   const successRgb = normalizeColorToRgb(successColor, "79, 139, 99");
   return {
     text:
@@ -162,9 +176,7 @@ function readChartTheme(): ChartTheme {
       rootStyle.getPropertyValue("--color-note").trim() ||
       rootStyle.getPropertyValue("--manual").trim() ||
       "#8d7bd6",
-    note:
-      rootStyle.getPropertyValue("--color-note").trim() ||
-      "#8d7bd6",
+    note: rootStyle.getPropertyValue("--color-note").trim() || "#8d7bd6",
     tooltipBg:
       rootStyle.getPropertyValue("--color-bg-surface").trim() ||
       rootStyle.getPropertyValue("--bg-elevated").trim() ||
@@ -176,7 +188,7 @@ function readChartTheme(): ChartTheme {
     tooltipText:
       rootStyle.getPropertyValue("--color-text-primary").trim() ||
       rootStyle.getPropertyValue("--text").trim() ||
-      "#2a1c17"
+      "#2a1c17",
   };
 }
 
@@ -191,7 +203,11 @@ function clampIndex(value: number | undefined, maxIndex: number | undefined): nu
 }
 
 function categoryAxisLength(option: ChartOption): number | undefined {
-  const axisConfig = Array.isArray(option.xAxis) ? option.xAxis : option.xAxis ? [option.xAxis] : [];
+  const axisConfig = Array.isArray(option.xAxis)
+    ? option.xAxis
+    : option.xAxis
+      ? [option.xAxis]
+      : [];
   for (const axis of axisConfig) {
     if (!axis || typeof axis !== "object") {
       continue;
@@ -214,7 +230,7 @@ function readCurrentDataZoomState(instance: any): DataZoomState[] {
     start: typeof item.start === "number" ? item.start : undefined,
     end: typeof item.end === "number" ? item.end : undefined,
     startValue: typeof item.startValue === "number" ? item.startValue : undefined,
-    endValue: typeof item.endValue === "number" ? item.endValue : undefined
+    endValue: typeof item.endValue === "number" ? item.endValue : undefined,
   }));
 }
 
@@ -239,21 +255,25 @@ function applyPreservedDataZoom(option: ChartOption, preservedState: DataZoomSta
       ...item,
       ...(typeof preserved.start === "number" ? { start: preserved.start } : {}),
       ...(typeof preserved.end === "number" ? { end: preserved.end } : {}),
-      ...(typeof preserved.startValue === "number" ? { startValue: clampIndex(preserved.startValue, maxIndex) } : {}),
-      ...(typeof preserved.endValue === "number" ? { endValue: clampIndex(preserved.endValue, maxIndex) } : {})
+      ...(typeof preserved.startValue === "number"
+        ? { startValue: clampIndex(preserved.startValue, maxIndex) }
+        : {}),
+      ...(typeof preserved.endValue === "number"
+        ? { endValue: clampIndex(preserved.endValue, maxIndex) }
+        : {}),
     };
   });
 
   return {
     ...option,
-    dataZoom: nextDataZoom
+    dataZoom: nextDataZoom,
   };
 }
 
 function useChart(
   ref: React.RefObject<HTMLDivElement | null>,
   buildOption: ChartBuilder | undefined,
-  runtime: ChartRuntime
+  runtime: ChartRuntime,
 ): void {
   const chartRef = React.useRef<LoadedChart | null>(null);
   const loadRuntime = React.useCallback(() => {
@@ -277,12 +297,12 @@ function useChart(
       const instance =
         echartsLib.getInstanceByDom(container) ??
         echartsLib.init(container, undefined, {
-          renderer: "canvas"
+          renderer: "canvas",
         });
       chartRef.current = {
         container,
         instance,
-        echartsLib
+        echartsLib,
       };
 
       observer = new ResizeObserver(() => {
@@ -327,14 +347,17 @@ function useChart(
               instance:
                 echartsLib.getInstanceByDom(container) ??
                 echartsLib.init(container, undefined, {
-                  renderer: "canvas"
+                  renderer: "canvas",
                 }),
-              echartsLib
+              echartsLib,
             };
 
       chartRef.current = chart;
       const preservedDataZoom = readCurrentDataZoomState(chart.instance);
-      const nextOption = applyPreservedDataZoom(buildOption(readChartTheme(), chart.echartsLib), preservedDataZoom);
+      const nextOption = applyPreservedDataZoom(
+        buildOption(readChartTheme(), chart.echartsLib),
+        preservedDataZoom,
+      );
       chart.instance.setOption(nextOption, true);
     });
 
@@ -354,7 +377,10 @@ function useChart(
         return;
       }
       const preservedDataZoom = readCurrentDataZoomState(chart.instance);
-      const nextOption = applyPreservedDataZoom(buildOption(readChartTheme(), chart.echartsLib), preservedDataZoom);
+      const nextOption = applyPreservedDataZoom(
+        buildOption(readChartTheme(), chart.echartsLib),
+        preservedDataZoom,
+      );
       chart.instance.setOption(nextOption, true);
     };
 

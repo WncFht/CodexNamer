@@ -9,7 +9,7 @@ function fingerprintText(value?: string): string | undefined {
 export function buildSessionRevision(
   session: MaterializedSession,
   fileInfo: { sizeBytes: number; mtime?: string },
-  previous?: SessionRevision
+  previous?: SessionRevision,
 ): SessionRevision {
   const normalized = {
     cwd: session.cwd ?? "",
@@ -18,7 +18,7 @@ export function buildSessionRevision(
     lastAgentMessage: stripControl(session.lastAgentMessage) ?? "",
     modelProvider: session.modelProvider ?? "",
     taskCompleteCount: session.taskCompleteCount,
-    tokenTotal: session.tokenTotal
+    tokenTotal: session.tokenTotal,
   };
 
   const currentRevision = sha256(JSON.stringify(normalized));
@@ -34,14 +34,17 @@ export function buildSessionRevision(
     lastSeenRolloutSize: fileInfo.sizeBytes,
     lastSeenRolloutMtime: fileInfo.mtime,
     lastMaterialChangeAt: hasMaterialChange
-      ? session.updatedAt ?? toUtcIso()
-      : previous?.lastMaterialChangeAt ?? session.updatedAt ?? toUtcIso(),
+      ? (session.updatedAt ?? toUtcIso())
+      : (previous?.lastMaterialChangeAt ?? session.updatedAt ?? toUtcIso()),
     lastTaskCompleteCount: session.taskCompleteCount,
-    lastAgentMessageFingerprint
+    lastAgentMessageFingerprint,
   };
 }
 
-export function isDirtySinceRename(currentRevision?: string, lastAppliedRevision?: string): boolean {
+export function isDirtySinceRename(
+  currentRevision?: string,
+  lastAppliedRevision?: string,
+): boolean {
   if (!currentRevision) {
     return false;
   }
@@ -52,4 +55,3 @@ export function isDirtySinceRename(currentRevision?: string, lastAppliedRevision
 
   return currentRevision !== lastAppliedRevision;
 }
-

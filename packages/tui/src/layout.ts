@@ -63,7 +63,11 @@ export function measureDisplayWidth(value: string | undefined): number {
   return width;
 }
 
-export function truncateDisplayText(value: string | undefined, maxWidth: number, fallback = "n/a"): string {
+export function truncateDisplayText(
+  value: string | undefined,
+  maxWidth: number,
+  fallback = "n/a",
+): string {
   const safe = value?.trim() || fallback;
   if (maxWidth <= 1) {
     return "…";
@@ -86,7 +90,11 @@ export function truncateDisplayText(value: string | undefined, maxWidth: number,
   return output;
 }
 
-export function wrapDisplayText(value: string | undefined, maxWidth: number, fallback = "n/a"): string[] {
+export function wrapDisplayText(
+  value: string | undefined,
+  maxWidth: number,
+  fallback = "n/a",
+): string[] {
   const safe = value?.trim() || fallback;
   if (safe.length === 0) {
     return [fallback];
@@ -125,7 +133,7 @@ export function wrapDisplayText(value: string | undefined, maxWidth: number, fal
 
 export function computeTerminalLayout(
   metrics: TerminalMetrics,
-  options?: TerminalLayoutOptions
+  options?: TerminalLayoutOptions,
 ): TerminalLayout {
   const columns = Math.max(52, metrics.columns || 120);
   const rows = Math.max(22, metrics.rows || 40);
@@ -135,14 +143,17 @@ export function computeTerminalLayout(
   const showPreview = options?.showPreview ?? false;
 
   const compact = columns < 108 || rows < 26 || area < 2_900;
-  const stacked = screenMode === "settings" ? true : compact || columns < 144 || rows < 33 || area < 4_400;
+  const stacked =
+    screenMode === "settings" ? true : compact || columns < 144 || rows < 33 || area < 4_400;
   const contentWidth = Math.max(columns - 4, 48);
   const previewHeight =
     screenMode !== "browser" || !showPreview ? 0 : compact ? 7 : stacked ? 8 : 9;
   const chromeRows = compact ? 10 : 11;
   const topSectionHeight = Math.max(stacked ? 16 : 12, rows - chromeRows - previewHeight);
 
-  let listWidth = stacked ? contentWidth : Math.max(50, Math.min(Math.floor(contentWidth * 0.5), contentWidth - 40));
+  let listWidth = stacked
+    ? contentWidth
+    : Math.max(50, Math.min(Math.floor(contentWidth * 0.5), contentWidth - 40));
   let detailWidth = stacked ? contentWidth : Math.max(34, contentWidth - listWidth - 2);
 
   if (screenMode === "settings") {
@@ -180,7 +191,10 @@ export function computeTerminalLayout(
             : Math.max(8, topSectionHeight - listHeight - 1)
           : topSectionHeight;
   const sessionRowHeight = compact ? 3 : 4;
-  const visibleSessionCount = Math.max(4, Math.floor(Math.max(6, listHeight - 3) / sessionRowHeight));
+  const visibleSessionCount = Math.max(
+    4,
+    Math.floor(Math.max(6, listHeight - 3) / sessionRowHeight),
+  );
   const visiblePreviewCount = Math.max(3, previewHeight - 3);
 
   return {
@@ -199,6 +213,6 @@ export function computeTerminalLayout(
     detailHeight,
     previewHeight,
     visibleSessionCount,
-    visiblePreviewCount
+    visiblePreviewCount,
   };
 }

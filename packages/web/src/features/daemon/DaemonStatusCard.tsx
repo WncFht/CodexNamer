@@ -1,10 +1,6 @@
 import { formatWhen } from "../../browser-utils.js";
-import {
-  runtimeExecutionLabel,
-  runtimeProgressExplanation,
-  type RuntimeDaemonStatusDisplay,
-  type RuntimeExecutionDisplay
-} from "../../runtime-display.js";
+import type { RuntimeDaemonStatusDisplay, RuntimeExecutionDisplay } from "../../runtime-display.js";
+import { runtimeExecutionLabel, runtimeProgressExplanation } from "../../runtime-display.js";
 import type { DaemonControlStatus, OverviewResponse } from "../../types.js";
 
 export function DaemonStatusCard(props: {
@@ -52,7 +48,9 @@ export function DaemonStatusCard(props: {
         <div>
           <dt>{props.inline("说明", "Explanation")}</dt>
           <dd className="daemon-copy">
-            {(props.runtimeDisplay.sweepRunning ? runtimeProgressExplanation(props.uiLanguage) : "") ||
+            {(props.runtimeDisplay.sweepRunning
+              ? runtimeProgressExplanation(props.uiLanguage)
+              : "") ||
               props.overview?.runtime.explain ||
               "--"}
           </dd>
