@@ -442,6 +442,10 @@ async function writeInstallArtifacts(context: {
 }): Promise<void> {
   await fs.mkdir(context.paths.serviceDir, { recursive: true });
   await fs.mkdir(context.paths.logsDir, { recursive: true });
+  await Promise.all([
+    fs.writeFile(context.paths.stdoutLogPath, "", "utf8"),
+    fs.writeFile(context.paths.stderrLogPath, "", "utf8"),
+  ]);
   await fs.writeFile(
     context.paths.serviceConfigPath,
     JSON.stringify(context.runtime, null, 2) + "\n",
@@ -659,6 +663,15 @@ async function collectManagedServiceDiagnostics(
   const portOwner = health.healthy ? undefined : inspectListeningPortOwner(installed.runtime.port);
 
   if (!options?.includeLogs) {
+    return {
+      health,
+      commandStatus,
+      platformStatus,
+      portOwner,
+    };
+  }
+
+  if (health.healthy) {
     return {
       health,
       commandStatus,

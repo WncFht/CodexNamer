@@ -67,6 +67,56 @@ describe("service output", () => {
     expect(output).toContain("EADDRINUSE");
   });
 
+  it("hides stale log tails when service is healthy", () => {
+    const result: ManagedServiceStatusResult = {
+      installed: true,
+      platform: "macos",
+      serviceName: "dev.codexnamer.agent",
+      url: "http://127.0.0.1:42111",
+      configPath: "/Users/tester/.local/state/codexnamer/service/service-config.json",
+      logs: {
+        stdout: "/Users/tester/.local/state/codexnamer/service/logs/service.stdout.log",
+        stderr: "/Users/tester/.local/state/codexnamer/service/logs/service.stderr.log",
+      },
+      runtime: {
+        version: 1,
+        platform: "macos",
+        installedAt: "2026-04-13T15:13:20.949Z",
+        cwd: "/Users/tester/Desktop/src/CodexNamer",
+        stateDir: "/Users/tester/.local/state/codexnamer",
+        host: "127.0.0.1",
+        port: 42111,
+        webRoot: "/Users/tester/Desktop/src/CodexNamer/packages/web/dist",
+        autoStartDaemon: true,
+        url: "http://127.0.0.1:42111",
+      },
+      commandStatus: {
+        command: "launchctl",
+        args: ["print", "gui/501/dev.codexnamer.agent"],
+        exitCode: 0,
+        ok: true,
+      },
+      platformStatus: {
+        loaded: true,
+        running: true,
+        state: "running",
+        pid: 2859,
+      },
+      health: {
+        healthy: true,
+        statusCode: 200,
+      },
+      logTail: {
+        stderr: ["Error: listen EADDRINUSE: address already in use 127.0.0.1:42110"],
+      },
+    };
+
+    const output = formatManagedServiceStatusResult(result, { color: false });
+    expect(output).toContain("health         healthy (HTTP 200)");
+    expect(output).not.toContain("recent stderr:");
+    expect(output).not.toContain("EADDRINUSE");
+  });
+
   it("formats not-installed status with the next command", () => {
     const output = formatManagedServiceStatusResult(
       {

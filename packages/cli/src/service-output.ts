@@ -263,8 +263,10 @@ export function formatManagedServiceStatusResult(
       options,
     );
   }
-  pushLogTail(lines, "recent stderr", result.logTail?.stderr, options);
-  pushLogTail(lines, "recent stdout", result.logTail?.stdout, options);
+  if (!result.health.healthy) {
+    pushLogTail(lines, "recent stderr", result.logTail?.stderr, options);
+    pushLogTail(lines, "recent stdout", result.logTail?.stdout, options);
+  }
   return lines.join("\n");
 }
 
