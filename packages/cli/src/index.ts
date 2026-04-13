@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { startApiServer, waitForShutdown } from "@codexnamer/api";
 import { CodexNamer } from "@codexnamer/core";
 import { cac } from "cac";
+import { formatServeAddressInUseMessage, isAddressInUseError } from "./serve-errors.js";
 import {
   getManagedServiceStatus,
   installManagedService,
@@ -99,13 +100,37 @@ cli
       );
     }
 
-    const app = await startApiServer({
-      host,
-      port,
-      webRoot,
-      autoStartDaemon: options.daemon !== false,
-      operator: "serve",
-    });
+    let app: Awaited<ReturnType<typeof startApiServer>>;
+    try {
+      app = await startApiServer({
+        host,
+        port,
+        webRoot,
+        autoStartDaemon: options.daemon !== false,
+        operator: "serve",
+      });
+    } catch (error) {
+      if (!isAddressInUseError(error)) {
+        throw error;
+      }
+
+      let serviceStatus: Parameters<typeof formatServeAddressInUseMessage>[0]["serviceStatus"];
+      try {
+        serviceStatus = (await getManagedServiceStatus()) as Parameters<
+          typeof formatServeAddressInUseMessage
+        >[0]["serviceStatus"];
+      } catch {
+        serviceStatus = undefined;
+      }
+
+      throw new Error(
+        formatServeAddressInUseMessage({
+          host,
+          port,
+          serviceStatus,
+        }),
+      );
+    }
 
     console.error(`[codexnamer] Service listening at http://${host}:${port}/`);
     console.error(`[codexnamer] Web root: ${webRoot}`);
