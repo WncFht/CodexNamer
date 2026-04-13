@@ -67,12 +67,12 @@ describe("classifyManagedProcess", () => {
 
 describe("detectSiblingRepoPath", () => {
   it("detects a same-name sibling repo for ai-tools workspaces", () => {
-    expect(detectSiblingRepoPath("/home/fanghaotian/Desktop/src/ai-tools/codexnamer")).toBe(
-      "/home/fanghaotian/Desktop/src/codexnamer"
+    expect(detectSiblingRepoPath("/home/tester/Desktop/src/ai-tools/codexnamer")).toBe(
+      "/home/tester/Desktop/src/codexnamer"
     );
   });
 
   it("ignores repos that are not under ai-tools", () => {
-    expect(detectSiblingRepoPath("/home/fanghaotian/Desktop/src/codexnamer")).toBeUndefined();
+    expect(detectSiblingRepoPath("/home/tester/Desktop/src/codexnamer")).toBeUndefined();
   });
 });

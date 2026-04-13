@@ -6,8 +6,8 @@
 
 - 外部设计稿：`docs/research/niracler-design.md`
 - 当前前端截图：
-  - `docs/reviews/assets/frontend-sessions-2026-04-05.png`
-  - `docs/reviews/assets/frontend-settings-2026-04-05.png`
+  - 当日 Web Sessions / Web Settings 截图已核对
+  - 原始截图因包含本地 workspace 与会话信息，未保留在仓库中
 - 现有前端结构说明：
   - `docs/reviews/frontend-design-audit-2026-04-05.md`
   - `docs/reviews/frontend-backend-refactor-plan-2026-04-11.md`
@@ -491,14 +491,11 @@
 - `packages/web/src/features/maintenance/charting.tsx`
 - `packages/web/src/main.tsx`
 
-本次截图验证产物：
+本次视觉验证说明：
 
-- `docs/reviews/assets/frontend-sessions-niracler-explicit-light-2026-04-13.png`
-- `docs/reviews/assets/frontend-settings-niracler-explicit-light-2026-04-13.png`
-- `docs/reviews/assets/frontend-maintenance-niracler-explicit-light-2026-04-13.png`
-- `docs/reviews/assets/frontend-daemon-niracler-explicit-light-2026-04-13.png`
-- `docs/reviews/assets/frontend-sessions-niracler-dark-2026-04-13.png`
-- `docs/reviews/assets/frontend-settings-niracler-dark-2026-04-13.png`
+- 已实际完成浅色 / 深色两轮页面核对
+- 原始截图包含本地 workspace、会话标题与用户名信息
+- 为避免泄漏本地数据，验证截图未保留在仓库中
 
 ## 11. 当日收尾审查与二次修正
 
@@ -593,12 +590,10 @@ Settings 在首轮落地后仍有两类偏差：
 - `npm test`
 - `npm run build`
 
-二次视觉验证截图：
+二次视觉验证说明：
 
-- `docs/reviews/assets/settings-ai-light-review-2026-04-13.png`
-- `docs/reviews/assets/settings-ai-dark-review-2026-04-13.png`
-- `docs/reviews/assets/maintenance-light-full-review-2026-04-13.png`
-- `docs/reviews/assets/maintenance-dark-full-review-2026-04-13.png`
+- 已对 AI Provider 与 Maintenance 图表做浅色 / 深色复查
+- 原始复查截图未入库，原因同上：避免泄漏本地 workspace 与个人数据
 
 最终结论：
 

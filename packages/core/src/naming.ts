@@ -1,3 +1,5 @@
+import os from "node:os";
+
 import type {
   EffectiveConfig,
   MaterializedSession,
@@ -17,6 +19,22 @@ type TopicRule = {
   en: string;
   patterns: RegExp[];
 };
+
+function isUserHomeProjectName(projectName?: string, cwd?: string): boolean {
+  const normalizedProjectName = projectName?.trim().toLowerCase();
+  const normalizedCwd = cwd?.trim().replace(/[\\/]+$/, "");
+  if (!normalizedProjectName || !normalizedCwd) {
+    return false;
+  }
+
+  const homeDir = os.homedir().trim().replace(/[\\/]+$/, "");
+  const homeBasename = basenameSafe(homeDir)?.trim().toLowerCase();
+  if (!homeBasename || normalizedProjectName !== homeBasename) {
+    return false;
+  }
+
+  return normalizedCwd === homeDir;
+}
 
 const KIND_RULES: Array<{ kind: string; patterns: RegExp[] }> = [
   {
@@ -725,7 +743,7 @@ export function suggestNameHeuristically(
   const scope =
     topicScope && topicScope !== "web" && topicScope !== "session"
       ? topicScope
-      : materialized.projectName && materialized.projectName !== "fanghaotian"
+      : materialized.projectName && !isUserHomeProjectName(materialized.projectName, materialized.cwd)
         ? materialized.projectName
         : undefined;
   let name = composeConfiguredSuggestionName(materialized, config, {

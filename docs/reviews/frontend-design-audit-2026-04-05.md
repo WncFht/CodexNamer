@@ -13,12 +13,11 @@
 
 - `docs/design/claude/DESIGN.md`
 
-截图集合：
+截图说明：
 
-- `docs/reviews/assets/frontend-sessions-2026-04-05.png`
-- `docs/reviews/assets/frontend-settings-2026-04-05.png`
-- `docs/reviews/assets/tui-browser-2026-04-05.png`
-- `docs/reviews/assets/tui-settings-2026-04-05.png`
+- 当日审查时确实核对过 Web / TUI 截图
+- 原始截图包含本地 workspace、会话标题与用户名信息
+- 为避免泄漏本地数据，原始截图现已移出仓库，不再随文档分发
 
 ## 摘要
 
@@ -28,21 +27,7 @@
 
 ## 截图
 
-### Web Sessions 截图
-
-![Web sessions](./assets/frontend-sessions-2026-04-05.png)
-
-### Web Settings 截图
-
-![Web settings](./assets/frontend-settings-2026-04-05.png)
-
-### TUI Browser 截图
-
-![TUI browser](./assets/tui-browser-2026-04-05.png)
-
-### TUI Settings 截图
-
-![TUI settings](./assets/tui-settings-2026-04-05.png)
+本次审查基于当日 Web Sessions / Web Settings / TUI Browser / TUI Settings 截图完成；原图因隐私原因未保留在仓库中。
 
 ## 发现
 
@@ -52,7 +37,7 @@
 
 证据：
 
-- `frontend-settings-2026-04-05.png`
+- `当日 Web Settings 截图`
 
 偏差原因：
 
@@ -78,8 +63,8 @@
 
 证据：
 
-- `frontend-sessions-2026-04-05.png`
-- `tui-browser-2026-04-05.png`
+- `当日 Web Sessions 截图`
+- `当日 TUI Browser 截图`
 
 偏差原因：
 
@@ -102,8 +87,8 @@
 
 证据：
 
-- `tui-browser-2026-04-05.png`
-- `tui-settings-2026-04-05.png`
+- `当日 TUI Browser 截图`
+- `当日 TUI Settings 截图`
 
 偏差原因：
 
@@ -131,8 +116,8 @@
 
 证据：
 
-- `frontend-sessions-2026-04-05.png`
-- `frontend-settings-2026-04-05.png`
+- `当日 Web Sessions 截图`
+- `当日 Web Settings 截图`
 
 已有改善：
 
@@ -153,7 +138,7 @@
 
 证据：
 
-- `frontend-sessions-2026-04-05.png`
+- `当日 Web Sessions 截图`
 
 偏差原因：
 
@@ -169,7 +154,7 @@
 
 证据：
 
-- `frontend-settings-2026-04-05.png`
+- `当日 Web Settings 截图`
 
 偏差原因：
 
@@ -187,8 +172,8 @@
 
 证据：
 
-- `frontend-sessions-2026-04-05.png`
-- `frontend-settings-2026-04-05.png`
+- `当日 Web Sessions 截图`
+- `当日 Web Settings 截图`
 
 已有改善：
 

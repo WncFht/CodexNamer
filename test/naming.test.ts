@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import os from "node:os";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildConfigForTests, buildRenamePrompt, suggestNameHeuristically } from "@codexnamer/core";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("naming specificity", () => {
   it("builds a more specific heuristic summary from settings and rename logic topics", () => {
@@ -129,5 +135,35 @@ describe("naming specificity", () => {
     expect(prompt).toContain("namingCompositionMode: prompt-override");
     expect(prompt).toContain("Custom naming override:");
     expect(prompt).toContain("Always prefer a domain tag first");
+  });
+
+  it("does not hardcode a user home directory name as scope", () => {
+    vi.spyOn(os, "homedir").mockReturnValue("/home/tester");
+
+    const config = buildConfigForTests({
+      naming: {
+        template: "{{kind}}{{scope_paren}}: {{summary}}",
+        maxLength: 80,
+        language: "en"
+      }
+    });
+
+    const suggestion = suggestNameHeuristically(
+      {
+        threadId: "t-home",
+        rolloutPath: "/tmp/r.jsonl",
+        cwd: "/home/tester",
+        projectName: "tester",
+        taskCompleteCount: 0,
+        tokenTotal: 0,
+        firstUserMessage: "check why the local launch script keeps restarting",
+        lastUserMessage: "make sure the rename does not use my username as project scope",
+        lastAgentMessage: "I will remove the user-specific fallback and keep the title generic."
+      },
+      config
+    );
+
+    expect(suggestion.scope).not.toBe("tester");
+    expect(suggestion.name).not.toContain("(tester)");
   });
 });
