@@ -37,7 +37,7 @@ CodexNamer scans local Codex rollout history, suggests clearer session titles, l
 ## What it does well
 
 - **See all your sessions in one place** across workspaces, providers, and projects.
-- **Generate clearer names** with heuristics or AI-backed structured naming.
+- **Generate clearer names** with reviewable, structured naming workflows.
 - **Review before writing** with explicit `skip / suggest / apply` states.
 - **Freeze noisy sessions** so stable names stay stable.
 - **Run fully local-first** with its own SQLite state and official `session_index.jsonl` writeback.
@@ -77,7 +77,7 @@ That starter file is intentionally more conservative than the built-in defaults:
 
 - browse sessions by workspace
 - inspect transcript, metadata, and rename history
-- review AI or heuristic suggestions
+- review suggested titles before applying them
 - apply, freeze, or requeue sessions when needed
 
 ### Settings
@@ -149,8 +149,6 @@ Optional project override path:
 - `<current working directory>/.codexnamer.toml`
 
 CodexNamer can inherit provider settings from your local Codex config, or you can define a manual provider inside CodexNamer.
-
-If AI naming is disabled or unavailable, heuristic naming still works.
 
 ## Other ways to operate
 

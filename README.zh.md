@@ -37,7 +37,7 @@ CodexNamer 会扫描本地 Codex rollout 历史，生成更清晰的 session 标
 ## 它现在能帮你做什么
 
 - **把所有 session 放回一个清晰列表里**，按 workspace、provider、项目统一查看。
-- **自动生成更像人写的标题**，可以走 heuristic，也可以走 AI 结构化命名。
+- **自动生成更像人写的标题**，走可审阅的结构化命名流程。
 - **先看再写回**，明确区分 `skip / suggest / apply`。
 - **冻结稳定会话**，避免标题反复抖动。
 - **保持本地优先**，使用自己的 SQLite 状态库，但仍走官方 `session_index.jsonl` 写回层。
@@ -77,7 +77,7 @@ cp config.example.toml ~/.config/codexnamer/config.toml
 
 - 按 workspace 浏览会话
 - 查看 transcript、元信息、命名历史
-- 审核 AI / heuristic 给出的候选标题
+- 审核候选标题后再决定是否写回
 - 在需要时 apply、freeze、requeue
 
 ### Settings
@@ -149,8 +149,6 @@ npm run cli -- service uninstall
 - `<当前工作目录>/.codexnamer.toml`
 
 CodexNamer 可以直接继承你本地 Codex 的 provider 配置，也可以在自己的配置里手动定义 provider。
-
-即使你关闭 AI 命名，heuristic 命名仍然可以工作。
 
 ## 其他使用方式
 
