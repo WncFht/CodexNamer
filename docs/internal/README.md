@@ -23,6 +23,10 @@
 - [前端设计审查](./reviews/frontend-design-audit-2026-04-05.md)
 - [前端设计系统落地记录](./reviews/frontend-design-system-adoption-2026-04-13.md)
 
+### 发布材料
+
+- [CodexNamer 对外分享文案（2026-04-14）](./releases/codexnamer-share-post-2026-04-14.md)
+
 ### 内部规格与规划
 
 - [实现 Checklist](./spec/implementation-checklist.md)
