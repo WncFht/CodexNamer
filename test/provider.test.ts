@@ -66,7 +66,8 @@ describe("provider backends", () => {
     });
 
     expect(suggestion.source).toBe("ai");
-    expect(suggestion.name).toContain("rename");
+    expect(suggestion.summary).toBe("rename sessions");
+    expect(suggestion.scope).toBe("codex");
     expect(suggestion.name.length).toBeLessThanOrEqual(24);
     expect(suggestion.kind).toBe("feat");
   });

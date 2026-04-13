@@ -130,6 +130,8 @@ npm run cli -- service stop
 npm run cli -- service uninstall
 ```
 
+These service commands now print human-readable summaries by default. Add `--json` if you need machine-readable output for scripts.
+
 Platform mapping:
 
 - Linux → `systemd --user`

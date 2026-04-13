@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { buildConfigForTests, CodexNamer } from "@codexnamer/core";
+import { CodexNamer } from "@codexnamer/core";
 import type { EffectiveConfig } from "@codexnamer/shared";
 
 type DeepPartial<T> = {
@@ -164,7 +164,7 @@ export async function createManagerForTest(
   const manager = await CodexNamer.create({
     cwd: workspaceRoot,
     configPath,
-    overrides: buildConfigForTests({
+    overrides: {
       general: {
         codexHome: overrides.codexHome,
         stateDir: overrides.stateDir,
@@ -177,7 +177,7 @@ export async function createManagerForTest(
         temperature: 0.2,
       },
       ...(overrides as Partial<EffectiveConfig>),
-    }),
+    },
     operator: "test",
   });
 

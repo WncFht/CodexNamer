@@ -130,7 +130,7 @@
 [general]
 codex_home = "~/.codex"
 state_dir = "~/.local/state/codexnamer"
-ui_language = "en-US"
+ui_language = "zh-CN"
 
 [rename]
 auto_apply = "idle-finalize"
@@ -145,18 +145,23 @@ max_auto_renames_per_session = 2
 [naming]
 preset = "conventional"
 template = "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}"
-max_length = 72
+max_length = 500
 language = "zh-CN"
-context_strategy = "summary-signals"
-context_max_chars = 8000
+context_strategy = "paired-user-turns"
+context_max_chars = 1000000
 composition_mode = "structured"
 builder = [
-  { type = "component", component = "tag" },
+  { type = "component", component = "timestamp", format = "%Y-%m-%d" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "project" },
   { type = "separator", value = " · " },
   { type = "component", component = "kind" },
   { type = "separator", value = " · " },
+  { type = "component", component = "scope" },
+  { type = "separator", value = " · " },
   { type = "component", component = "summary" }
 ]
+custom_prompt = "Always prefix a workspace-heavy Chinese tag."
 
 [ai]
 backend = "responses"
@@ -172,19 +177,15 @@ suggest_compact_index_above_lines = 20000
 backup_before_compact = true
 ```
 
-## 5. `config.example.toml` 为什么和默认值不完全一样
+## 5. `config.example.toml` 与默认值的关系
 
-仓库根目录的 `config.example.toml` 是**保守的首次启动样例**，不是内置默认值的逐字镜像。
+仓库根目录的 `config.example.toml` 现在基本对齐当前内置默认值：
 
-当前差异主要有两处：
+- 默认 UI 语言就是 `zh-CN`
+- 默认 `rename.auto_apply` 就是 `idle-finalize`
+- 默认 builder / context / custom prompt 也与运行态一致
 
-- 样例把 `ui_language` 预设成 `zh-CN`
-- 样例把 `rename.auto_apply` 预设成 `disabled`
-
-这是刻意设计：
-
-- 内置默认值偏向“完整功能可用”
-- 样例配置偏向“先观察再自动落盘”
+它仍然保留了更多注释，方便首次编辑，但不再故意走一套“更保守的样例默认”。
 
 ## 6. builder-first 命名
 

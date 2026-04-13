@@ -93,9 +93,13 @@ export type DraftFieldUpdater = <K extends keyof SettingsDraft>(
 
 export type SettingsTagDraft = SettingsDraft["namingTags"][number];
 export const DEFAULT_NAMING_BUILDER: NamingBuilderItem[] = [
-  { type: "component", component: "tag" },
+  { type: "component", component: "timestamp", format: "%Y-%m-%d" },
+  { type: "separator", value: " · " },
+  { type: "component", component: "project" },
   { type: "separator", value: " · " },
   { type: "component", component: "kind" },
+  { type: "separator", value: " · " },
+  { type: "component", component: "scope" },
   { type: "separator", value: " · " },
   { type: "component", component: "summary" },
 ];
@@ -255,21 +259,21 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
   );
 
   return {
-    uiLanguage: asString(asRecord(effective.general).uiLanguage, "en-US") as "en-US" | "zh-CN",
+    uiLanguage: asString(asRecord(effective.general).uiLanguage, "zh-CN") as "en-US" | "zh-CN",
     namingPreset: asString(naming.preset, "conventional"),
     namingTemplate: asString(
       naming.template,
       "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
     ),
     namingLanguage: asString(naming.language, "zh-CN"),
-    namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
+    namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "500"),
     namingContextStrategy: asString(
       naming.contextStrategy || naming.context_strategy,
-      "summary-signals",
+      "paired-user-turns",
     ),
     namingContextMaxChars: asNumberString(
       naming.contextMaxChars || naming.context_max_chars,
-      "8000",
+      "1000000",
     ),
     namingCompositionMode: asString(
       naming.compositionMode || naming.composition_mode,
@@ -277,7 +281,10 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
     ) as NamingCompositionMode,
     namingBuilder: normalizeNamingBuilder(naming.builder),
     namingTags: normalizeNamingTags(naming.tags),
-    namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
+    namingCustomPrompt: asString(
+      naming.customPrompt || naming.custom_prompt,
+      "Always prefix a workspace-heavy Chinese tag.",
+    ),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
     scanIntervalSeconds: asNumberString(
       watch.scanIntervalSeconds || watch.scan_interval_seconds,

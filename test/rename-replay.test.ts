@@ -83,7 +83,7 @@ describe("rename replay queue", () => {
       codexHome: workspace.codexHome,
       stateDir: workspace.stateDir,
       naming: {
-        customPrompt: "Always prefix a workspace-heavy Chinese tag.",
+        customPrompt: "Always prefix a release-heavy Chinese tag.",
       },
     });
 

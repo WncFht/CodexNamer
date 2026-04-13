@@ -130,6 +130,8 @@ npm run cli -- service stop
 npm run cli -- service uninstall
 ```
 
+这组 service 命令现在默认输出更适合人看的摘要；如果要给脚本消费，再追加 `--json`。
+
 平台对应：
 
 - Linux → `systemd --user`

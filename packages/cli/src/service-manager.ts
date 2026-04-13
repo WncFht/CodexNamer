@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import { startApiServer, waitForShutdown } from "@codexnamer/api";
 import { loadEffectiveConfig } from "@codexnamer/core";
+import type { ListeningPortOwner } from "./port-owner.js";
+import { inspectListeningPortOwner } from "./port-owner.js";
 
 const SERVICE_CONFIG_FILENAME = "service-config.json";
 const POSIX_LAUNCHER_FILENAME = "run-service.sh";
@@ -74,6 +76,82 @@ type InstalledService = {
   paths: ManagedServicePaths;
 };
 
+export type ManagedServiceHealth = {
+  healthy: boolean;
+  statusCode?: number;
+  error?: string;
+};
+
+export type CommandStatusSummary = {
+  loaded?: boolean;
+  running?: boolean;
+  state?: string;
+  pid?: number;
+  lastExitCode?: number;
+  active?: string;
+  status?: string;
+};
+
+export type ManagedServiceCommandStatus = {
+  command: string;
+  args: string[];
+  exitCode: number | null;
+  ok: boolean;
+  error?: string;
+};
+
+export type ManagedServiceLogTail = {
+  stdout?: string[];
+  stderr?: string[];
+};
+
+export type ManagedServiceInstallResult = {
+  installed: true;
+  platform: ManagedServicePlatform;
+  url: string;
+  configPath: string;
+  shellLauncherPath: string;
+  powerShellLauncherPath: string;
+  descriptorPath: string;
+  autoStartDaemon: boolean;
+  started: boolean;
+  health?: ManagedServiceHealth;
+};
+
+export type ManagedServiceActionResult = {
+  started?: boolean;
+  stopped?: boolean;
+  restarted?: boolean;
+  removed?: boolean;
+  reason?: string;
+  platform?: ManagedServicePlatform;
+  url?: string;
+  health?: ManagedServiceHealth;
+};
+
+export type ManagedServiceStatusResult =
+  | {
+      installed: false;
+      serviceName: string;
+    }
+  | {
+      installed: true;
+      platform: ManagedServicePlatform;
+      serviceName: string;
+      url: string;
+      configPath: string;
+      logs: {
+        stdout: string;
+        stderr: string;
+      };
+      runtime: ManagedServiceRuntimeConfig;
+      commandStatus: ManagedServiceCommandStatus;
+      platformStatus: CommandStatusSummary;
+      health: ManagedServiceHealth;
+      portOwner?: ListeningPortOwner;
+      logTail?: ManagedServiceLogTail;
+    };
+
 function resolveCliEntryPath(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.js");
 }
@@ -137,6 +215,10 @@ function assertCommandOk(result: CommandResult, context: string): void {
   }
   const detail = result.error ?? result.stderr.trim() ?? result.stdout.trim() ?? "unknown error";
   throw new Error(`${context} failed: ${detail}`);
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function plistEscape(value: string): string {
@@ -429,14 +511,13 @@ function queryPlatformStatus(runtime: ManagedServiceRuntimeConfig): CommandResul
   return runCommand("schtasks", ["/Query", "/TN", WINDOWS_TASK_NAME, "/FO", "LIST", "/V"]);
 }
 
-async function probeServiceHealth(runtime: ManagedServiceRuntimeConfig): Promise<{
-  healthy: boolean;
-  statusCode?: number;
-  error?: string;
-}> {
+async function probeServiceHealth(
+  runtime: ManagedServiceRuntimeConfig,
+): Promise<ManagedServiceHealth> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
+    const timeoutMs = 1500;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(new URL("/api/v1/health", runtime.url), {
       signal: controller.signal,
     });
@@ -446,16 +527,144 @@ async function probeServiceHealth(runtime: ManagedServiceRuntimeConfig): Promise
       statusCode: response.status,
     };
   } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "Health probe timed out after 1500ms."
+        : error instanceof Error
+          ? error.message
+          : String(error);
     return {
       healthy: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: message,
     };
   }
 }
 
+function parseMacLaunchctlSummary(stdout: string): CommandStatusSummary {
+  const pidMatch = stdout.match(/\bpid = (\d+)/);
+  const stateMatch = stdout.match(/\bstate = ([^\n]+)/);
+  const lastExitCodeMatch = stdout.match(/\blast exit code = (\d+)/);
+  return {
+    loaded: true,
+    running: Boolean(pidMatch),
+    pid: pidMatch ? Number(pidMatch[1]) : undefined,
+    state: stateMatch?.[1]?.trim(),
+    lastExitCode: lastExitCodeMatch ? Number(lastExitCodeMatch[1]) : undefined,
+  };
+}
+
+function parseLinuxSystemctlSummary(stdout: string): CommandStatusSummary {
+  const activeMatch = stdout.match(/Active:\s+([^(]+)(?:\s+\(([^)]+)\))?/);
+  const pidMatch = stdout.match(/Main PID:\s+(\d+)/);
+  return {
+    loaded: true,
+    running: activeMatch?.[1]?.trim() === "active",
+    active: activeMatch?.[1]?.trim(),
+    state: activeMatch?.[2]?.trim(),
+    pid: pidMatch ? Number(pidMatch[1]) : undefined,
+  };
+}
+
+function parseWindowsTaskSummary(stdout: string): CommandStatusSummary {
+  const statusMatch = stdout.match(/Status:\s+([^\r\n]+)/i);
+  return {
+    loaded: true,
+    running: statusMatch?.[1]?.trim().toLowerCase() === "running",
+    status: statusMatch?.[1]?.trim(),
+  };
+}
+
+export function summarizePlatformStatus(
+  runtime: ManagedServiceRuntimeConfig,
+  commandStatus: CommandResult,
+): CommandStatusSummary {
+  if (!commandStatus.ok) {
+    return {
+      loaded: false,
+    };
+  }
+
+  if (runtime.platform === "macos") {
+    return parseMacLaunchctlSummary(commandStatus.stdout);
+  }
+  if (runtime.platform === "linux") {
+    return parseLinuxSystemctlSummary(commandStatus.stdout);
+  }
+  return parseWindowsTaskSummary(commandStatus.stdout);
+}
+
+async function tailLog(logPath: string, maxLines = 20): Promise<string[]> {
+  try {
+    const content = await fs.readFile(logPath, "utf8");
+    return content
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter(Boolean)
+      .slice(-maxLines);
+  } catch {
+    return [];
+  }
+}
+
+async function waitForManagedServiceHealth(
+  runtime: ManagedServiceRuntimeConfig,
+  timeoutMs = 6_000,
+): Promise<ManagedServiceHealth> {
+  const deadline = Date.now() + timeoutMs;
+  let lastHealth: ManagedServiceHealth = {
+    healthy: false,
+    error: "Service did not become healthy before timeout.",
+  };
+
+  while (Date.now() < deadline) {
+    lastHealth = await probeServiceHealth(runtime);
+    if (lastHealth.healthy) {
+      return lastHealth;
+    }
+    await delay(500);
+  }
+
+  return lastHealth;
+}
+
+async function ensureManagedServiceHealthy(
+  installed: InstalledService,
+): Promise<ManagedServiceHealth> {
+  const health = await waitForManagedServiceHealth(installed.runtime);
+  if (health.healthy) {
+    return health;
+  }
+
+  const portOwner = inspectListeningPortOwner(installed.runtime.port);
+  const stderrTail = await tailLog(installed.paths.stderrLogPath);
+  const stdoutTail = await tailLog(installed.paths.stdoutLogPath);
+
+  try {
+    await stopManagedService();
+  } catch {
+    // best-effort cleanup; keep the install but stop restart loops
+  }
+
+  const details = [
+    `Managed service failed to become healthy at ${installed.runtime.url}.`,
+    health.statusCode ? `health status=${health.statusCode}.` : undefined,
+    health.error ? `health error=${health.error}.` : undefined,
+    portOwner
+      ? `port owner=${portOwner.command ?? "unknown"}${portOwner.pid ? ` pid=${portOwner.pid}` : ""} via ${portOwner.source}.`
+      : undefined,
+    stderrTail.length > 0
+      ? `stderr tail:\n${stderrTail.join("\n")}`
+      : stdoutTail.length > 0
+        ? `stdout tail:\n${stdoutTail.join("\n")}`
+        : undefined,
+  ].filter(Boolean);
+
+  throw new Error(details.join("\n"));
+}
+
 export async function installManagedService(
   options?: ServiceCommandOptions,
-): Promise<Record<string, unknown>> {
+): Promise<ManagedServiceInstallResult> {
   const context = await buildInstallContext(options);
   await writeInstallArtifacts(context);
 
@@ -484,9 +693,7 @@ export async function installManagedService(
     );
   }
 
-  if (options?.start) {
-    await startManagedService();
-  }
+  const startResult = options?.start ? await startManagedService() : undefined;
 
   return {
     installed: true,
@@ -497,10 +704,12 @@ export async function installManagedService(
     powerShellLauncherPath: context.paths.powerShellLauncherPath,
     descriptorPath: context.descriptor.descriptorPath,
     autoStartDaemon: context.runtime.autoStartDaemon,
+    started: Boolean(startResult?.started),
+    health: startResult?.health,
   };
 }
 
-export async function startManagedService(): Promise<Record<string, unknown>> {
+export async function startManagedService(): Promise<ManagedServiceActionResult> {
   const installed = await loadInstalledService();
   if (!installed) {
     throw new Error("No installed managed service found. Run `codexnamer service install` first.");
@@ -538,14 +747,17 @@ export async function startManagedService(): Promise<Record<string, unknown>> {
     );
   }
 
+  const health = await ensureManagedServiceHealthy(installed);
+
   return {
     started: true,
     platform: installed.runtime.platform,
     url: installed.runtime.url,
+    health,
   };
 }
 
-export async function stopManagedService(): Promise<Record<string, unknown>> {
+export async function stopManagedService(): Promise<ManagedServiceActionResult> {
   const installed = await loadInstalledService();
   if (!installed) {
     throw new Error("No installed managed service found. Run `codexnamer service install` first.");
@@ -572,7 +784,7 @@ export async function stopManagedService(): Promise<Record<string, unknown>> {
   };
 }
 
-export async function restartManagedService(): Promise<Record<string, unknown>> {
+export async function restartManagedService(): Promise<ManagedServiceActionResult> {
   const installed = await loadInstalledService();
   if (!installed) {
     throw new Error("No installed managed service found. Run `codexnamer service install` first.");
@@ -591,7 +803,7 @@ export async function restartManagedService(): Promise<Record<string, unknown>> 
   };
 }
 
-export async function uninstallManagedService(): Promise<Record<string, unknown>> {
+export async function uninstallManagedService(): Promise<ManagedServiceActionResult> {
   const installed = await loadInstalledService();
   if (!installed) {
     return {
@@ -620,7 +832,7 @@ export async function uninstallManagedService(): Promise<Record<string, unknown>
   };
 }
 
-export async function getManagedServiceStatus(): Promise<Record<string, unknown>> {
+export async function getManagedServiceStatus(): Promise<ManagedServiceStatusResult> {
   const installed = await loadInstalledService();
   if (!installed) {
     return {
@@ -638,6 +850,17 @@ export async function getManagedServiceStatus(): Promise<Record<string, unknown>
     Promise.resolve(queryPlatformStatus(installed.runtime)),
     probeServiceHealth(installed.runtime),
   ]);
+  const platformStatus = summarizePlatformStatus(installed.runtime, commandStatus);
+  const portOwner = health.healthy ? undefined : inspectListeningPortOwner(installed.runtime.port);
+  const stderrTail = health.healthy ? [] : await tailLog(installed.paths.stderrLogPath);
+  const stdoutTail = health.healthy ? [] : await tailLog(installed.paths.stdoutLogPath);
+  const logTail =
+    stderrTail.length > 0 || stdoutTail.length > 0
+      ? {
+          ...(stdoutTail.length > 0 ? { stdout: stdoutTail } : {}),
+          ...(stderrTail.length > 0 ? { stderr: stderrTail } : {}),
+        }
+      : undefined;
 
   return {
     installed: true,
@@ -655,8 +878,17 @@ export async function getManagedServiceStatus(): Promise<Record<string, unknown>
       stderr: installed.paths.stderrLogPath,
     },
     runtime: installed.runtime,
-    commandStatus,
+    commandStatus: {
+      command: commandStatus.command,
+      args: commandStatus.args,
+      exitCode: commandStatus.exitCode,
+      ok: commandStatus.ok,
+      error: commandStatus.error,
+    },
+    platformStatus,
     health,
+    portOwner,
+    logTail,
   };
 }
 

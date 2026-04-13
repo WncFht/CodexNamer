@@ -1,7 +1,7 @@
 # Copy this file to ~/.config/codexnamer/config.toml and edit from there.
-# This starter config is intentionally conservative:
+# This starter config matches the current default local-first setup:
 # - it reuses your existing Codex provider/auth by default
-# - it keeps rename in preview mode until you trust the results
+# - it enables the current structured Chinese naming layout
 
 [general]
 # Usually you can keep the default Codex home.
@@ -14,10 +14,8 @@ state_dir = "~/.local/state/codexnamer"
 ui_language = "zh-CN"
 
 [rename]
-# Recommended for first-time use:
-# - "disabled" = preview only
-# - "idle-finalize" = daemon may auto-apply finalize-ready renames
-auto_apply = "disabled"
+# "idle-finalize" lets the controller-managed daemon auto-apply finalize-ready renames.
+auto_apply = "idle-finalize"
 
 [ai]
 # "responses" is the recommended default for OpenAI-style providers.
@@ -37,27 +35,28 @@ temperature = 0.2
 max_concurrency = 1
 
 [naming]
-# Builder-first structured naming is the current recommended path.
+# Builder-first structured naming is the current default path.
 preset = "conventional"
 language = "zh-CN"
-max_length = 72
+max_length = 500
 
-# Good starter choice for most sessions. Other valid values include:
-# - "last-user-last-assistant"
-# - "user-assistant-transcript"
-# - "user-only-transcript"
-context_strategy = "summary-signals"
-context_max_chars = 8000
+context_strategy = "paired-user-turns"
+context_max_chars = 1000000
 
 # "structured" lets the model return fields and then compose the final title locally.
 # Use "prompt-override" only when you want custom_prompt to fully steer output.
 composition_mode = "structured"
+custom_prompt = "Always prefix a workspace-heavy Chinese tag."
 
 # Final title shape. Empty components are skipped automatically.
 builder = [
-  { type = "component", component = "tag" },
+  { type = "component", component = "timestamp", format = "%Y-%m-%d" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "project" },
   { type = "separator", value = " · " },
   { type = "component", component = "kind" },
+  { type = "separator", value = " · " },
+  { type = "component", component = "scope" },
   { type = "separator", value = " · " },
   { type = "component", component = "summary" }
 ]

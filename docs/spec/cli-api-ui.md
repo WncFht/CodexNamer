@@ -47,18 +47,19 @@ codexnamer serve [--host 127.0.0.1] [--port 42110] [--web-root <path>] [--no-dae
 ### 1.3 用户级 service 管理
 
 ```bash
-codexnamer service install [--start]
-codexnamer service start
-codexnamer service stop
-codexnamer service restart
-codexnamer service status
-codexnamer service uninstall
+codexnamer service install [--start] [--json]
+codexnamer service start [--json]
+codexnamer service stop [--json]
+codexnamer service restart [--json]
+codexnamer service status [--json]
+codexnamer service uninstall [--json]
 ```
 
 说明：
 
 - 当前 parser 会把 `service install` 这种写法归一化到内部命令 `service-install`
 - `service-host` 是内部 service 启动入口，不作为普通用户命令文档主路径
+- 默认输出是面向人的摘要；只有传 `--json` 时才输出机器可读 JSON
 
 ## 2. Local API
 

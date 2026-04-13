@@ -14,6 +14,11 @@ import {
   isAddressInUseError,
 } from "./serve-errors.js";
 import { probeRunningServeTarget } from "./serve-target.js";
+import type {
+  ManagedServiceActionResult,
+  ManagedServiceInstallResult,
+  ManagedServiceStatusResult,
+} from "./service-manager.js";
 import {
   getManagedServiceStatus,
   installManagedService,
@@ -23,6 +28,12 @@ import {
   stopManagedService,
   uninstallManagedService,
 } from "./service-manager.js";
+import {
+  formatManagedServiceActionResult,
+  formatManagedServiceInstallResult,
+  formatManagedServiceJsonResult,
+  formatManagedServiceStatusResult,
+} from "./service-output.js";
 
 type IdOptions = { id?: string };
 type RenameOptions = { id?: string; name?: string };
@@ -30,6 +41,13 @@ type BatchApplyOptions = { dirty?: boolean; preview?: boolean };
 type ServeOptions = { host?: string; port?: string | number; webRoot?: string; daemon?: boolean };
 type ServiceInstallOptions = ServeOptions & { start?: boolean };
 type ServiceHostOptions = { config?: string };
+type ServiceOutputOptions = { json?: boolean };
+
+function printServiceResult<
+  T extends ManagedServiceInstallResult | ManagedServiceActionResult | ManagedServiceStatusResult,
+>(options: ServiceOutputOptions | undefined, result: T, formatter: (result: T) => string): void {
+  console.log(options?.json ? formatManagedServiceJsonResult(result) : formatter(result));
+}
 
 async function withManager<T>(fn: (manager: CodexNamer) => Promise<T>): Promise<T> {
   const manager = await CodexNamer.create({ operator: "cli" });
@@ -208,35 +226,59 @@ cli
   .option("--web-root <path>", "Directory containing a built Web app")
   .option("--no-daemon", "Do not auto-start the background daemon")
   .option("--start", "Start the service immediately after install")
-  .action(async (options: ServiceInstallOptions) => {
+  .option("--json", "Print machine-readable JSON")
+  .action(async (options: ServiceInstallOptions & ServiceOutputOptions) => {
     const result = await installManagedService(options);
-    console.log(JSON.stringify(result, null, 2));
+    printServiceResult(options, result, formatManagedServiceInstallResult);
   });
 
-cli.command("service-start", "Start the installed local service").action(async () => {
-  const result = await startManagedService();
-  console.log(JSON.stringify(result, null, 2));
-});
+cli
+  .command("service-start", "Start the installed local service")
+  .option("--json", "Print machine-readable JSON")
+  .action(async (options: ServiceOutputOptions) => {
+    const result = await startManagedService();
+    printServiceResult(options, result, (actionResult) =>
+      formatManagedServiceActionResult("start", actionResult as ManagedServiceActionResult),
+    );
+  });
 
-cli.command("service-stop", "Stop the installed local service").action(async () => {
-  const result = await stopManagedService();
-  console.log(JSON.stringify(result, null, 2));
-});
+cli
+  .command("service-stop", "Stop the installed local service")
+  .option("--json", "Print machine-readable JSON")
+  .action(async (options: ServiceOutputOptions) => {
+    const result = await stopManagedService();
+    printServiceResult(options, result, (actionResult) =>
+      formatManagedServiceActionResult("stop", actionResult as ManagedServiceActionResult),
+    );
+  });
 
-cli.command("service-restart", "Restart the installed local service").action(async () => {
-  const result = await restartManagedService();
-  console.log(JSON.stringify(result, null, 2));
-});
+cli
+  .command("service-restart", "Restart the installed local service")
+  .option("--json", "Print machine-readable JSON")
+  .action(async (options: ServiceOutputOptions) => {
+    const result = await restartManagedService();
+    printServiceResult(options, result, (actionResult) =>
+      formatManagedServiceActionResult("restart", actionResult as ManagedServiceActionResult),
+    );
+  });
 
-cli.command("service-status", "Show installed service status and health").action(async () => {
-  const result = await getManagedServiceStatus();
-  console.log(JSON.stringify(result, null, 2));
-});
+cli
+  .command("service-status", "Show installed service status and health")
+  .option("--json", "Print machine-readable JSON")
+  .action(async (options: ServiceOutputOptions) => {
+    const result = await getManagedServiceStatus();
+    printServiceResult(options, result, formatManagedServiceStatusResult);
+  });
 
-cli.command("service-uninstall", "Remove the installed local service").action(async () => {
-  const result = await uninstallManagedService();
-  console.log(JSON.stringify(result, null, 2));
-});
+cli
+  .command("service-uninstall", "Remove the installed local service")
+  .option("--json", "Print machine-readable JSON")
+  .action(async (options: ServiceOutputOptions) => {
+    const result = await uninstallManagedService();
+    printServiceResult(options, result, (actionResult) =>
+      formatManagedServiceActionResult("uninstall", actionResult as ManagedServiceActionResult),
+    );
+  });
 
 cli
   .command("service-host", "Internal service entrypoint")

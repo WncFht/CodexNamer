@@ -6,6 +6,7 @@ import {
   buildManagedServiceDescriptor,
   resolveManagedServicePaths,
   resolveManagedServicePlatform,
+  summarizePlatformStatus,
 } from "../packages/cli/src/service-manager.ts";
 
 function buildRuntime(
@@ -102,5 +103,24 @@ describe("service manager", () => {
     expect(descriptor.descriptorText).toContain(paths.powerShellLauncherPath);
     expect(descriptor.powerShellLauncherText).toContain("service-host --config");
     expect(descriptor.powerShellLauncherText).toContain(paths.stdoutLogPath);
+  });
+
+  it("summarizes macOS launchctl output", () => {
+    const summary = summarizePlatformStatus(buildRuntime("macos"), {
+      command: "launchctl",
+      args: ["print", "gui/501/dev.codexnamer.agent"],
+      exitCode: 0,
+      ok: true,
+      stdout: "state = running\npid = 12345\nlast exit code = 1\n",
+      stderr: "",
+    });
+
+    expect(summary).toEqual({
+      loaded: true,
+      running: true,
+      state: "running",
+      pid: 12345,
+      lastExitCode: 1,
+    });
   });
 });

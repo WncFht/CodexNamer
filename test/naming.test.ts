@@ -64,19 +64,18 @@ describe("naming specificity", () => {
       config,
     );
 
-    expect(prompt).toContain("Make the rename concrete");
+    expect(prompt).toContain("标题要具体，能体现主子系统以及实际动作、问题或评审焦点。");
     expect(prompt).toContain("namingCompositionMode: structured");
-    expect(prompt).toContain("## Naming builder");
-    expect(prompt).toContain("1. tag");
-    expect(prompt).toContain('2. separator " · "');
-    expect(prompt).toContain("## Tag presets");
+    expect(prompt).toContain("## 命名构建器");
+    expect(prompt).toContain("1. 时间戳 (%Y-%m-%d)");
+    expect(prompt).toContain('2. 分隔符 " · "');
+    expect(prompt).toContain("3. 项目");
+    expect(prompt).toContain("## Tag 预设");
     expect(prompt).toContain("```conversation");
+    expect(prompt).toContain("只返回一个 JSON 对象，键包括：name, kind, summary, scope, tagId。");
+    expect(prompt).toContain("就把 tagId 设为对应 id；否则留空");
     expect(prompt).toContain(
-      "Return only a JSON object with keys: name, kind, summary, scope, tagId.",
-    );
-    expect(prompt).toContain("set tagId to the matching preset id");
-    expect(prompt).toContain(
-      "Allowed kind values: feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops.",
+      "允许的 kind 值：feat, fix, debug, refactor, docs, research, review, design, migration, test, chore, ops。",
     );
   });
 
@@ -135,7 +134,7 @@ describe("naming specificity", () => {
     );
 
     expect(prompt).toContain("namingCompositionMode: prompt-override");
-    expect(prompt).toContain("Custom naming override:");
+    expect(prompt).toContain("自定义命名覆写：");
     expect(prompt).toContain("Always prefer a domain tag first");
   });
 

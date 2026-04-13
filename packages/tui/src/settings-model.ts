@@ -1,6 +1,9 @@
 import type { UiLanguage } from "./i18n.js";
 import type { ConfigDocument, ConfigView, ProviderProfile } from "./types.js";
 
+const DEFAULT_TUI_NAMING_BUILDER_JSON =
+  '[{"type":"component","component":"timestamp","format":"%Y-%m-%d"},{"type":"separator","value":" · "},{"type":"component","component":"project"},{"type":"separator","value":" · "},{"type":"component","component":"kind"},{"type":"separator","value":" · "},{"type":"component","component":"scope"},{"type":"separator","value":" · "},{"type":"component","component":"summary"}]';
+
 export type SettingKey =
   | "uiLanguage"
   | "namingPreset"
@@ -205,23 +208,26 @@ export function buildSettingsDraft(configView: ConfigView): SettingsDraft {
       naming.template,
       "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
     ),
-    namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "72"),
+    namingMaxLength: asNumberString(naming.maxLength || naming.max_length, "500"),
     namingLanguage: asString(naming.language, "zh-CN"),
     namingContextStrategy: asString(
       naming.contextStrategy || naming.context_strategy,
-      "summary-signals",
+      "paired-user-turns",
     ),
     namingContextMaxChars: asNumberString(
       naming.contextMaxChars || naming.context_max_chars,
-      "8000",
+      "1000000",
     ),
     namingCompositionMode: asString(
       naming.compositionMode || naming.composition_mode,
       "structured",
     ),
-    namingBuilderJson: toJsonString(naming.builder, "[]"),
+    namingBuilderJson: toJsonString(naming.builder, DEFAULT_TUI_NAMING_BUILDER_JSON),
     namingTagsJson: toJsonString(naming.tags, "[]"),
-    namingCustomPrompt: asString(naming.customPrompt || naming.custom_prompt),
+    namingCustomPrompt: asString(
+      naming.customPrompt || naming.custom_prompt,
+      "Always prefix a workspace-heavy Chinese tag.",
+    ),
     renameAutoApply: asString(rename.autoApply || rename.auto_apply, "idle-finalize"),
     scanIntervalSeconds: asNumberString(
       watch.scanIntervalSeconds || watch.scan_interval_seconds,

@@ -68,7 +68,7 @@ export const DEFAULT_CONFIG: EffectiveConfig = {
   general: {
     codexHome: "~/.codex",
     stateDir: `~/${DEFAULT_STATE_RELATIVE_PATH}`,
-    uiLanguage: "en-US",
+    uiLanguage: "zh-CN",
   },
   rename: {
     autoApply: "idle-finalize",
@@ -79,20 +79,24 @@ export const DEFAULT_CONFIG: EffectiveConfig = {
   naming: {
     preset: "conventional",
     template: "{{time:%m%d-%H%M}} {{kind}}{{scope_paren}}: {{summary}}",
-    maxLength: 72,
+    maxLength: 500,
     language: "zh-CN",
-    contextStrategy: "summary-signals",
-    contextMaxChars: 8_000,
+    contextStrategy: "paired-user-turns",
+    contextMaxChars: 1_000_000,
     compositionMode: "structured",
     builder: [
-      { type: "component", component: "tag" },
+      { type: "component", component: "timestamp", format: "%Y-%m-%d" },
+      { type: "separator", value: " · " },
+      { type: "component", component: "project" },
       { type: "separator", value: " · " },
       { type: "component", component: "kind" },
+      { type: "separator", value: " · " },
+      { type: "component", component: "scope" },
       { type: "separator", value: " · " },
       { type: "component", component: "summary" },
     ],
     tags: DEFAULT_NAMING_TAGS,
-    customPrompt: undefined,
+    customPrompt: "Always prefix a workspace-heavy Chinese tag.",
   },
   ai: {
     backend: "responses",
