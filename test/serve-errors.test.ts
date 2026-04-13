@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatServeAddressInUseMessage,
+  formatServeAlreadyRunningMessage,
+  formatServeOtherRepoMessage,
   isAddressInUseError,
 } from "../packages/cli/src/serve-errors.ts";
 
@@ -41,5 +43,26 @@ describe("serve error helpers", () => {
     });
 
     expect(message).toContain("managed service is already healthy");
+  });
+
+  it("formats a reuse message for the same repo", () => {
+    expect(
+      formatServeAlreadyRunningMessage({
+        baseUrl: "http://127.0.0.1:42110/",
+        cwd: "/tmp/codexnamer",
+      }),
+    ).toContain("Reusing existing CodexNamer service");
+  });
+
+  it("formats a conflict message for another repo", () => {
+    const message = formatServeOtherRepoMessage({
+      host: "127.0.0.1",
+      port: 42110,
+      cwd: "/tmp/other-repo",
+    });
+
+    expect(message).toContain("another CodexNamer repo");
+    expect(message).toContain("/tmp/other-repo");
+    expect(message).toContain("npm run serve -- --port 42111");
   });
 });

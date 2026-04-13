@@ -54,3 +54,24 @@ export function formatServeAddressInUseMessage(params: {
 
   return lines.join(" ");
 }
+
+export function formatServeAlreadyRunningMessage(params: {
+  baseUrl: string;
+  cwd?: string;
+}): string {
+  return params.cwd
+    ? `[codexnamer] Reusing existing CodexNamer service at ${params.baseUrl} for repo ${params.cwd}`
+    : `[codexnamer] Reusing existing CodexNamer service at ${params.baseUrl}`;
+}
+
+export function formatServeOtherRepoMessage(params: {
+  host: string;
+  port: number;
+  cwd: string;
+}): string {
+  const baseUrl = `http://${params.host}:${params.port}/`;
+  return [
+    `Cannot start CodexNamer because ${baseUrl} is already serving another CodexNamer repo from ${params.cwd}.`,
+    `Stop it with \`${formatServiceCommand("stop")}\` if that address belongs to your installed service, or retry on another port such as \`${formatServeRetryCommand(params.host, params.port + 1)}\`.`,
+  ].join(" ");
+}

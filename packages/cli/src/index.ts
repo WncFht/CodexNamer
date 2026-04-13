@@ -6,7 +6,13 @@ import { fileURLToPath } from "node:url";
 import { startApiServer, waitForShutdown } from "@codexnamer/api";
 import { CodexNamer } from "@codexnamer/core";
 import { cac } from "cac";
-import { formatServeAddressInUseMessage, isAddressInUseError } from "./serve-errors.js";
+import {
+  formatServeAddressInUseMessage,
+  formatServeAlreadyRunningMessage,
+  formatServeOtherRepoMessage,
+  isAddressInUseError,
+} from "./serve-errors.js";
+import { probeRunningServeTarget } from "./serve-target.js";
 import {
   getManagedServiceStatus,
   installManagedService,
@@ -94,9 +100,34 @@ cli
     const host = options.host ?? "127.0.0.1";
     const port = resolvePort(options.port, 42110);
     const webRoot = resolveServeWebRoot(options.webRoot);
+    const expectedCwd = process.cwd();
     if (!webRoot) {
       throw new Error(
         "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html.",
+      );
+    }
+
+    const existingTarget = await probeRunningServeTarget({
+      host,
+      port,
+      expectedCwd,
+    });
+    if (existingTarget?.kind === "same-repo") {
+      console.error(
+        formatServeAlreadyRunningMessage({
+          baseUrl: existingTarget.baseUrl,
+          cwd: existingTarget.cwd,
+        }),
+      );
+      return;
+    }
+    if (existingTarget?.kind === "other-repo") {
+      throw new Error(
+        formatServeOtherRepoMessage({
+          host,
+          port,
+          cwd: existingTarget.cwd,
+        }),
       );
     }
 
@@ -112,6 +143,30 @@ cli
     } catch (error) {
       if (!isAddressInUseError(error)) {
         throw error;
+      }
+
+      const racedTarget = await probeRunningServeTarget({
+        host,
+        port,
+        expectedCwd,
+      });
+      if (racedTarget?.kind === "same-repo") {
+        console.error(
+          formatServeAlreadyRunningMessage({
+            baseUrl: racedTarget.baseUrl,
+            cwd: racedTarget.cwd,
+          }),
+        );
+        return;
+      }
+      if (racedTarget?.kind === "other-repo") {
+        throw new Error(
+          formatServeOtherRepoMessage({
+            host,
+            port,
+            cwd: racedTarget.cwd,
+          }),
+        );
       }
 
       let serviceStatus: Parameters<typeof formatServeAddressInUseMessage>[0]["serviceStatus"];
