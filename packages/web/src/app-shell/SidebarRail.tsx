@@ -2,6 +2,8 @@ import * as React from "react";
 
 import type { TabId } from "../control-deck-model.js";
 import type { WorkspaceSummary } from "../types.js";
+import { ThemeToggle } from "./ThemeToggle.js";
+import type { ResolvedTheme, ThemeMode } from "./useThemePreference.js";
 
 export function SidebarRail(props: {
   tab: TabId;
@@ -15,8 +17,12 @@ export function SidebarRail(props: {
   previewSuggestCount: number;
   lastSyncAt: string | null;
   tt: (key: string) => string;
+  themeLabel: string;
+  themeMode: ThemeMode;
+  themeResolved: ResolvedTheme;
   formatWhen: (value?: string | null) => string;
   onToggleCollapsed: () => void;
+  onCycleTheme: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectTab: (tab: TabId) => void;
 }) {
@@ -36,12 +42,18 @@ export function SidebarRail(props: {
       style={{ viewTransitionName: "persistent-nav" } as React.CSSProperties}
     >
       <div className="sidebar-header">
-        <div>
+        <div className="sidebar-brand-copy">
           <p className="sidebar-kicker">Session Control</p>
           <h1 className="home-link">CodexNamer</h1>
           <p className="sidebar-copy">{props.tt("sidebarSummary")}</p>
         </div>
-        <div className="pane-controls">
+        <div className="sidebar-header-actions">
+          <ThemeToggle
+            label={props.themeLabel}
+            mode={props.themeMode}
+            onToggle={props.onCycleTheme}
+            resolvedTheme={props.themeResolved}
+          />
           <button
             aria-controls="sidebar"
             aria-expanded={!props.workspacePaneCollapsed}

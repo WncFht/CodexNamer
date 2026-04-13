@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { THEME_CHANGE_EVENT } from "../../app-shell/useThemePreference.js";
+
 export type ChartTheme = {
   text: string;
   muted: string;
@@ -74,16 +76,46 @@ async function loadSankeyRuntime(): Promise<any> {
 function readChartTheme(): ChartTheme {
   const rootStyle = getComputedStyle(document.documentElement);
   return {
-    text: rootStyle.getPropertyValue("--text-secondary").trim() || "#5e5d59",
-    muted: rootStyle.getPropertyValue("--text-muted").trim() || "#87867f",
-    border: rootStyle.getPropertyValue("--border-strong").trim() || "#e8e6dc",
-    surface: rootStyle.getPropertyValue("--bg-secondary").trim() || "#faf9f5",
-    surfaceAlt: rootStyle.getPropertyValue("--bg-elevated").trim() || "#ffffff",
-    accent: rootStyle.getPropertyValue("--accent").trim() || "#c96442",
-    success: rootStyle.getPropertyValue("--success").trim() || "#6b7a45",
-    warning: rootStyle.getPropertyValue("--warning").trim() || "#a57533",
-    danger: rootStyle.getPropertyValue("--danger").trim() || "#b53333",
-    manual: rootStyle.getPropertyValue("--manual").trim() || "#8e5a4f"
+    text:
+      rootStyle.getPropertyValue("--color-text-secondary").trim() ||
+      rootStyle.getPropertyValue("--text-secondary").trim() ||
+      "#5e5d59",
+    muted:
+      rootStyle.getPropertyValue("--color-text-muted").trim() ||
+      rootStyle.getPropertyValue("--text-muted").trim() ||
+      "#87867f",
+    border:
+      rootStyle.getPropertyValue("--color-border-strong").trim() ||
+      rootStyle.getPropertyValue("--border-strong").trim() ||
+      "#e8e6dc",
+    surface:
+      rootStyle.getPropertyValue("--color-bg-muted").trim() ||
+      rootStyle.getPropertyValue("--bg-secondary").trim() ||
+      "#faf9f5",
+    surfaceAlt:
+      rootStyle.getPropertyValue("--color-bg-surface").trim() ||
+      rootStyle.getPropertyValue("--bg-elevated").trim() ||
+      "#ffffff",
+    accent:
+      rootStyle.getPropertyValue("--color-accent").trim() ||
+      rootStyle.getPropertyValue("--accent").trim() ||
+      "#c96442",
+    success:
+      rootStyle.getPropertyValue("--color-success").trim() ||
+      rootStyle.getPropertyValue("--success").trim() ||
+      "#6b7a45",
+    warning:
+      rootStyle.getPropertyValue("--color-warning").trim() ||
+      rootStyle.getPropertyValue("--warning").trim() ||
+      "#a57533",
+    danger:
+      rootStyle.getPropertyValue("--color-danger").trim() ||
+      rootStyle.getPropertyValue("--danger").trim() ||
+      "#b53333",
+    manual:
+      rootStyle.getPropertyValue("--color-note").trim() ||
+      rootStyle.getPropertyValue("--manual").trim() ||
+      "#8e5a4f"
   };
 }
 
@@ -249,6 +281,27 @@ function useChart(
       disposed = true;
     };
   }, [buildOption, loadRuntime, ref]);
+
+  React.useEffect(() => {
+    if (!buildOption) {
+      return;
+    }
+
+    const handleThemeChange = () => {
+      const chart = chartRef.current;
+      if (!chart) {
+        return;
+      }
+      const preservedDataZoom = readCurrentDataZoomState(chart.instance);
+      const nextOption = applyPreservedDataZoom(buildOption(readChartTheme(), chart.echartsLib), preservedDataZoom);
+      chart.instance.setOption(nextOption, true);
+    };
+
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange as EventListener);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange as EventListener);
+    };
+  }, [buildOption]);
 }
 
 export function ChartCard(props: {

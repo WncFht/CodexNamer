@@ -4,6 +4,7 @@ import { formatWhen } from "./browser-utils.js";
 import { copyTextToClipboard } from "./clipboard.js";
 import { SidebarRail } from "./app-shell/SidebarRail.js";
 import { TopNoticeBanner } from "./app-shell/TopNoticeBanner.js";
+import { useThemePreference } from "./app-shell/useThemePreference.js";
 import { usePaneLayoutState } from "./app-shell/usePaneLayoutState.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
 import { SessionBrowser } from "./SessionBrowser.js";
@@ -52,6 +53,7 @@ function LazyTabShell(props: {
 
 export function App() {
   const state = useControlDeckState();
+  const theme = useThemePreference();
   const paneLayout = usePaneLayoutState({
     tab: state.tab,
     selectedId: state.selectedId
@@ -70,6 +72,18 @@ export function App() {
       ? undefined
       : state.workspaces.find((item) => item.workspaceId === state.selectedWorkspaceId);
   const selectedWorkspaceLabel = selectedWorkspace?.workspaceLabel ?? tt("allWorkspaces");
+  const themeModeLabel =
+    uiLanguage === "zh-CN"
+      ? theme.mode === "system"
+        ? "主题：跟随系统"
+        : theme.mode === "light"
+          ? "主题：浅色"
+          : "主题：深色"
+      : theme.mode === "system"
+        ? "Theme: system"
+        : theme.mode === "light"
+          ? "Theme: light"
+          : "Theme: dark";
 
   React.useEffect(() => {
     document.documentElement.lang = uiLanguage;
@@ -135,8 +149,12 @@ export function App() {
         previewSuggestCount={previewSuggestCount}
         selectedWorkspaceId={state.selectedWorkspaceId}
         tab={state.tab}
+        themeLabel={themeModeLabel}
+        themeMode={theme.mode}
+        themeResolved={theme.resolvedTheme}
         totalWorkspaceSessionCount={totalWorkspaceSessionCount}
         visibleSessionCount={state.sessions.length}
+        onCycleTheme={theme.cycleMode}
         tt={tt as (key: string) => string}
         workspacePaneCollapsed={paneLayout.workspacePaneCollapsed}
         workspaces={state.workspaces}

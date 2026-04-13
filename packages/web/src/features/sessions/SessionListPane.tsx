@@ -180,10 +180,12 @@ export function SessionListPane(props: {
   const renderSessionCardContent = React.useCallback(
     (session: SessionSummary) => {
       const subtitle = sessionListSubtitle(session);
+      const showWorkspaceLabel =
+        props.selectedWorkspaceLabel === tt("allWorkspaces") || props.selectedWorkspaceLabel !== session.workspaceLabel;
       const meta = [
-        session.workspaceLabel,
+        showWorkspaceLabel ? session.workspaceLabel : null,
         session.provider ?? tt("unknownProvider"),
-        `${session.taskCompleteCount} ${props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}`,
+        session.taskCompleteCount > 0 ? `${session.taskCompleteCount} ${props.uiLanguage === "zh-CN" ? "个任务" : "tasks"}` : null,
         sessionStatusLabel(session.statusEstimate, props.uiLanguage)
       ]
         .filter(Boolean)
@@ -203,7 +205,7 @@ export function SessionListPane(props: {
         </>
       );
     },
-    [props.uiLanguage, tt]
+    [props.selectedWorkspaceLabel, props.uiLanguage, tt]
   );
 
   return (

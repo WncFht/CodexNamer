@@ -96,7 +96,7 @@ export function TranscriptPanel(props: {
           <p className="panel-kicker">{tt("transcript")}</p>
         </div>
         <div className="chat-toolbar-actions">
-          {(["all", "user", "assistant", "tool", "system"] as const).map((item) => (
+          {(["user", "assistant", "all", "tool", "system"] as const).map((item) => (
             <button
               className={role === item ? "btn-chip active" : "btn-chip"}
               key={item}
