@@ -504,7 +504,10 @@ export function AiRequestLogsSection(props: AiRequestLogsSectionProps) {
                   </div>
                 </td>
                 <td>
-                  <span className={`chip ${aiRequestStatusTone(item.status)}`}>
+                  <span
+                    className={`chip ai-request-status-chip ${aiRequestStatusTone(item.status)}`}
+                    data-status={item.status ?? "unknown"}
+                  >
                     {aiRequestStatusLabel(item.status, props.uiLanguage)}
                   </span>
                 </td>

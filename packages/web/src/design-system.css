@@ -1623,6 +1623,36 @@ pre.settings-json {
   font-size: var(--font-size-2xs);
 }
 
+.ai-request-status-chip {
+  justify-content: center;
+  min-width: 5.25rem;
+}
+
+[data-theme="dark"] .ops-log-row[data-status="running"] td {
+  background: color-mix(in srgb, var(--color-bg-muted) 88%, var(--color-bg-surface) 12%);
+}
+
+[data-theme="dark"] .ai-request-status-chip[data-status="running"] {
+  border-color: color-mix(in srgb, var(--color-border-strong) 84%, transparent);
+  background: color-mix(in srgb, var(--color-bg-muted) 78%, var(--color-bg-surface) 22%);
+  color: color-mix(in srgb, var(--color-text-muted) 84%, var(--color-text-secondary) 16%);
+}
+
+[data-theme="dark"] .ops-log-row[data-status="running"]:hover td,
+[data-theme="dark"] .ops-log-row[data-status="running"][data-selected="true"] td {
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-bg-muted) 90%);
+}
+
+[data-theme="dark"] .ops-log-row[data-status="running"]:hover .ai-request-status-chip,
+[data-theme="dark"]
+  .ops-log-row[data-status="running"][data-selected="true"]
+  .ai-request-status-chip,
+[data-theme="dark"] .ai-request-status-chip[data-status="running"]:hover {
+  border-color: color-mix(in srgb, var(--color-warning) 24%, var(--color-border));
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-surface) 88%);
+  color: var(--color-warning);
+}
+
 .ops-log-detail-grid,
 .settings-runtime-grid.compact.ops-log-detail-grid {
   gap: var(--space-3);
