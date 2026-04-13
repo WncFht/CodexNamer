@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { startApiServer, waitForShutdown } from "@codexnamer/api";
 import { CodexNamer } from "@codexnamer/core";
 import { cac } from "cac";
+import { inspectListeningPortOwner } from "./port-owner.js";
 import {
   formatServeAddressInUseMessage,
   formatServeAlreadyRunningMessage,
@@ -177,12 +178,14 @@ cli
       } catch {
         serviceStatus = undefined;
       }
+      const portOwner = inspectListeningPortOwner(port);
 
       throw new Error(
         formatServeAddressInUseMessage({
           host,
           port,
           serviceStatus,
+          portOwner,
         }),
       );
     }
