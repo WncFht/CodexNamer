@@ -11,7 +11,30 @@ CodexNamer scans local Codex rollout history, suggests clearer session titles, l
 ![Local-first](https://img.shields.io/static/v1?label=Mode&message=Local-first&color=7c3aed&style=flat-square)
 ![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=2563eb&style=flat-square)
 
-## What it does
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/screenshots/readme-sessions.png" alt="Sessions and transcript browser" />
+    </td>
+    <td width="50%">
+      <img src="docs/assets/screenshots/readme-settings.png" alt="Naming and runtime settings" />
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <strong>Sessions and transcript review</strong><br />
+      Browse by workspace, inspect transcript, and review rename context without leaving the app shell.
+    </td>
+    <td valign="top">
+      <strong>Settings and runtime controls</strong><br />
+      Edit naming policy, provider setup, and runtime thresholds from one product surface.
+    </td>
+  </tr>
+</table>
+
+## What it does well
 
 - **See all your sessions in one place** across workspaces, providers, and projects.
 - **Generate clearer names** with heuristics or AI-backed structured naming.
@@ -20,9 +43,9 @@ CodexNamer scans local Codex rollout history, suggests clearer session titles, l
 - **Run fully local-first** with its own SQLite state and official `session_index.jsonl` writeback.
 - **Manage the whole flow in a product UI** with Sessions, Settings, Maintenance, Requeue, and Daemon views.
 
-## Recommended way to use it
+## Quick start
 
-Right now the GitHub repository is the primary distribution channel.
+The GitHub repository is the primary distribution channel right now.
 
 ```bash
 git clone https://github.com/WncFht/CodexNamer.git codexnamer
@@ -37,7 +60,7 @@ Open:
 
 `npm run serve` builds what it needs, starts one long-lived local process, serves the Web UI and the Local API together, and auto-starts the managed daemon unless you disable it explicitly.
 
-## Conservative first-run config
+## Conservative first-run setup
 
 If you want a preview-only first run, copy the starter config before launching:
 
@@ -70,6 +93,25 @@ That starter file is intentionally more conservative than the built-in defaults:
 - compact `session_index.jsonl` when it grows too large
 - preview and execute rule-signature-based requeue
 - watch the managed sweep daemon and control its runtime state
+
+## Development and release checks
+
+Current repository status:
+
+- formatting and linting are unified on **Biome**
+- `npm run lint` runs `biome check .`
+- `npm run format` runs `biome format --write .`
+- `npm run validate:full` is the release-grade verification entry
+
+Typical contributor flow:
+
+```bash
+npm run lint
+npm run build
+npm run build:runtime
+npm run web:build
+npm test
+```
 
 ## Background service
 
@@ -119,6 +161,7 @@ Most users only need `npm run serve`, but the project also includes:
 
 ## Documentation
 
+- Release-facing overview and quick start: `README.md` / `README.zh.md`
 - User and contributor docs: [`docs/README.md`](docs/README.md)
 - Security policy: [`SECURITY.md`](SECURITY.md)
 - Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
