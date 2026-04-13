@@ -130,7 +130,7 @@ npm run cli -- service stop
 npm run cli -- service uninstall
 ```
 
-These service commands now print human-readable summaries by default. Add `--json` if you need machine-readable output for scripts.
+These service commands now print human-readable summaries by default, with terminal colors enabled automatically on TTY output. Add `--json` if you need machine-readable output for scripts, or `NO_COLOR=1` if you want plain text.
 
 Platform mapping:
 

@@ -5,6 +5,7 @@ import {
   formatManagedServiceInstallResult,
   formatManagedServiceStatusResult,
 } from "../packages/cli/src/service-output.ts";
+import { stripAnsi } from "../packages/cli/src/terminal-style.ts";
 
 describe("service output", () => {
   it("formats installed service status in a readable summary", () => {
@@ -56,48 +57,78 @@ describe("service output", () => {
       },
     };
 
-    const output = formatManagedServiceStatusResult(result);
-    expect(output).toContain("[codexnamer] Managed service status");
-    expect(output).toContain("- health: unhealthy (Health probe timed out after 1500ms.)");
-    expect(output).toContain("- supervisor: running=no, state=spawn scheduled, lastExitCode=1");
-    expect(output).toContain("- detected listener: Code H (pid 19728) via lsof");
-    expect(output).toContain("- recent stderr:");
+    const output = formatManagedServiceStatusResult(result, { color: false });
+    expect(output).toContain("Managed service status");
+    expect(output).toContain("health         unhealthy (Health probe timed out after 1500ms.)");
+    expect(output).toContain("supervisor     running=no, state=spawn scheduled, lastExitCode=1");
+    expect(output).toContain("listener       Code H (pid 19728) via lsof");
+    expect(output).toContain("recent stderr:");
     expect(output).toContain("EADDRINUSE");
   });
 
   it("formats not-installed status with the next command", () => {
-    const output = formatManagedServiceStatusResult({
-      installed: false,
-      serviceName: "dev.codexnamer.agent",
-    });
+    const output = formatManagedServiceStatusResult(
+      {
+        installed: false,
+        serviceName: "dev.codexnamer.agent",
+      },
+      { color: false },
+    );
 
     expect(output).toContain("Managed service is not installed");
     expect(output).toContain("npm run cli -- service install --start");
   });
 
   it("formats install and uninstall summaries", () => {
-    const installOutput = formatManagedServiceInstallResult({
-      installed: true,
-      platform: "macos",
-      url: "http://127.0.0.1:42111",
-      configPath: "/tmp/service-config.json",
-      shellLauncherPath: "/tmp/run-service.sh",
-      powerShellLauncherPath: "/tmp/run-service.ps1",
-      descriptorPath: "/tmp/dev.codexnamer.agent.plist",
-      autoStartDaemon: true,
-      started: true,
-      health: {
-        healthy: true,
-        statusCode: 200,
+    const installOutput = formatManagedServiceInstallResult(
+      {
+        installed: true,
+        platform: "macos",
+        url: "http://127.0.0.1:42111",
+        configPath: "/tmp/service-config.json",
+        shellLauncherPath: "/tmp/run-service.sh",
+        powerShellLauncherPath: "/tmp/run-service.ps1",
+        descriptorPath: "/tmp/dev.codexnamer.agent.plist",
+        autoStartDaemon: true,
+        started: true,
+        health: {
+          healthy: true,
+          statusCode: 200,
+        },
       },
-    });
-    const uninstallOutput = formatManagedServiceActionResult("uninstall", {
-      removed: false,
-      reason: "not-installed",
-    });
+      { color: false },
+    );
+    const uninstallOutput = formatManagedServiceActionResult(
+      "uninstall",
+      {
+        removed: false,
+        reason: "not-installed",
+      },
+      { color: false },
+    );
 
-    expect(installOutput).toContain("- started now: yes");
-    expect(installOutput).toContain("- health: healthy (HTTP 200)");
+    expect(installOutput).toContain("started now    yes");
+    expect(installOutput).toContain("health         healthy (HTTP 200)");
     expect(uninstallOutput).toContain("Managed service is not installed");
+  });
+
+  it("adds ANSI colors when enabled", () => {
+    const colored = formatManagedServiceActionResult(
+      "start",
+      {
+        started: true,
+        platform: "linux",
+        url: "http://127.0.0.1:42110",
+        health: {
+          healthy: true,
+          statusCode: 200,
+        },
+      },
+      { color: true },
+    );
+
+    expect(colored).toContain("\u001B[");
+    expect(stripAnsi(colored)).toContain("Managed service started");
+    expect(stripAnsi(colored)).toContain("health         healthy (HTTP 200)");
   });
 });

@@ -59,7 +59,9 @@ codexnamer service uninstall [--json]
 
 - 当前 parser 会把 `service install` 这种写法归一化到内部命令 `service-install`
 - `service-host` 是内部 service 启动入口，不作为普通用户命令文档主路径
-- 默认输出是面向人的摘要；只有传 `--json` 时才输出机器可读 JSON
+- 默认输出是面向人的摘要；TTY 下会自动带 ANSI 颜色
+- 只有传 `--json` 时才输出机器可读 JSON
+- 如果只想禁用颜色，可设置 `NO_COLOR=1`
 
 ## 2. Local API
 

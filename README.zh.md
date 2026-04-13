@@ -130,7 +130,7 @@ npm run cli -- service stop
 npm run cli -- service uninstall
 ```
 
-这组 service 命令现在默认输出更适合人看的摘要；如果要给脚本消费，再追加 `--json`。
+这组 service 命令现在默认输出更适合人看的摘要；在 TTY 里会自动带颜色。如果要给脚本消费，再追加 `--json`；如果只想强制纯文本，可以加 `NO_COLOR=1`。
 
 平台对应：
 
