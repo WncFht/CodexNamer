@@ -22,6 +22,20 @@ function runCommand(command: string, args: string[]): CommandResult {
   };
 }
 
+function decodeEscapedProcessName(value: string | undefined): string | undefined {
+  if (!value) {
+    return value;
+  }
+
+  return value
+    .replace(/\\x([0-9A-Fa-f]{2})/g, (_match, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    )
+    .replace(/\\([0-7]{3})/g, (_match, octal: string) =>
+      String.fromCharCode(Number.parseInt(octal, 8)),
+    );
+}
+
 export function parseLsofListeningPortOwner(stdout: string): ListeningPortOwner | undefined {
   const lines = stdout
     .split(/\r?\n/)
@@ -39,7 +53,7 @@ export function parseLsofListeningPortOwner(stdout: string): ListeningPortOwner 
   const pid = Number(firstRow[1]);
   return {
     source: "lsof",
-    command: firstRow[0],
+    command: decodeEscapedProcessName(firstRow[0]),
     pid: Number.isInteger(pid) ? pid : undefined,
     raw: lines[1],
   };
@@ -59,7 +73,7 @@ export function parseSsListeningPortOwner(stdout: string): ListeningPortOwner | 
   const commandMatch = firstLine.match(/users:\(\("([^"]+)"/);
   return {
     source: "ss",
-    command: commandMatch?.[1],
+    command: decodeEscapedProcessName(commandMatch?.[1]),
     pid: pidMatch ? Number(pidMatch[1]) : undefined,
     raw: firstLine,
   };
@@ -122,7 +136,7 @@ function inspectWithNetstat(port: number): ListeningPortOwner | undefined {
 
   return {
     source: "netstat",
-    command,
+    command: decodeEscapedProcessName(command),
     pid,
     raw: csvLine,
   };

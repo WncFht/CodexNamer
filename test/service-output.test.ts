@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ManagedServiceStatusResult } from "../packages/cli/src/service-manager.ts";
 import {
   formatManagedServiceActionResult,
+  formatManagedServiceFailure,
   formatManagedServiceInstallResult,
   formatManagedServiceStatusResult,
 } from "../packages/cli/src/service-output.ts";
@@ -130,5 +131,60 @@ describe("service output", () => {
     expect(colored).toContain("\u001B[");
     expect(stripAnsi(colored)).toContain("Managed service started");
     expect(stripAnsi(colored)).toContain("health         healthy (HTTP 200)");
+  });
+
+  it("formats startup failures without dumping raw stacks", () => {
+    const output = formatManagedServiceFailure(
+      {
+        kind: "port-in-use",
+        phase: "install",
+        runtime: {
+          version: 1,
+          platform: "macos",
+          installedAt: "2026-04-13T13:01:00.000Z",
+          cwd: "/Users/tester/Desktop/src/CodexNamer",
+          stateDir: "/Users/tester/.local/state/codexnamer",
+          host: "127.0.0.1",
+          port: 42110,
+          webRoot: "/Users/tester/Desktop/src/CodexNamer/packages/web/dist",
+          autoStartDaemon: true,
+          url: "http://127.0.0.1:42110",
+        },
+        health: {
+          healthy: false,
+          error: "Health probe timed out after 1500ms.",
+        },
+        commandStatus: {
+          command: "launchctl",
+          args: ["print", "gui/501/dev.codexnamer.agent"],
+          exitCode: 113,
+          ok: false,
+        },
+        platformStatus: {
+          loaded: false,
+        },
+        portOwner: {
+          command: "Code H",
+          pid: 82082,
+          source: "lsof",
+        },
+        logTail: {
+          stderr: [
+            "shell-init: error retrieving current directory: getcwd: cannot access parent directories: Operation not permitted",
+            "Error: listen EADDRINUSE: address already in use 127.0.0.1:42110",
+            "    at Server.setupListenHandle [as _listen2] (node:net:2008:16)",
+          ],
+        },
+      },
+      { color: false },
+    );
+
+    expect(output).toContain("Managed service installed, but startup failed");
+    expect(output).toContain("reason         target address is already in use");
+    expect(output).toContain("listener       Code H (pid 82082) via lsof");
+    expect(output).toContain("stderr summary:");
+    expect(output).toContain("Error: listen EADDRINUSE: address already in use 127.0.0.1:42110");
+    expect(output).not.toContain("at Server.setupListenHandle");
+    expect(output).toContain("npm run cli -- service install --start --port 42111");
   });
 });

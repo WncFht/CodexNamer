@@ -16,12 +16,14 @@ import {
 import { probeRunningServeTarget } from "./serve-target.js";
 import type {
   ManagedServiceActionResult,
+  ManagedServiceCommandFailure,
   ManagedServiceInstallResult,
   ManagedServiceStatusResult,
 } from "./service-manager.js";
 import {
   getManagedServiceStatus,
   installManagedService,
+  isManagedServiceCommandError,
   restartManagedService,
   runManagedServiceHost,
   startManagedService,
@@ -30,6 +32,7 @@ import {
 } from "./service-manager.js";
 import {
   formatManagedServiceActionResult,
+  formatManagedServiceFailure,
   formatManagedServiceInstallResult,
   formatManagedServiceJsonResult,
   formatManagedServiceStatusResult,
@@ -47,6 +50,41 @@ function printServiceResult<
   T extends ManagedServiceInstallResult | ManagedServiceActionResult | ManagedServiceStatusResult,
 >(options: ServiceOutputOptions | undefined, result: T, formatter: (result: T) => string): void {
   console.log(options?.json ? formatManagedServiceJsonResult(result) : formatter(result));
+}
+
+function printManagedServiceFailure(
+  options: ServiceOutputOptions | undefined,
+  failure: ManagedServiceCommandFailure,
+): void {
+  console.error(
+    options?.json ? formatManagedServiceJsonResult(failure) : formatManagedServiceFailure(failure),
+  );
+  process.exitCode = 1;
+}
+
+async function runServiceCommand(
+  options: ServiceOutputOptions | undefined,
+  action: () => Promise<void>,
+): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    if (isManagedServiceCommandError(error)) {
+      printManagedServiceFailure(options, error.failure);
+      return;
+    }
+    if (error instanceof Error && error.message.includes("No installed managed service found")) {
+      console.error(
+        formatManagedServiceActionResult("uninstall", {
+          removed: false,
+          reason: "not-installed",
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
 }
 
 async function withManager<T>(fn: (manager: CodexNamer) => Promise<T>): Promise<T> {
@@ -228,38 +266,46 @@ cli
   .option("--start", "Start the service immediately after install")
   .option("--json", "Print machine-readable JSON")
   .action(async (options: ServiceInstallOptions & ServiceOutputOptions) => {
-    const result = await installManagedService(options);
-    printServiceResult(options, result, formatManagedServiceInstallResult);
+    await runServiceCommand(options, async () => {
+      const result = await installManagedService(options);
+      printServiceResult(options, result, formatManagedServiceInstallResult);
+    });
   });
 
 cli
   .command("service-start", "Start the installed local service")
   .option("--json", "Print machine-readable JSON")
   .action(async (options: ServiceOutputOptions) => {
-    const result = await startManagedService();
-    printServiceResult(options, result, (actionResult) =>
-      formatManagedServiceActionResult("start", actionResult as ManagedServiceActionResult),
-    );
+    await runServiceCommand(options, async () => {
+      const result = await startManagedService();
+      printServiceResult(options, result, (actionResult) =>
+        formatManagedServiceActionResult("start", actionResult as ManagedServiceActionResult),
+      );
+    });
   });
 
 cli
   .command("service-stop", "Stop the installed local service")
   .option("--json", "Print machine-readable JSON")
   .action(async (options: ServiceOutputOptions) => {
-    const result = await stopManagedService();
-    printServiceResult(options, result, (actionResult) =>
-      formatManagedServiceActionResult("stop", actionResult as ManagedServiceActionResult),
-    );
+    await runServiceCommand(options, async () => {
+      const result = await stopManagedService();
+      printServiceResult(options, result, (actionResult) =>
+        formatManagedServiceActionResult("stop", actionResult as ManagedServiceActionResult),
+      );
+    });
   });
 
 cli
   .command("service-restart", "Restart the installed local service")
   .option("--json", "Print machine-readable JSON")
   .action(async (options: ServiceOutputOptions) => {
-    const result = await restartManagedService();
-    printServiceResult(options, result, (actionResult) =>
-      formatManagedServiceActionResult("restart", actionResult as ManagedServiceActionResult),
-    );
+    await runServiceCommand(options, async () => {
+      const result = await restartManagedService();
+      printServiceResult(options, result, (actionResult) =>
+        formatManagedServiceActionResult("restart", actionResult as ManagedServiceActionResult),
+      );
+    });
   });
 
 cli

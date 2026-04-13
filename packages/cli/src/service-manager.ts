@@ -123,11 +123,39 @@ export type ManagedServiceActionResult = {
   stopped?: boolean;
   restarted?: boolean;
   removed?: boolean;
+  alreadyRunning?: boolean;
   reason?: string;
   platform?: ManagedServicePlatform;
   url?: string;
   health?: ManagedServiceHealth;
 };
+
+export type ManagedServiceLifecyclePhase = "install" | "start" | "restart";
+
+export type ManagedServiceCommandFailure = {
+  kind: "port-in-use" | "start-failed";
+  phase: ManagedServiceLifecyclePhase;
+  runtime: ManagedServiceRuntimeConfig;
+  health?: ManagedServiceHealth;
+  commandStatus?: ManagedServiceCommandStatus;
+  platformStatus?: CommandStatusSummary;
+  portOwner?: ListeningPortOwner;
+  logTail?: ManagedServiceLogTail;
+};
+
+export class ManagedServiceCommandError extends Error {
+  constructor(
+    message: string,
+    public readonly failure: ManagedServiceCommandFailure,
+  ) {
+    super(message);
+    this.name = "ManagedServiceCommandError";
+  }
+}
+
+export function isManagedServiceCommandError(error: unknown): error is ManagedServiceCommandError {
+  return error instanceof ManagedServiceCommandError;
+}
 
 export type ManagedServiceStatusResult =
   | {
@@ -606,6 +634,87 @@ async function tailLog(logPath: string, maxLines = 20): Promise<string[]> {
   }
 }
 
+async function collectManagedServiceDiagnostics(
+  installed: InstalledService,
+  options?: { includeLogs?: boolean },
+): Promise<{
+  health: ManagedServiceHealth;
+  commandStatus: ManagedServiceCommandStatus;
+  platformStatus: CommandStatusSummary;
+  portOwner?: ListeningPortOwner;
+  logTail?: ManagedServiceLogTail;
+}> {
+  const [commandStatusResult, health] = await Promise.all([
+    Promise.resolve(queryPlatformStatus(installed.runtime)),
+    probeServiceHealth(installed.runtime),
+  ]);
+  const commandStatus: ManagedServiceCommandStatus = {
+    command: commandStatusResult.command,
+    args: commandStatusResult.args,
+    exitCode: commandStatusResult.exitCode,
+    ok: commandStatusResult.ok,
+    error: commandStatusResult.error,
+  };
+  const platformStatus = summarizePlatformStatus(installed.runtime, commandStatusResult);
+  const portOwner = health.healthy ? undefined : inspectListeningPortOwner(installed.runtime.port);
+
+  if (!options?.includeLogs) {
+    return {
+      health,
+      commandStatus,
+      platformStatus,
+      portOwner,
+    };
+  }
+
+  const [stderrTail, stdoutTail] = await Promise.all([
+    tailLog(installed.paths.stderrLogPath),
+    tailLog(installed.paths.stdoutLogPath),
+  ]);
+  const logTail =
+    stderrTail.length > 0 || stdoutTail.length > 0
+      ? {
+          ...(stdoutTail.length > 0 ? { stdout: stdoutTail } : {}),
+          ...(stderrTail.length > 0 ? { stderr: stderrTail } : {}),
+        }
+      : undefined;
+
+  return {
+    health,
+    commandStatus,
+    platformStatus,
+    portOwner,
+    logTail,
+  };
+}
+
+async function preflightManagedServiceStart(
+  installed: InstalledService,
+  phase: ManagedServiceLifecyclePhase,
+): Promise<ManagedServiceHealth | undefined> {
+  const diagnostics = await collectManagedServiceDiagnostics(installed);
+  if (diagnostics.health.healthy) {
+    return diagnostics.health;
+  }
+
+  if (diagnostics.portOwner && diagnostics.platformStatus.running !== true) {
+    throw new ManagedServiceCommandError(
+      `Cannot ${phase} managed service because ${installed.runtime.url} is already in use.`,
+      {
+        kind: "port-in-use",
+        phase,
+        runtime: installed.runtime,
+        health: diagnostics.health,
+        commandStatus: diagnostics.commandStatus,
+        platformStatus: diagnostics.platformStatus,
+        portOwner: diagnostics.portOwner,
+      },
+    );
+  }
+
+  return undefined;
+}
+
 async function waitForManagedServiceHealth(
   runtime: ManagedServiceRuntimeConfig,
   timeoutMs = 6_000,
@@ -629,15 +738,15 @@ async function waitForManagedServiceHealth(
 
 async function ensureManagedServiceHealthy(
   installed: InstalledService,
+  phase: ManagedServiceLifecyclePhase,
 ): Promise<ManagedServiceHealth> {
   const health = await waitForManagedServiceHealth(installed.runtime);
   if (health.healthy) {
     return health;
   }
-
-  const portOwner = inspectListeningPortOwner(installed.runtime.port);
-  const stderrTail = await tailLog(installed.paths.stderrLogPath);
-  const stdoutTail = await tailLog(installed.paths.stdoutLogPath);
+  const diagnostics = await collectManagedServiceDiagnostics(installed, {
+    includeLogs: true,
+  });
 
   try {
     await stopManagedService();
@@ -645,21 +754,19 @@ async function ensureManagedServiceHealthy(
     // best-effort cleanup; keep the install but stop restart loops
   }
 
-  const details = [
+  throw new ManagedServiceCommandError(
     `Managed service failed to become healthy at ${installed.runtime.url}.`,
-    health.statusCode ? `health status=${health.statusCode}.` : undefined,
-    health.error ? `health error=${health.error}.` : undefined,
-    portOwner
-      ? `port owner=${portOwner.command ?? "unknown"}${portOwner.pid ? ` pid=${portOwner.pid}` : ""} via ${portOwner.source}.`
-      : undefined,
-    stderrTail.length > 0
-      ? `stderr tail:\n${stderrTail.join("\n")}`
-      : stdoutTail.length > 0
-        ? `stdout tail:\n${stdoutTail.join("\n")}`
-        : undefined,
-  ].filter(Boolean);
-
-  throw new Error(details.join("\n"));
+    {
+      kind: "start-failed",
+      phase,
+      runtime: installed.runtime,
+      health: diagnostics.health,
+      commandStatus: diagnostics.commandStatus,
+      platformStatus: diagnostics.platformStatus,
+      portOwner: diagnostics.portOwner,
+      logTail: diagnostics.logTail,
+    },
+  );
 }
 
 export async function installManagedService(
@@ -693,7 +800,7 @@ export async function installManagedService(
     );
   }
 
-  const startResult = options?.start ? await startManagedService() : undefined;
+  const startResult = options?.start ? await startManagedService({ phase: "install" }) : undefined;
 
   return {
     installed: true,
@@ -709,10 +816,23 @@ export async function installManagedService(
   };
 }
 
-export async function startManagedService(): Promise<ManagedServiceActionResult> {
+export async function startManagedService(options?: {
+  phase?: ManagedServiceLifecyclePhase;
+}): Promise<ManagedServiceActionResult> {
   const installed = await loadInstalledService();
   if (!installed) {
     throw new Error("No installed managed service found. Run `codexnamer service install` first.");
+  }
+  const phase = options?.phase ?? "start";
+  const existingHealth = await preflightManagedServiceStart(installed, phase);
+  if (existingHealth?.healthy) {
+    return {
+      started: true,
+      alreadyRunning: true,
+      platform: installed.runtime.platform,
+      url: installed.runtime.url,
+      health: existingHealth,
+    };
   }
 
   if (installed.runtime.platform === "linux") {
@@ -747,7 +867,7 @@ export async function startManagedService(): Promise<ManagedServiceActionResult>
     );
   }
 
-  const health = await ensureManagedServiceHealthy(installed);
+  const health = await ensureManagedServiceHealthy(installed, phase);
 
   return {
     started: true,
@@ -795,7 +915,7 @@ export async function restartManagedService(): Promise<ManagedServiceActionResul
   } catch {
     // continue into start; restart should be resilient to already-stopped services
   }
-  await startManagedService();
+  await startManagedService({ phase: "restart" });
   return {
     restarted: true,
     platform: installed.runtime.platform,
@@ -846,21 +966,9 @@ export async function getManagedServiceStatus(): Promise<ManagedServiceStatusRes
     };
   }
 
-  const [commandStatus, health] = await Promise.all([
-    Promise.resolve(queryPlatformStatus(installed.runtime)),
-    probeServiceHealth(installed.runtime),
-  ]);
-  const platformStatus = summarizePlatformStatus(installed.runtime, commandStatus);
-  const portOwner = health.healthy ? undefined : inspectListeningPortOwner(installed.runtime.port);
-  const stderrTail = health.healthy ? [] : await tailLog(installed.paths.stderrLogPath);
-  const stdoutTail = health.healthy ? [] : await tailLog(installed.paths.stdoutLogPath);
-  const logTail =
-    stderrTail.length > 0 || stdoutTail.length > 0
-      ? {
-          ...(stdoutTail.length > 0 ? { stdout: stdoutTail } : {}),
-          ...(stderrTail.length > 0 ? { stderr: stderrTail } : {}),
-        }
-      : undefined;
+  const diagnostics = await collectManagedServiceDiagnostics(installed, {
+    includeLogs: true,
+  });
 
   return {
     installed: true,
@@ -878,17 +986,11 @@ export async function getManagedServiceStatus(): Promise<ManagedServiceStatusRes
       stderr: installed.paths.stderrLogPath,
     },
     runtime: installed.runtime,
-    commandStatus: {
-      command: commandStatus.command,
-      args: commandStatus.args,
-      exitCode: commandStatus.exitCode,
-      ok: commandStatus.ok,
-      error: commandStatus.error,
-    },
-    platformStatus,
-    health,
-    portOwner,
-    logTail,
+    commandStatus: diagnostics.commandStatus,
+    platformStatus: diagnostics.platformStatus,
+    health: diagnostics.health,
+    portOwner: diagnostics.portOwner,
+    logTail: diagnostics.logTail,
   };
 }
 

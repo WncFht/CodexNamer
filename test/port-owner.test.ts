@@ -23,6 +23,17 @@ describe("port owner parsers", () => {
     });
   });
 
+  it("decodes escaped process names from lsof output", () => {
+    const owner = parseLsofListeningPortOwner(
+      [
+        "COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME",
+        "Code\\x20H    82082 fang   21u  IPv4 0x123456789abcdef      0t0  TCP 127.0.0.1:42110 (LISTEN)",
+      ].join("\n"),
+    );
+
+    expect(owner?.command).toBe("Code H");
+  });
+
   it("parses ss output", () => {
     const owner = parseSsListeningPortOwner(
       'State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess\nLISTEN 0      511    127.0.0.1:42110      0.0.0.0:*    users:(("node",pid=48121,fd=21))',

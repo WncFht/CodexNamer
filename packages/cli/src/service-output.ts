@@ -2,9 +2,11 @@ import type { ListeningPortOwner } from "./port-owner.js";
 import type {
   CommandStatusSummary,
   ManagedServiceActionResult,
+  ManagedServiceCommandFailure,
   ManagedServiceCommandStatus,
   ManagedServiceHealth,
   ManagedServiceInstallResult,
+  ManagedServiceLifecyclePhase,
   ManagedServiceStatusResult,
 } from "./service-manager.js";
 import type { TerminalStyleOptions } from "./terminal-style.js";
@@ -44,6 +46,22 @@ function formatPortOwner(owner: ListeningPortOwner): string {
           ? `pid ${owner.pid}`
           : "unknown process";
   return owner.source ? `${target} via ${owner.source}` : target;
+}
+
+function summarizeLogTailLines(lines: string[] | undefined): string[] | undefined {
+  if (!lines || lines.length === 0) {
+    return undefined;
+  }
+
+  const prioritized = lines.filter(
+    (line) =>
+      /EADDRINUSE|listen EADDRINUSE|getcwd|Operation not permitted|ENOENT|EACCES|address already in use/i.test(
+        line,
+      ) || /^Error:/i.test(line),
+  );
+
+  const source = prioritized.length > 0 ? prioritized : lines;
+  return [...new Set(source)].slice(-4);
 }
 
 function formatSupervisorSummary(params: {
@@ -114,6 +132,10 @@ function formatPlatformLabel(platform: string): string {
     : platform === "macos"
       ? "macOS / LaunchAgent"
       : "windows / Task Scheduler";
+}
+
+function formatPhaseLabel(phase: ManagedServiceLifecyclePhase): string {
+  return phase === "install" ? "install --start" : phase === "restart" ? "restart" : "start";
 }
 
 export function formatManagedServiceInstallResult(
@@ -246,8 +268,83 @@ export function formatManagedServiceStatusResult(
   return lines.join("\n");
 }
 
+export function formatManagedServiceFailure(
+  failure: ManagedServiceCommandFailure,
+  options?: TerminalStyleOptions,
+): string {
+  const phaseLabel = formatPhaseLabel(failure.phase);
+  const lines = [
+    actionHeading(
+      "✖",
+      failure.phase === "install"
+        ? "Managed service installed, but startup failed"
+        : "Managed service could not start",
+      "danger",
+      options,
+    ),
+  ];
+
+  pushLine(lines, "action", phaseLabel, options);
+  pushLine(lines, "platform", formatPlatformLabel(failure.runtime.platform), options);
+  pushLine(lines, "url", tone(failure.runtime.url, "info", options), options);
+  pushLine(
+    lines,
+    "reason",
+    failure.kind === "port-in-use"
+      ? tone("target address is already in use", "danger", options)
+      : tone("service never became healthy", "danger", options),
+    options,
+  );
+  pushLine(lines, "health", formatHealth(failure.health, options), options);
+  pushLine(
+    lines,
+    "supervisor",
+    formatSupervisorSummary({
+      platformStatus: failure.platformStatus,
+      commandStatus: failure.commandStatus,
+    }),
+    options,
+  );
+  if (failure.portOwner) {
+    pushLine(
+      lines,
+      "listener",
+      tone(formatPortOwner(failure.portOwner), "warning", options),
+      options,
+    );
+  }
+
+  const stderrSummary = summarizeLogTailLines(failure.logTail?.stderr);
+  const stdoutSummary = summarizeLogTailLines(failure.logTail?.stdout);
+  pushLogTail(lines, "stderr summary", stderrSummary, options);
+  pushLogTail(lines, "stdout summary", stdoutSummary, options);
+
+  const reinstallCommand = `npm run cli -- service install --start --port ${failure.runtime.port + 1}`;
+  if (failure.kind === "port-in-use") {
+    pushLine(
+      lines,
+      "next",
+      `stop the current listener, or reinstall on another port with ${tone(reinstallCommand, "info", options)}`,
+      options,
+    );
+  } else {
+    pushLine(
+      lines,
+      "next",
+      `inspect ${tone("npm run cli -- service status", "info", options)} or retry with ${tone(reinstallCommand, "info", options)}`,
+      options,
+    );
+  }
+
+  return lines.join("\n");
+}
+
 export function formatManagedServiceJsonResult(
-  result: ManagedServiceInstallResult | ManagedServiceActionResult | ManagedServiceStatusResult,
+  result:
+    | ManagedServiceInstallResult
+    | ManagedServiceActionResult
+    | ManagedServiceStatusResult
+    | ManagedServiceCommandFailure,
 ): string {
   return JSON.stringify(result, null, 2);
 }
