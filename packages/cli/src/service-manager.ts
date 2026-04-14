@@ -92,6 +92,7 @@ export type ManagedServiceHealth = {
 
 export type CommandStatusSummary = {
   loaded?: boolean;
+  disabled?: boolean;
   running?: boolean;
   state?: string;
   pid?: number;
@@ -602,6 +603,41 @@ function currentLaunchctlDomain(): string {
   return `gui/${uid}`;
 }
 
+function currentLaunchctlServiceTarget(): string {
+  return `${currentLaunchctlDomain()}/${MAC_LABEL}`;
+}
+
+export function parseMacLaunchctlDisabledState(
+  stdout: string,
+  label = MAC_LABEL,
+): boolean | undefined {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = stdout.match(new RegExp(`"${escapedLabel}"\\s*=>\\s*(disabled|enabled)`, "i"));
+  const state = match?.[1];
+  if (typeof state !== "string") {
+    return undefined;
+  }
+  return state.toLowerCase() === "disabled";
+}
+
+function queryMacLaunchctlDisabledState(): boolean | undefined {
+  const result = runCommand("launchctl", ["print-disabled", currentLaunchctlDomain()]);
+  if (!result.ok) {
+    return undefined;
+  }
+  return parseMacLaunchctlDisabledState(result.stdout);
+}
+
+function ensureMacLaunchAgentEnabled(): void {
+  if (queryMacLaunchctlDisabledState() !== true) {
+    return;
+  }
+  assertCommandOk(
+    runCommand("launchctl", ["enable", currentLaunchctlServiceTarget()]),
+    "launchctl enable",
+  );
+}
+
 function queryPlatformStatus(runtime: ManagedServiceRuntimeConfig): CommandResult {
   if (runtime.platform === "linux") {
     return runCommand("systemctl", ["--user", "status", "--no-pager", LINUX_UNIT_NAME]);
@@ -729,6 +765,9 @@ async function collectManagedServiceDiagnostics(
     error: commandStatusResult.error,
   };
   const platformStatus = summarizePlatformStatus(installed.runtime, commandStatusResult);
+  if (installed.runtime.platform === "macos") {
+    platformStatus.disabled = queryMacLaunchctlDisabledState();
+  }
   const portOwner = health.healthy ? undefined : inspectListeningPortOwner(installed.runtime.port);
 
   if (!options?.includeLogs) {
@@ -863,6 +902,8 @@ export async function installManagedService(
       runCommand("systemctl", ["--user", "enable", LINUX_UNIT_NAME]),
       "systemd enable",
     );
+  } else if (context.platform === "macos") {
+    ensureMacLaunchAgentEnabled();
   } else if (context.platform === "windows") {
     const taskCommand = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${context.paths.powerShellLauncherPath}"`;
     assertCommandOk(
@@ -920,16 +961,15 @@ export async function startManagedService(options?: {
   if (installed.runtime.platform === "linux") {
     assertCommandOk(runCommand("systemctl", ["--user", "start", LINUX_UNIT_NAME]), "systemd start");
   } else if (installed.runtime.platform === "macos") {
-    const bootoutResult = runCommand("launchctl", [
-      "bootout",
-      `${currentLaunchctlDomain()}/${MAC_LABEL}`,
-    ]);
+    const serviceTarget = currentLaunchctlServiceTarget();
+    const bootoutResult = runCommand("launchctl", ["bootout", serviceTarget]);
     if (
       !bootoutResult.ok &&
       !/Could not find service/i.test(`${bootoutResult.stdout}\n${bootoutResult.stderr}`)
     ) {
       // ignore only missing-service cases
     }
+    ensureMacLaunchAgentEnabled();
     assertCommandOk(
       runCommand("launchctl", [
         "bootstrap",
@@ -939,7 +979,7 @@ export async function startManagedService(options?: {
       "launchctl bootstrap",
     );
     assertCommandOk(
-      runCommand("launchctl", ["kickstart", "-k", `${currentLaunchctlDomain()}/${MAC_LABEL}`]),
+      runCommand("launchctl", ["kickstart", "-k", serviceTarget]),
       "launchctl kickstart",
     );
   } else {

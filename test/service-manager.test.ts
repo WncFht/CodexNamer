@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ManagedServiceRuntimeConfig } from "../packages/cli/src/service-manager.ts";
 import {
   buildManagedServiceDescriptor,
+  parseMacLaunchctlDisabledState,
   resolveManagedServicePaths,
   resolveManagedServicePlatform,
   resolveManagedServiceRuntimeBundlePaths,
@@ -145,5 +146,11 @@ describe("service manager", () => {
       pid: 12345,
       lastExitCode: 1,
     });
+  });
+
+  it("parses launchctl disabled-state output for the managed label", () => {
+    expect(parseMacLaunchctlDisabledState('\t\t"dev.codexnamer.agent" => disabled\n')).toBe(true);
+    expect(parseMacLaunchctlDisabledState('\t\t"dev.codexnamer.agent" => enabled\n')).toBe(false);
+    expect(parseMacLaunchctlDisabledState('\t\t"other.service" => disabled\n')).toBeUndefined();
   });
 });

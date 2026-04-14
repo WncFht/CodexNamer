@@ -70,6 +70,9 @@ function formatSupervisorSummary(params: {
 }): string {
   const { platformStatus, commandStatus } = params;
   if (!platformStatus?.loaded) {
+    if (platformStatus?.disabled) {
+      return "not loaded (disabled)";
+    }
     const detail =
       commandStatus?.error ??
       (typeof commandStatus?.exitCode === "number" ? `exit ${commandStatus.exitCode}` : undefined);

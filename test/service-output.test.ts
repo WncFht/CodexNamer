@@ -130,6 +130,50 @@ describe("service output", () => {
     expect(output).toContain("npm run cli -- service install --start");
   });
 
+  it("surfaces disabled launch agents instead of raw launchctl exit codes", () => {
+    const result: ManagedServiceStatusResult = {
+      installed: true,
+      platform: "macos",
+      serviceName: "dev.codexnamer.agent",
+      url: "http://127.0.0.1:42111",
+      configPath: "/Users/tester/.local/state/codexnamer/service/service-config.json",
+      logs: {
+        stdout: "/Users/tester/.local/state/codexnamer/service/logs/service.stdout.log",
+        stderr: "/Users/tester/.local/state/codexnamer/service/logs/service.stderr.log",
+      },
+      runtime: {
+        version: 1,
+        platform: "macos",
+        installedAt: "2026-04-14T10:15:11.095Z",
+        cwd: "/Users/tester/Desktop/src/CodexNamer",
+        stateDir: "/Users/tester/.local/state/codexnamer",
+        host: "127.0.0.1",
+        port: 42111,
+        webRoot: "/Users/tester/Desktop/src/CodexNamer/packages/web/dist",
+        autoStartDaemon: true,
+        url: "http://127.0.0.1:42111",
+      },
+      commandStatus: {
+        command: "launchctl",
+        args: ["print", "gui/501/dev.codexnamer.agent"],
+        exitCode: 113,
+        ok: false,
+      },
+      platformStatus: {
+        loaded: false,
+        disabled: true,
+      },
+      health: {
+        healthy: false,
+        error: "fetch failed",
+      },
+    };
+
+    const output = formatManagedServiceStatusResult(result, { color: false });
+    expect(output).toContain("supervisor     not loaded (disabled)");
+    expect(output).not.toContain("exit 113");
+  });
+
   it("formats install and uninstall summaries", () => {
     const installOutput = formatManagedServiceInstallResult(
       {
