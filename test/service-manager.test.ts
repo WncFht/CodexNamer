@@ -6,6 +6,7 @@ import {
   buildManagedServiceDescriptor,
   resolveManagedServicePaths,
   resolveManagedServicePlatform,
+  resolveManagedServiceRuntimeBundlePaths,
   summarizePlatformStatus,
 } from "../packages/cli/src/service-manager.ts";
 
@@ -56,6 +57,23 @@ describe("service manager", () => {
     expect(descriptor.descriptorText).toContain("WantedBy=default.target");
     expect(descriptor.shellLauncherText).toContain("service-host --config");
     expect(descriptor.shellLauncherText).toContain(`cd '${paths.serviceDir}'`);
+  });
+
+  it("derives staged runtime bundle paths inside the service directory", () => {
+    const paths = resolveManagedServicePaths({
+      stateDir: "/tmp/codexnamer-state",
+      homeDir: "/home/tester",
+    });
+    const runtimeBundlePaths = resolveManagedServiceRuntimeBundlePaths(paths);
+
+    expect(runtimeBundlePaths.runtimeDir).toBe("/tmp/codexnamer-state/service/runtime");
+    expect(runtimeBundlePaths.nodeModulesDir).toBe(
+      "/tmp/codexnamer-state/service/runtime/node_modules",
+    );
+    expect(runtimeBundlePaths.cliEntryPath).toBe(
+      "/tmp/codexnamer-state/service/runtime/node_modules/@codexnamer/cli/dist/index.js",
+    );
+    expect(runtimeBundlePaths.webRoot).toBe("/tmp/codexnamer-state/service/runtime/web-dist");
   });
 
   it("builds macOS launch agent artifacts with launchd metadata", () => {

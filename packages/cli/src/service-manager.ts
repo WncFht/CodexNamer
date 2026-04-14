@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { startApiServer, waitForShutdown } from "@codexnamer/api";
-import { loadEffectiveConfig } from "@codexnamer/core";
+import { loadEffectiveConfig, resolveConfigPaths } from "@codexnamer/core";
 import type { ListeningPortOwner } from "./port-owner.js";
 import { inspectListeningPortOwner } from "./port-owner.js";
 
@@ -53,6 +53,13 @@ export type ManagedServicePaths = {
   stderrLogPath: string;
   linuxUnitPath: string;
   macPlistPath: string;
+};
+
+export type ManagedServiceRuntimeBundlePaths = {
+  runtimeDir: string;
+  nodeModulesDir: string;
+  cliEntryPath: string;
+  webRoot: string;
 };
 
 export type ManagedServiceDescriptor = {
@@ -181,12 +188,12 @@ export type ManagedServiceStatusResult =
       logTail?: ManagedServiceLogTail;
     };
 
-function resolveCliEntryPath(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "index.js");
-}
-
 function resolveCurrentBundledWebRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+}
+
+function resolveSourceNodeModulesRoot(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../node_modules");
 }
 
 function quoteForPosixShell(value: string): string {
@@ -307,6 +314,19 @@ export function resolveManagedServicePaths(params: {
   };
 }
 
+export function resolveManagedServiceRuntimeBundlePaths(
+  paths: ManagedServicePaths,
+): ManagedServiceRuntimeBundlePaths {
+  const runtimeDir = path.join(paths.serviceDir, "runtime");
+  const nodeModulesDir = path.join(runtimeDir, "node_modules");
+  return {
+    runtimeDir,
+    nodeModulesDir,
+    cliEntryPath: path.join(nodeModulesDir, "@codexnamer", "cli", "dist", "index.js"),
+    webRoot: path.join(runtimeDir, "web-dist"),
+  };
+}
+
 export function buildManagedServiceDescriptor(params: {
   platform: ManagedServicePlatform;
   runtime: ManagedServiceRuntimeConfig;
@@ -405,43 +425,50 @@ async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
   runtime: ManagedServiceRuntimeConfig;
   paths: ManagedServicePaths;
   descriptor: ManagedServiceDescriptor;
+  runtimeBundlePaths: ManagedServiceRuntimeBundlePaths;
+  sourceWebRoot: string;
 }> {
-  const effective = await loadEffectiveConfig({
-    cwd: options?.cwd,
+  const configPaths = await resolveConfigPaths({
+    cwd: os.homedir(),
     configPath: options?.configPath,
+  });
+  const effective = await loadEffectiveConfig({
+    cwd: configPaths.cwd,
+    configPath: configPaths.userConfigPath,
   });
   const platform = resolveManagedServicePlatform();
   if (platform === "macos") {
     assertSupportedMacLaunchAgentInvocation();
   }
-  const webRoot = resolveServeWebRoot(options?.webRoot);
-  if (!webRoot) {
+  const sourceWebRoot = resolveServeWebRoot(options?.webRoot);
+  if (!sourceWebRoot) {
     throw new Error(
       "No built Web UI found. Run `npm run web:build` first or pass `--web-root <path>` with a directory containing index.html.",
     );
   }
 
+  const paths = resolveManagedServicePaths({
+    stateDir: effective.general.stateDir,
+  });
+  const runtimeBundlePaths = resolveManagedServiceRuntimeBundlePaths(paths);
   const runtime: ManagedServiceRuntimeConfig = {
     version: 1,
     platform,
     installedAt: new Date().toISOString(),
-    cwd: path.resolve(options?.cwd ?? process.cwd()),
-    configPath: options?.configPath ? path.resolve(options.configPath) : undefined,
+    cwd: configPaths.cwd,
+    configPath: configPaths.userConfigPath,
     stateDir: effective.general.stateDir,
     host: options?.host ?? "127.0.0.1",
     port: resolvePort(options?.port, 42110),
-    webRoot,
+    webRoot: runtimeBundlePaths.webRoot,
     autoStartDaemon: options?.daemon !== false,
     url: `http://${options?.host ?? "127.0.0.1"}:${resolvePort(options?.port, 42110)}`,
   };
-  const paths = resolveManagedServicePaths({
-    stateDir: runtime.stateDir,
-  });
   const descriptor = buildManagedServiceDescriptor({
     platform,
     runtime,
     paths,
-    cliEntryPath: resolveCliEntryPath(),
+    cliEntryPath: runtimeBundlePaths.cliEntryPath,
     nodePath: process.execPath,
   });
 
@@ -450,6 +477,8 @@ async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
     runtime,
     paths,
     descriptor,
+    runtimeBundlePaths,
+    sourceWebRoot,
   };
 }
 
@@ -457,9 +486,29 @@ async function writeInstallArtifacts(context: {
   runtime: ManagedServiceRuntimeConfig;
   paths: ManagedServicePaths;
   descriptor: ManagedServiceDescriptor;
+  runtimeBundlePaths: ManagedServiceRuntimeBundlePaths;
+  sourceWebRoot: string;
 }): Promise<void> {
   await fs.mkdir(context.paths.serviceDir, { recursive: true });
   await fs.mkdir(context.paths.logsDir, { recursive: true });
+  await fs.rm(context.runtimeBundlePaths.runtimeDir, { recursive: true, force: true });
+  await fs.mkdir(context.runtimeBundlePaths.runtimeDir, { recursive: true });
+
+  const sourceNodeModulesDir = resolveSourceNodeModulesRoot();
+  if (!existsSync(sourceNodeModulesDir)) {
+    throw new Error(
+      `Managed service runtime dependencies were not found at ${sourceNodeModulesDir}. Run \`npm install\` first.`,
+    );
+  }
+
+  await fs.cp(sourceNodeModulesDir, context.runtimeBundlePaths.nodeModulesDir, {
+    recursive: true,
+    dereference: true,
+  });
+  await fs.cp(context.sourceWebRoot, context.runtimeBundlePaths.webRoot, {
+    recursive: true,
+  });
+
   await Promise.all([
     fs.writeFile(context.paths.stdoutLogPath, "", "utf8"),
     fs.writeFile(context.paths.stderrLogPath, "", "utf8"),
