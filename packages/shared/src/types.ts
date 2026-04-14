@@ -126,6 +126,7 @@ export interface GeneralConfig {
   codexHome: string;
   stateDir: string;
   uiLanguage: UiLanguage;
+  sessionSortOrder?: SortOrder;
 }
 
 export interface AiConfig {

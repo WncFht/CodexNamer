@@ -162,6 +162,9 @@ const COPY = {
     thisMonth: "This Month",
     earlier: "Earlier",
     nA: "n/a",
+    defaultSortOrder: "Default sort order",
+    sortNewestFirst: "Newest first",
+    sortOldestFirst: "Oldest first",
   },
   "zh-CN": {
     allWorkspaces: "全部工作区",
@@ -322,6 +325,9 @@ const COPY = {
     thisMonth: "本月",
     earlier: "更早",
     nA: "无",
+    defaultSortOrder: "默认排序方式",
+    sortNewestFirst: "最新在前",
+    sortOldestFirst: "最早在前",
   },
 } as const;
 

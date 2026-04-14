@@ -9,7 +9,7 @@ import {
 } from "../../browser-utils.js";
 import type { UiLanguage } from "../../i18n.js";
 import { sessionStatusLabel, t } from "../../i18n.js";
-import type { SessionSummary } from "../../types.js";
+import type { SessionSummary, SortOrder } from "../../types.js";
 import { addAppTransitionType } from "../../view-transitions.js";
 
 const SESSION_CONTEXT_MENU_WIDTH = 220;
@@ -25,6 +25,7 @@ export function SessionListPane(props: {
   loadingSessions: boolean;
   error: string | null;
   uiLanguage: UiLanguage;
+  sortOrder: SortOrder;
   onSearchChange: (value: string) => void;
   onRefresh: () => void;
   onSelectSession: (threadId: string) => void;
@@ -42,8 +43,8 @@ export function SessionListPane(props: {
   const searchCommitTimerRef = React.useRef<number | null>(null);
   const searchComposingRef = React.useRef(false);
   const groupedSessions = React.useMemo(
-    () => groupSessionsByTime(props.sessions, props.uiLanguage),
-    [props.sessions, props.uiLanguage],
+    () => groupSessionsByTime(props.sessions, props.uiLanguage, props.sortOrder),
+    [props.sessions, props.uiLanguage, props.sortOrder],
   );
   const tt = React.useCallback(
     (key: Parameters<typeof t>[1]) => t(props.uiLanguage, key),

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { ConfigDocument, ConfigView, ProviderProfile } from "./types.js";
+import type { ConfigDocument, ConfigView, ProviderProfile, SortOrder } from "./types.js";
+
+export type SessionSortOrder = SortOrder;
 
 export type SettingsDraft = {
   uiLanguage: "en-US" | "zh-CN";
@@ -36,6 +38,7 @@ export type SettingsDraft = {
   maintenanceBackupBeforeCompact: boolean;
   providerProfiles: ProviderProfile[];
   selectedProfileId: string;
+  sessionSortOrder: SessionSortOrder;
 };
 
 export type RenameAutoApply = "disabled" | "idle-finalize";
@@ -326,6 +329,7 @@ export function buildDraft(configView: ConfigView): SettingsDraft {
     ),
     providerProfiles,
     selectedProfileId,
+    sessionSortOrder: asString(asRecord(effective.general).sessionSortOrder, "desc") as SessionSortOrder,
   };
 }
 
@@ -368,6 +372,7 @@ export function encodeDraft(draft: SettingsDraft): ConfigDocument {
   return {
     general: {
       uiLanguage: draft.uiLanguage,
+      sessionSortOrder: draft.sessionSortOrder,
     },
     rename: {
       autoApply: draft.renameAutoApply as RenameAutoApply,
@@ -610,4 +615,12 @@ export function summarizeProfileLabel(profile: ProviderProfile): string {
     firstNonEmptyString(profile.displayName, profile.profileId, profile.model, profile.baseUrl) ??
     profile.profileId
   );
+}
+
+export function normalizeSessionSortOrder(configView?: { effectiveConfig?: unknown } | null): SessionSortOrder {
+  const raw = (configView?.effectiveConfig as Record<string, unknown> | undefined)?.general as
+    | Record<string, unknown>
+    | undefined;
+  const value = raw?.sessionSortOrder;
+  return value === "asc" ? "asc" : "desc";
 }

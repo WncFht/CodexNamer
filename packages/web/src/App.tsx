@@ -5,6 +5,7 @@ import { usePaneLayoutState } from "./app-shell/usePaneLayoutState.js";
 import { useThemePreference } from "./app-shell/useThemePreference.js";
 import { copyTextToClipboard } from "./clipboard.js";
 import { normalizeUiLanguage, t } from "./i18n.js";
+import { normalizeSessionSortOrder } from "./settings-model.js";
 import { SessionBrowser } from "./SessionBrowser.js";
 import { ALL_WORKSPACES_ID, useControlDeckState } from "./useControlDeckState.js";
 import { AppViewTransition, addAppTransitionType } from "./view-transitions.js";
@@ -65,6 +66,7 @@ export function App() {
   const [requeuePanelLoaded, setRequeuePanelLoaded] = React.useState(() => state.tab === "requeue");
   const [daemonPanelLoaded, setDaemonPanelLoaded] = React.useState(() => state.tab === "daemon");
   const uiLanguage = normalizeUiLanguage(state.configView);
+  const sortOrder = normalizeSessionSortOrder(state.configView);
   const tt = (key: Parameters<typeof t>[1]) => t(uiLanguage, key);
   const previewApplyCount =
     state.preview?.items.filter((item) => item.status === "apply").length ?? 0;
@@ -195,6 +197,7 @@ export function App() {
               showHiddenTranscript={state.showHiddenTranscript}
               error={state.error}
               uiLanguage={uiLanguage}
+              sortOrder={sortOrder}
               onToggleShowHiddenTranscript={state.setShowHiddenTranscript}
               onSearchChange={state.setSearch}
               onRefresh={() => void state.refreshSessions()}

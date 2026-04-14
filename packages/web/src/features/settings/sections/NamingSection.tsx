@@ -386,6 +386,31 @@ export function NamingSection(props: {
               ]}
               value={props.draft.uiLanguage}
             />
+            <SelectField
+              label={props.text.tt("defaultSortOrder")}
+              onChange={(value) => {
+                props.updateDraftField("sessionSortOrder", value);
+              }}
+              options={[
+                {
+                  value: "desc",
+                  label: props.text.tt("sortNewestFirst"),
+                  description: props.text.inline(
+                    "最新的会话显示在最前面。",
+                    "Newest sessions appear first.",
+                  ),
+                },
+                {
+                  value: "asc",
+                  label: props.text.tt("sortOldestFirst"),
+                  description: props.text.inline(
+                    "最早的会话显示在最前面。",
+                    "Oldest sessions appear first.",
+                  ),
+                },
+              ]}
+              value={props.draft.sessionSortOrder}
+            />
             <label className="settings-field">
               <span>{props.text.tt("language")}</span>
               <select

@@ -5,7 +5,7 @@ import { SessionListPane } from "./features/sessions/SessionListPane.js";
 import type { UiLanguage } from "./i18n.js";
 import { t } from "./i18n.js";
 import { TranscriptPanel } from "./TranscriptPanel.js";
-import type { SessionDetail, SessionSummary } from "./types.js";
+import type { SessionDetail, SessionSummary, SortOrder } from "./types.js";
 import { AppViewTransition } from "./view-transitions.js";
 
 const SESSION_PANE_MIN_WIDTH = 320;
@@ -28,6 +28,7 @@ export function SessionBrowser(props: {
   showHiddenTranscript: boolean;
   error: string | null;
   uiLanguage: UiLanguage;
+  sortOrder: SortOrder;
   onToggleShowHiddenTranscript: (value: boolean) => void;
   onSearchChange: (value: string) => void;
   onRefresh: () => void;
@@ -118,6 +119,7 @@ export function SessionBrowser(props: {
         sessionPaneCollapsed={props.sessionPaneCollapsed}
         sessions={props.sessions}
         uiLanguage={props.uiLanguage}
+        sortOrder={props.sortOrder}
       />
 
       {!props.sessionPaneCollapsed && !props.focusMode ? (

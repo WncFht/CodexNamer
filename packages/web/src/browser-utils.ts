@@ -1,6 +1,6 @@
 import type { UiLanguage } from "./i18n.js";
 import { formatUiWhen, timeGroupLabel } from "./i18n.js";
-import type { SessionDetail, SessionSummary } from "./types.js";
+import type { SessionDetail, SessionSummary, SortOrder } from "./types.js";
 
 export function formatWhen(value: string | undefined | null, language: UiLanguage): string {
   return formatUiWhen(value, language);
@@ -72,6 +72,7 @@ function getTimeGroup(value?: string): TimeGroupLabel {
 export function groupSessionsByTime(
   sessions: SessionSummary[],
   language: UiLanguage,
+  sortOrder: SortOrder = "desc",
 ): Array<{ label: string; items: SessionSummary[] }> {
   const groups = new Map<TimeGroupLabel, SessionSummary[]>();
   for (const label of TIME_GROUP_ORDER) {
@@ -82,7 +83,17 @@ export function groupSessionsByTime(
     groups.get(getTimeGroup(session.updatedAt))?.push(session);
   }
 
-  return TIME_GROUP_ORDER.map((label) => ({
+  for (const group of groups.values()) {
+    group.sort((a, b) => {
+      const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return sortOrder === "desc" ? timeB - timeA : timeA - timeB;
+    });
+  }
+
+  const groupOrder = sortOrder === "desc" ? TIME_GROUP_ORDER : [...TIME_GROUP_ORDER].reverse();
+
+  return groupOrder.map((label) => ({
     label: timeGroupLabel(label, language),
     items: groups.get(label) ?? [],
   })).filter((group) => group.items.length > 0);
