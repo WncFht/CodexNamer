@@ -2,10 +2,10 @@
 
 本项目设计主要参考以下四个来源：
 
-- `TokenArena`
-- `cli-history-hub`
-- `codexmate`
-- `openai/codex`
+- [`TokenArena`](https://github.com/coder/TokenArena)
+- [`nameIsNoPublic/cli-history-hub`](https://github.com/nameIsNoPublic/cli-history-hub)
+- [`codexmate`](https://github.com/musistudio/codexmate)
+- [`openai/codex`](https://github.com/openai/codex)
 
 ## 1. TokenArena
 
