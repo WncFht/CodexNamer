@@ -34,6 +34,7 @@ export type ManagedServiceRuntimeConfig = {
   platform: ManagedServicePlatform;
   installedAt: string;
   cwd: string;
+  configPath?: string;
   stateDir: string;
   host: string;
   port: number;
@@ -219,6 +220,19 @@ function resolveServeWebRoot(explicitWebRoot?: string): string | undefined {
   return existsSync(path.join(bundledRoot, "index.html")) ? bundledRoot : undefined;
 }
 
+function assertSupportedMacLaunchAgentInvocation(): void {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+  if (uid !== 0) {
+    return;
+  }
+  throw new Error(
+    "macOS LaunchAgent commands must be run as the logged-in user, not with sudo. Re-run the same `npm run cli -- service ...` command without sudo.",
+  );
+}
+
 function runCommand(command: string, args: string[]): CommandResult {
   const result = spawnSync(command, args, {
     encoding: "utf8",
@@ -305,7 +319,7 @@ export function buildManagedServiceDescriptor(params: {
       "#!/usr/bin/env sh",
       "set -eu",
       `mkdir -p ${quoteForPosixShell(params.paths.logsDir)}`,
-      `cd ${quoteForPosixShell(params.runtime.cwd)}`,
+      `cd ${quoteForPosixShell(params.paths.serviceDir)}`,
       `exec ${quoteForPosixShell(params.nodePath)} ${quoteForPosixShell(params.cliEntryPath)} service-host --config ${quoteForPosixShell(params.paths.serviceConfigPath)}`,
     ].join("\n") + "\n";
 
@@ -313,7 +327,7 @@ export function buildManagedServiceDescriptor(params: {
     [
       "$ErrorActionPreference = 'Stop'",
       `New-Item -ItemType Directory -Force -Path ${quoteForPowerShell(params.paths.logsDir)} | Out-Null`,
-      `Set-Location -LiteralPath ${quoteForPowerShell(params.runtime.cwd)}`,
+      `Set-Location -LiteralPath ${quoteForPowerShell(params.paths.serviceDir)}`,
       `& ${quoteForPowerShell(params.nodePath)} ${quoteForPowerShell(params.cliEntryPath)} service-host --config ${quoteForPowerShell(params.paths.serviceConfigPath)} 1>> ${quoteForPowerShell(params.paths.stdoutLogPath)} 2>> ${quoteForPowerShell(params.paths.stderrLogPath)}`,
       "exit $LASTEXITCODE",
     ].join("\r\n") + "\r\n";
@@ -329,7 +343,7 @@ export function buildManagedServiceDescriptor(params: {
           "",
           "[Service]",
           "Type=simple",
-          `WorkingDirectory=${params.runtime.cwd}`,
+          `WorkingDirectory=${params.paths.serviceDir}`,
           `ExecStart=/bin/sh ${params.paths.shellLauncherPath}`,
           "Restart=on-failure",
           "RestartSec=5",
@@ -365,7 +379,7 @@ export function buildManagedServiceDescriptor(params: {
           "  <key>KeepAlive</key>",
           "  <true/>",
           "  <key>WorkingDirectory</key>",
-          `  <string>${plistEscape(params.runtime.cwd)}</string>`,
+          `  <string>${plistEscape(params.paths.serviceDir)}</string>`,
           "  <key>StandardOutPath</key>",
           `  <string>${plistEscape(params.paths.stdoutLogPath)}</string>`,
           "  <key>StandardErrorPath</key>",
@@ -397,6 +411,9 @@ async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
     configPath: options?.configPath,
   });
   const platform = resolveManagedServicePlatform();
+  if (platform === "macos") {
+    assertSupportedMacLaunchAgentInvocation();
+  }
   const webRoot = resolveServeWebRoot(options?.webRoot);
   if (!webRoot) {
     throw new Error(
@@ -409,6 +426,7 @@ async function buildInstallContext(options?: ServiceCommandOptions): Promise<{
     platform,
     installedAt: new Date().toISOString(),
     cwd: path.resolve(options?.cwd ?? process.cwd()),
+    configPath: options?.configPath ? path.resolve(options.configPath) : undefined,
     stateDir: effective.general.stateDir,
     host: options?.host ?? "127.0.0.1",
     port: resolvePort(options?.port, 42110),
@@ -472,6 +490,7 @@ async function writeInstallArtifacts(context: {
 }
 
 async function getServiceConfigCandidates(options?: ServiceCommandOptions): Promise<string[]> {
+  assertSupportedMacLaunchAgentInvocation();
   const candidates = new Set<string>();
   const addStateDir = (stateDir: string | undefined) => {
     if (!stateDir) {
@@ -526,6 +545,7 @@ async function loadInstalledService(
 }
 
 function currentLaunchctlDomain(): string {
+  assertSupportedMacLaunchAgentInvocation();
   const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
   if (typeof uid !== "number") {
     throw new Error("launchctl user domain is unavailable on this platform");
@@ -1009,13 +1029,14 @@ export async function getManagedServiceStatus(): Promise<ManagedServiceStatusRes
 
 export async function runManagedServiceHost(configPath: string): Promise<void> {
   const runtime = JSON.parse(await fs.readFile(configPath, "utf8")) as ManagedServiceRuntimeConfig;
-  process.chdir(runtime.cwd);
   const app = await startApiServer({
     host: runtime.host,
     port: runtime.port,
     webRoot: runtime.webRoot,
     autoStartDaemon: runtime.autoStartDaemon,
     operator: "service-host",
+    cwd: runtime.cwd,
+    configPath: runtime.configPath,
   });
   await waitForShutdown(app);
 }

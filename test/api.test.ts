@@ -19,6 +19,44 @@ afterEach(async () => {
 });
 
 describe("local api", () => {
+  it("creates an owned manager from explicit cwd and config path", async () => {
+    const workspace = await createTempWorkspace();
+    const configPath = path.join(workspace.root, ".config", "codexnamer", "config.toml");
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(
+      configPath,
+      [
+        "[general]",
+        `codex_home = "${workspace.codexHome}"`,
+        `state_dir = "${workspace.stateDir}"`,
+        "",
+        "[ai]",
+        'backend = "none"',
+        'provider_source = "codex-config"',
+        'profile = "default"',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const app = await buildApiServer({
+      operator: "api-test",
+      cwd: workspace.root,
+      configPath,
+    });
+    cleanup.push(async () => {
+      await app.close();
+    });
+
+    const config = await app.inject({
+      method: "GET",
+      url: "/api/v1/config",
+    });
+    expect(config.statusCode).toBe(200);
+    expect(config.json().paths.cwd).toBe(workspace.root);
+    expect(config.json().paths.userConfigPath).toBe(configPath);
+  });
+
   it("serves health and sessions endpoints", async () => {
     const workspace = await createTempWorkspace();
     const manager = await createManagerForTest({

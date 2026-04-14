@@ -23,6 +23,8 @@ export async function buildApiServer(options?: {
   manager?: CodexNamer;
   operator?: string;
   staticWebRoot?: string;
+  cwd?: string;
+  configPath?: string;
 }): Promise<ApiServer> {
   const app = Fastify({
     logger: false,
@@ -30,7 +32,11 @@ export async function buildApiServer(options?: {
 
   const ownedManager = options?.manager
     ? undefined
-    : await CodexNamer.create({ operator: options?.operator ?? "api" });
+    : await CodexNamer.create({
+        operator: options?.operator ?? "api",
+        cwd: options?.cwd,
+        configPath: options?.configPath,
+      });
   const manager = options?.manager ?? ownedManager!;
   const eventLog = new ApiEventLog();
   const daemonController = new DaemonProcessController({

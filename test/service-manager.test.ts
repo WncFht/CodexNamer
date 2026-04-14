@@ -49,11 +49,13 @@ describe("service manager", () => {
     expect(paths.serviceConfigPath).toBe("/tmp/codexnamer-state/service/service-config.json");
     expect(paths.linuxUnitPath).toBe("/home/tester/.config/systemd/user/codexnamer.service");
     expect(descriptor.descriptorPath).toBe(paths.linuxUnitPath);
+    expect(descriptor.descriptorText).toContain(`WorkingDirectory=${paths.serviceDir}`);
     expect(descriptor.descriptorText).toContain(
       "ExecStart=/bin/sh /tmp/codexnamer-state/service/run-service.sh",
     );
     expect(descriptor.descriptorText).toContain("WantedBy=default.target");
     expect(descriptor.shellLauncherText).toContain("service-host --config");
+    expect(descriptor.shellLauncherText).toContain(`cd '${paths.serviceDir}'`);
   });
 
   it("builds macOS launch agent artifacts with launchd metadata", () => {
@@ -76,7 +78,9 @@ describe("service manager", () => {
     expect(descriptor.descriptorText).toContain("<key>Label</key>");
     expect(descriptor.descriptorText).toContain("<string>dev.codexnamer.agent</string>");
     expect(descriptor.descriptorText).toContain("<key>KeepAlive</key>");
+    expect(descriptor.descriptorText).toContain(`<string>${paths.serviceDir}</string>`);
     expect(descriptor.descriptorText).toContain(paths.stdoutLogPath);
+    expect(descriptor.shellLauncherText).toContain(`cd '${paths.serviceDir}'`);
   });
 
   it("builds windows task wrapper command via powershell", () => {
@@ -103,6 +107,7 @@ describe("service manager", () => {
     expect(descriptor.descriptorText).toContain(paths.powerShellLauncherPath);
     expect(descriptor.powerShellLauncherText).toContain("service-host --config");
     expect(descriptor.powerShellLauncherText).toContain(paths.stdoutLogPath);
+    expect(descriptor.powerShellLauncherText).toContain(paths.serviceDir);
   });
 
   it("summarizes macOS launchctl output", () => {

@@ -13,6 +13,8 @@ export type ApiServerStartOptions = {
   webRoot?: string;
   autoStartDaemon?: boolean;
   operator?: string;
+  cwd?: string;
+  configPath?: string;
 };
 
 function parseArgs(argv: string[]): {
@@ -42,6 +44,8 @@ export async function startApiServer(options: ApiServerStartOptions): Promise<Ap
   const app = (await buildApiServer({
     operator: options.operator,
     staticWebRoot: options.webRoot,
+    cwd: options.cwd,
+    configPath: options.configPath,
   })) as ApiServer;
 
   await app.listen({
